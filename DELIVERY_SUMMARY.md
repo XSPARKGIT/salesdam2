@@ -21,9 +21,11 @@ API-only.
 
 The Salesdam V3 Insurance Workspace backend and API are implemented and tested
 against the BRD (Business Requirements Document) v1.0. Insurance records are
-viewed and edited through the generic CRM record screens; the insurance
-operations themselves — quote, accept, issue, lapse/reinstate, billing,
-endorsements and claims payout — are **API-only**, with no dedicated screens.
+viewed and edited through the generic CRM record screens. Policy servicing has a
+dedicated panel on each policy (issue, lapse/reinstate, suspend/reactivate,
+cancel/close, documents, history, communications); the other insurance
+operations — new business (quote, accept, submit), billing, endorsements and
+claims payout — are still **API-only**, with no dedicated screens.
 The platform is **not signed off for production** (see Status above).
 
 ---
@@ -204,8 +206,9 @@ credentials or the Insurance ERD — plus explicit seams for the parts that do:
 | §21 | Claims | Intake → requirements → approval → payout |
 | §23 | Reporting | Analytics core (dashboards pending) |
 
-> "Implemented" in this table means the backend/API. Insurance operations
-> (§7, §11, §12, §13, §17, §21) have no dedicated UI — see §9 of
+> "Implemented" in this table means the backend/API. Of the insurance
+> operations, only §11–§12 (issue and servicing) have a dedicated UI — the
+> policy servicing panel; §7, §13, §17 and §21 are API-only. See §9 of
 > `V3_SPECIFICATIONS.md`.
 
 ### ⚠️ External Dependencies (Not Implemented)

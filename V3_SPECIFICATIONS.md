@@ -462,6 +462,16 @@ permissions, automations and notifications.
 | §21 | Claims | intake → requirements → approval → payout |
 | §23 | Reporting | analytics core (insurance-specific widgets pending) |
 
+**UI.** Insurance records use the generic CRM screens, navigated through the
+Insurance workspace's groups. Policy records add a **policy servicing panel**
+(Insurance BRD §11–§12): status with key billing facts (premium, paid-through,
+next billing, arrears), the servicing actions the current status allows —
+`GET /insurance/policies/:id` returns `allowed_actions` and `can_issue`, e.g.
+reinstate for lapsed/in-arrears, reactivate for suspended, nothing once closed
+— with a reason recorded in the status history, plus document generation and
+download, status history and the communication log. New business, billing,
+endorsements and claims operations have no dedicated screens yet.
+
 ### 8.4 Scheduled operations
 
 systemd units in `deploy/systemd/`:
@@ -564,7 +574,7 @@ Login. Used by platform operators for cross-tenant administration.
 | `tests/record-merge.e2e.mjs` | 23/23 |
 | `tests/conversation-capture.e2e.mjs` | 14/14 |
 | `backend/tests/insurance-endorsements.e2e.mjs` | 33/33 |
-| `npm run test:insurance` | exit 0 (9/9, 33/33, 32/32, 8/8, 11/11, 18/18, 15/15, 4/4) |
+| `npm run test:insurance` | exit 0 (9/9, 33/33, 36/36, 8/8, 11/11, 18/18, 15/15, 4/4) |
 | `frontend && npm run build` | pass |
 | `admin && npm run build` | pass |
 

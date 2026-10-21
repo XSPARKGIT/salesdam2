@@ -183,8 +183,12 @@ export const getApplicationState = async ({ tenantId, policyId: id }) => {
     findMany(tenantId, 'policy_acceptance', { 'data.policy': pid }, { createdAt: -1 }),
     findMany(tenantId, 'policy_status_history', { 'data.policy': pid }),
   ]);
+  const status = dataOf(policy).status || POLICY_STATUS.STARTED;
   return {
     policy: { id: pid, ...dataOf(policy) },
+    // What an operator can do next from this status (servicing UI).
+    allowed_actions: availablePolicyActions(status),
+    can_issue: status === POLICY_STATUS.SUBMITTED,
     parties: parties.map((p) => ({ id: String(p._id), ...dataOf(p) })),
     insured_lives: lives.filter((l) => !l.isDeleted).map((l) => ({ id: String(l._id), ...dataOf(l) })),
     acceptance: acceptances.length ? { id: String(acceptances[0]._id), ...dataOf(acceptances[0]) } : null,
@@ -584,6 +588,31 @@ export const POLICY_ACTIONS = {
   reactivate: POLICY_STATUS.ACTIVE,
   close: POLICY_STATUS.CLOSED,
 };
+
+// Which statuses each action is meant for. Both reinstate and reactivate lead
+// to ACTIVE, but they are different operations: reinstate restores a lapsed or
+// in-arrears policy, reactivate resumes a suspended (inactive) one.
+const ACTION_FROM = {
+  lapse: [POLICY_STATUS.ACTIVE, POLICY_STATUS.ARREARS],
+  reinstate: [POLICY_STATUS.LAPSED, POLICY_STATUS.ARREARS],
+  suspend: [POLICY_STATUS.ACTIVE],
+  reactivate: [POLICY_STATUS.INACTIVE],
+  cancel: null, // wherever the state machine allows it
+  close: null,
+};
+
+/**
+ * Servicing actions that make sense from `status`: the action's intended
+ * source statuses, intersected with the state machine's legal transitions.
+ */
+export const availablePolicyActions = (status) =>
+  Object.entries(POLICY_ACTIONS)
+    .filter(([action, to]) => {
+      const from = ACTION_FROM[action];
+      if (from && !from.includes(status)) return false;
+      return (TRANSITIONS[status] || []).includes(to);
+    })
+    .map(([action]) => action);
 
 /**
  * Apply a servicing action to a policy. The shared state machine validates the

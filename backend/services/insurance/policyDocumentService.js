@@ -145,8 +145,8 @@ export const generatePolicyDocument = async ({ tenantId, userId, policyId, type 
   // Create HTML file
   const htmlFile = await File.create({
     tenantId,
-    name: `${type}_${policy.policy_number || policyId}_${Date.now()}.html`,
-    description: `Policy ${type} for ${policy.policy_number || policyId}`,
+    name: `${type}_${dataOf(policy).policy_number || policyId}_${Date.now()}.html`,
+    description: `Policy ${type} for ${dataOf(policy).policy_number || policyId}`,
     mimeType: 'text/html',
     data: Buffer.from(html).toString('base64'),
     sizeBytes: html.length,
@@ -162,8 +162,8 @@ export const generatePolicyDocument = async ({ tenantId, userId, policyId, type 
   if (pdfBuffer) {
     const pdfFile = await File.create({
       tenantId,
-      name: `${type}_${policy.policy_number || policyId}_${Date.now()}.pdf`,
-      description: `Policy ${type} (PDF) for ${policy.policy_number || policyId}`,
+      name: `${type}_${dataOf(policy).policy_number || policyId}_${Date.now()}.pdf`,
+      description: `Policy ${type} (PDF) for ${dataOf(policy).policy_number || policyId}`,
       mimeType: 'application/pdf',
       data: pdfBuffer.toString('base64'),
       sizeBytes: pdfBuffer.length,

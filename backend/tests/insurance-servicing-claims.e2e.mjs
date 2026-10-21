@@ -173,20 +173,37 @@ try {
   const got = await req(`/api/v1/insurance/policies/${policy1}`, { cookie: ca });
   check('GET policy returns 200', got.status === 200, `HTTP ${got.status}`);
   check('issued policy is active', got.json?.data?.policy?.status === 'active');
+  const sameSet = (a, b) => JSON.stringify([...(a || [])].sort()) === JSON.stringify([...b].sort());
+  check(
+    'an active policy offers lapse, suspend, cancel and close',
+    sameSet(got.json?.data?.allowed_actions, ['lapse', 'suspend', 'cancel', 'close']) && got.json?.data?.can_issue === false,
+    JSON.stringify(got.json?.data?.allowed_actions),
+  );
 
   const list = await req('/api/v1/insurance/policies?status=active', { cookie: ca });
   check('policy list includes the policy', (list.json?.data || []).some((p) => p.id === policy1));
 
   const lapse = await req(`/api/v1/insurance/policies/${policy1}/lapse`, { method: 'POST', cookie: ca, body: { reason: 'non-payment' } });
   check('lapse → lapsed', lapse.json?.data?.policy?.status === 'lapsed', `HTTP ${lapse.status}`);
+  check(
+    'a lapsed policy offers reinstate, not reactivate',
+    sameSet(lapse.json?.data?.allowed_actions, ['reinstate', 'cancel', 'close']),
+    JSON.stringify(lapse.json?.data?.allowed_actions),
+  );
   const reinstate = await req(`/api/v1/insurance/policies/${policy1}/reinstate`, { method: 'POST', cookie: ca });
   check('reinstate → active', reinstate.json?.data?.policy?.status === 'active');
   const suspend = await req(`/api/v1/insurance/policies/${policy1}/suspend`, { method: 'POST', cookie: ca });
   check('suspend → inactive', suspend.json?.data?.policy?.status === 'inactive');
+  check(
+    'a suspended policy offers reactivate, not reinstate',
+    sameSet(suspend.json?.data?.allowed_actions, ['reactivate', 'cancel']),
+    JSON.stringify(suspend.json?.data?.allowed_actions),
+  );
   const reactivate = await req(`/api/v1/insurance/policies/${policy1}/reactivate`, { method: 'POST', cookie: ca });
   check('reactivate → active', reactivate.json?.data?.policy?.status === 'active');
   const cancel = await req(`/api/v1/insurance/policies/${policy1}/cancel`, { method: 'POST', cookie: ca, body: { reason: 'client request' } });
   check('cancel → cancelled', cancel.json?.data?.policy?.status === 'cancelled');
+  check('a cancelled policy can only be closed', sameSet(cancel.json?.data?.allowed_actions, ['close']), JSON.stringify(cancel.json?.data?.allowed_actions));
   const badReinstate = await req(`/api/v1/insurance/policies/${policy1}/reinstate`, { method: 'POST', cookie: ca });
   check('illegal reinstate of a cancelled policy → 409', badReinstate.status === 409, `HTTP ${badReinstate.status}`);
   const unknownAction = await req(`/api/v1/insurance/policies/${policy1}/teleport`, { method: 'POST', cookie: ca });

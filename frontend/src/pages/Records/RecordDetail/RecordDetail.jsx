@@ -18,6 +18,7 @@ import { getRecords } from '../../../services/api/records';
 import RecordHeader from './RecordHeader/RecordHeader';
 import RecordTabs from './RecordTabs/RecordTabs';
 import ApprovalPanel from '../../../components/records/ApprovalPanel/ApprovalPanel';
+import PolicyServicingPanel from '../../../components/insurance/PolicyServicingPanel/PolicyServicingPanel';
 import RecordContent from './RecordContent/RecordContent';
 import RecordSystemInfo from './RecordSystemInfo/RecordSystemInfo';
 import RecordModals from './RecordModals/RecordModals';
@@ -382,6 +383,10 @@ const RecordDetail = () => {
               </button>
             </div>
           </div>
+        )}
+
+        {objectApiName === 'policy' && (
+          <PolicyServicingPanel policyId={id} fields={fields} canUpdate={perms.canUpdate} />
         )}
 
         <ApprovalPanel objectApiName={objectApiName} recordId={id} />
