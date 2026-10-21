@@ -469,8 +469,21 @@ next billing, arrears), the servicing actions the current status allows —
 `GET /insurance/policies/:id` returns `allowed_actions` and `can_issue`, e.g.
 reinstate for lapsed/in-arrears, reactivate for suspended, nothing once closed
 — with a reason recorded in the status history, plus document generation and
-download, status history and the communication log. New business, billing,
-endorsements and claims operations have no dedicated screens yet.
+download, status history and the communication log.
+
+New business has a **wizard** at `/insurance/new-business` (Insurance BRD §2,
+§7, §10): product version and sales channel → main member (age checked against
+the product's entry ages; cover chosen from its benefit covers) → spouse,
+children and extended family, as the product allows → premium payer, payment
+method and beneficiary → server-priced quote → acceptance with the evidence
+the channel requires (branch: signature reference; telephone: recording
+reference or approved fallback) → validation and submit → optional immediate
+issue. Every step is saved to the application, so `?application=<id>` resumes
+it; a submitted application redirects to its policy record. It opens from the
+Policies list, from **New policy** on a client (prefilled main member) or lead
+(attribution), and from a client's related Policies list — policies are never
+created as bare records from the UI. Billing, endorsements and claims
+operations have no dedicated screens yet.
 
 ### 8.4 Scheduled operations
 

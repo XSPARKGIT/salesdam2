@@ -7,6 +7,7 @@ import SubmitForApprovalButton from '../../../../components/records/SubmitForApp
 import ApprovalActionsButtons from '../../../../components/records/ApprovalActionsButtons';
 import ConvertToDealButton from '../../../../components/records/ConvertToDealButton';
 import ActionFlowRunner from '../../../../components/records/ActionFlowRunner';
+import NewPolicyButton from '../../../../components/insurance/NewPolicyButton';
 import styles from '../RecordDetail.module.css';
 
 const RecordHeader = ({
@@ -202,6 +203,11 @@ const RecordHeader = ({
           >
             View PDF
           </Button>
+        )}
+        {(objectApiName === 'client' || objectApiName === 'lead') && (
+          <NewPolicyButton
+            params={objectApiName === 'client' ? { client: id } : { lead: id }}
+          />
         )}
         {perms.canUpdate && (
           <Link to={`/o/${objectApiName}/${id}/edit`}>

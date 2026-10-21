@@ -55,6 +55,7 @@ import ApprovalProcessList from './pages/Approvals/ApprovalProcessList';
 import ApprovalProcessEditor from './pages/Approvals/ApprovalProcessEditor';
 import MyApprovals from './pages/Approvals/MyApprovals';
 import DuplicateRules from './pages/DuplicateRules/DuplicateRules';
+import NewBusinessWizard from './pages/Insurance/NewBusiness/NewBusinessWizard';
 import StorageUsage from './pages/Admin/settings/StorageUsage';
 import Tenders from './pages/Tenders/Tenders';
 import OrdersDashboard from './pages/SalesdamDashboards/OrdersDashboard/OrdersDashboard';
@@ -491,6 +492,14 @@ export default function App() {
         }
       />
 
+      <Route
+        path="/insurance/new-business"
+        element={
+          <Guard>
+            <NewBusinessWizard />
+          </Guard>
+        }
+      />
       <Route
         path="/setup/duplicate-rules"
         element={

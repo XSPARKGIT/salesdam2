@@ -371,6 +371,15 @@ const RelatedList = ({
   };
 
   const openCreateModal = () => {
+    // A policy is sold through the new business wizard (application → quote →
+    // acceptance → issue), never created as a bare record.
+    if (relatedObjectMeta?.apiName === 'policy') {
+      const params = new URLSearchParams();
+      if (parentObjectApiName === 'client') params.set('client', parentId);
+      if (parentObjectApiName === 'lead') params.set('lead', parentId);
+      navigate(`/insurance/new-business${params.size ? `?${params}` : ''}`);
+      return;
+    }
     setCreateFormData({
       [relatedField?.apiName]: parentId,
     });

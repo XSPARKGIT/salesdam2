@@ -187,7 +187,13 @@ const RecordHeader = ({
         )}
 
         {perms.canCreate && !['quote', 'invoice'].includes(objectApiName) && (
-          <Link to={`/o/${objectApiName}/new`}>
+          <Link
+            to={
+              objectApiName === 'policy'
+                ? '/insurance/new-business' // the application flow, not a bare record
+                : `/o/${objectApiName}/new`
+            }
+          >
             <Button size="sm" icon={<Plus size={14} />}>
               New {objMeta?.label || objectApiName}
             </Button>
