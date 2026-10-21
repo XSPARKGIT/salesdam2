@@ -22,6 +22,7 @@ import AutoNumberCounter from '../models/AutoNumberCounter.js';
 import { seedDefaultRoles } from '../services/roleService.js';
 import { seedStandardObjects, ensureUserObject } from '../services/metadataService.js';
 import { seedInsuranceObjects, seedInsuranceWorkspace } from '../services/insuranceMetadataService.js';
+import { runBillingCycle } from '../services/insurance/billingRunService.js';
 
 const RUN = Date.now().toString(36);
 const PASSWORD = 'InsApp123!';
@@ -242,6 +243,41 @@ try {
   check('issue returns 200', issued.status === 200, `HTTP ${issued.status}`);
   check('policy becomes active', issued.json?.data?.policy?.status === 'active');
   check('status history records every transition', (issued.json?.data?.status_history || []).length === 3, `${(issued.json?.data?.status_history || []).length}`);
+
+  // ── Issue sets the policy up for billing ───────────────────────────────────
+  const today = new Date().toISOString().slice(0, 10);
+  const issuedPolicy = issued.json?.data?.policy || {};
+  check('issue sets the first premium due on the issue date', issuedPolicy.next_billing_date === today, `next=${issuedPolicy.next_billing_date}`);
+  check('issue sets monthly billing', issuedPolicy.billing_frequency === 'monthly', `freq=${issuedPolicy.billing_frequency}`);
+  check('nothing is paid through yet', !issuedPolicy.paid_through_date, `paid=${issuedPolicy.paid_through_date}`);
+  const premiumAccount = issuedPolicy.account
+    ? await DynamicRecord.findOne({ _id: issuedPolicy.account, tenantId: A.tenant._id, objectApiName: 'account' })
+    : null;
+  check(
+    'issue links a premium account for the payer',
+    !!premiumAccount && String(premiumAccount.getField('account_number') || '').startsWith('PA-'),
+    `account=${issuedPolicy.account} number=${premiumAccount?.getField('account_number')}`,
+  );
+
+  const billing = await runBillingCycle(String(A.tenant._id), String(A.user._id));
+  const billedThis = (billing.results || []).find((r) => r.policyId === appId);
+  check('the billing run bills the newly issued policy', billedThis?.created === true, JSON.stringify(billedThis || billing));
+  const debit = await DynamicRecord.findOne({
+    tenantId: A.tenant._id, objectApiName: 'premium_transaction', 'data.policy': appId, isDeleted: false,
+  });
+  check(
+    'the first debit is for this month at the quoted premium',
+    debit?.getField('billing_period') === today.slice(0, 7) && Number(debit?.getField('amount')) === 250,
+    `period=${debit?.getField('billing_period')} amount=${debit?.getField('amount')}`,
+  );
+  const afterBilling = await DynamicRecord.findById(appId);
+  const nextMonth = new Date(`${today}T00:00:00Z`);
+  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+  check(
+    'next billing date moves on a month after billing',
+    afterBilling.getField('next_billing_date') === nextMonth.toISOString().slice(0, 10),
+    `next=${afterBilling.getField('next_billing_date')}`,
+  );
 
   // ── Config errors must be explicit, never a silent default ─────────────────
   const badStart = await req('/api/v1/insurance/applications', { method: 'POST', cookie: ca, body: startBody });

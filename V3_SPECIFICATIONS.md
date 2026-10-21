@@ -453,7 +453,7 @@ permissions, automations and notifications.
 | §8 | API | `/api/v1/insurance`, versioned, idempotent |
 | §9 | Pricing | 5 rate categories, age bands, child rules, markup |
 | §10 | Acceptance | web/branch/phone evidence |
-| §11 | Policy issue | auto-number, approval gate, HTML+PDF documents |
+| §11 | Policy issue | auto-number, approval gate, HTML+PDF documents; sets the first premium due on the issue date (monthly) and links a premium account so the billing run picks the policy up |
 | §12 | Servicing | lapse/reinstate/suspend/cancel/close |
 | §13 | Billing | debits, credits, FIFO, paid-through date |
 | §15 | Arrears/Lapse | 3 non-consecutive missed, grace, configurable |
@@ -587,7 +587,7 @@ Login. Used by platform operators for cross-tenant administration.
 | `tests/record-merge.e2e.mjs` | 23/23 |
 | `tests/conversation-capture.e2e.mjs` | 14/14 |
 | `backend/tests/insurance-endorsements.e2e.mjs` | 33/33 |
-| `npm run test:insurance` | exit 0 (9/9, 33/33, 36/36, 8/8, 11/11, 18/18, 15/15, 4/4) |
+| `npm run test:insurance` | exit 0 (9/9, 40/40, 36/36, 8/8, 11/11, 18/18, 15/15, 4/4) |
 | `frontend && npm run build` | pass |
 | `admin && npm run build` | pass |
 

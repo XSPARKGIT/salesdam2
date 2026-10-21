@@ -527,6 +527,14 @@ export const issuePolicy = async ({ tenantId, userId, policyId: id }) => {
 
   await transition({ tenantId, userId, policy, to: POLICY_STATUS.ACTIVE, reason: 'Policy issued and activated' });
 
+  // Billing must not block issuance (e.g. a tenant without the account
+  // object): log it, and the policy can be set up for billing afterwards.
+  try {
+    await setUpBilling({ tenantId, userId, policy: await loadPolicy(tenantId, id) });
+  } catch (billingErr) {
+    console.error('Billing set-up on issue failed:', billingErr.message);
+  }
+
   // Generate policy documents on issue (BRD §11.3) — contract + schedule.
   let generatedFiles = [];
   try {
@@ -575,6 +583,56 @@ export const issuePolicy = async ({ tenantId, userId, policyId: id }) => {
     details: { transition: 'active' },
   });
   return getApplicationState({ tenantId, policyId: policyId(policy) });
+};
+
+// ── Billing set-up on issue (BRD §13) ─────────────────────────────────────────
+
+const isoDay = (d = now()) => new Date(d).toISOString().slice(0, 10);
+
+/**
+ * Make a newly issued policy billable. The nightly billing run only bills
+ * policies with a `next_billing_date` on or before today AND a linked premium
+ * `account`, so without this an issued policy was never billed.
+ *
+ * - First premium falls due on the issue date (then monthly from there).
+ * - A premium account is created for the premium payer if none is linked.
+ * - `paid_through_date` is left alone: it is derived from fully settled
+ *   debits, so it stays empty until the first premium is paid.
+ *
+ * Values already on the policy (e.g. set by an integration) are kept.
+ */
+const setUpBilling = async ({ tenantId, userId, policy }) => {
+  const pData = dataOf(policy);
+  const updates = {};
+  if (isBlank(pData.billing_frequency)) updates.billing_frequency = 'monthly';
+  if (isBlank(pData.next_billing_date)) updates.next_billing_date = isoDay();
+
+  if (Object.keys(updates).length) await updateDynamic(policy, updates, userId);
+
+  // The account object is part of the core CRM, not the insurance pack, so a
+  // tenant may not have it; the dates above are still set in that case.
+  if (isBlank(pData.account)) {
+    const payer = pData.premium_payer
+      ? await findOne(tenantId, 'client', { _id: pData.premium_payer })
+      : null;
+    const payerData = payer ? dataOf(payer) : {};
+    const reference = pData.policy_number || policyId(policy);
+    const account = await createDynamic({
+      tenantId,
+      objectApiName: 'account',
+      userId,
+      data: {
+        name: `${payerData.name || 'Premium payer'} — ${reference} premium account`,
+        account_number: `PA-${reference}`,
+        currency: 'ZAR',
+        email: payerData.email || undefined,
+        phone: payerData.phone || undefined,
+      },
+    });
+    updates.account = String(account._id);
+    await updateDynamic(policy, { account: updates.account }, userId);
+  }
+  return updates;
 };
 
 // ── Servicing & lifecycle (BRD §12) ───────────────────────────────────────────

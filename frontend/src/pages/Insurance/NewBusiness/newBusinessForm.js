@@ -17,12 +17,13 @@ export const CHANNELS = [
   { value: 'website', label: 'Website' },
 ];
 
+// Same values as the premium transaction's payment_method picklist.
 export const PAYMENT_METHODS = [
   { value: 'debit_order', label: 'Debit order' },
-  { value: 'eft', label: 'EFT' },
+  { value: 'eft_manual', label: 'EFT / manual' },
   { value: 'pay_at', label: 'Pay@' },
   { value: 'easypay', label: 'EasyPay' },
-  { value: 'card', label: 'Card (payment gateway)' },
+  { value: 'online_gateway', label: 'Online gateway (card)' },
 ];
 
 export const emptyPerson = () => ({ name: '', id_number: '', email: '', phone: '', age: '' });

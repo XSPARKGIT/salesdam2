@@ -219,7 +219,11 @@ const PolicyServicingPanel = ({ policyId, fields = [], canUpdate }) => {
 
   const facts = [
     { label: 'Premium', value: money(p.current_premium), sub: p.billing_frequency ? optionLabel('billing_frequency', p.billing_frequency) : null },
-    { label: 'Paid through', value: fmtDate(p.paid_through_date) },
+    {
+      label: 'Paid through',
+      // Derived from fully settled premiums, so blank until the first is paid.
+      value: p.paid_through_date ? fmtDate(p.paid_through_date) : p.next_billing_date ? 'Nothing paid yet' : '—',
+    },
     { label: 'Next billing', value: fmtDate(p.next_billing_date) },
     {
       label: 'Arrears',
