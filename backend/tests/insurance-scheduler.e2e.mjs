@@ -52,7 +52,7 @@ const mk = (tenantId, userId, objectApiName, data) =>
 
 const mkTxn = async (tenantId, userId, txnData) => {
   const txnId = await objectIdFor(tenantId, 'premium_transaction');
-  return mk(tenantId, userId, txnId, 'premium_transaction', txnData);
+  return mk(tenantId, userId, 'premium_transaction', txnData);
 };
 
 const seedPlan = async (tenantId, userId) => {
@@ -61,8 +61,8 @@ const seedPlan = async (tenantId, userId) => {
   const bcId = await objectIdFor(tenantId, 'benefit_cover');
   const crId = await objectIdFor(tenantId, 'child_benefit_rule');
 
-  const product = await mk(tenantId, userId, productId, 'product', { name: 'Funeral Plan' });
-  const pv = await mk(tenantId, userId, pvId, 'product_version', {
+  const product = await mk(tenantId, userId, 'product', { name: 'Funeral Plan' });
+  const pv = await mk(tenantId, userId, 'product_version', {
     name: 'FP v1',
     product: String(product._id),
     status: 'active',
@@ -84,7 +84,7 @@ const seedPlan = async (tenantId, userId) => {
   });
 
   const cover = (rate_category, cover_amount, premium) =>
-    mk(tenantId, userId, bcId, 'benefit_cover', {
+    mk(tenantId, userId, 'benefit_cover', {
       name: `${rate_category} ${cover_amount}`,
       product_version: String(pv._id),
       rate_category,
@@ -103,7 +103,7 @@ const seedPlan = async (tenantId, userId) => {
   await cover('main_member_spouse_children', 100000, 420);
   await cover('extended_family', 50000, 150);
 
-  await mk(tenantId, userId, crId, 'child_benefit_rule', {
+  await mk(tenantId, userId, 'child_benefit_rule', {
     name: 'Child 0-21',
     product_version: String(pv._id),
     min_age: 0,
@@ -150,11 +150,11 @@ let tenantId, userId, product, pv;
 async function createTestData(tenantId, userId) {
   // Create client, account, policy
   const clientIdObj = await objectIdFor(tenantId, 'client');
-  const client = await mk(tenantId, userId, clientIdObj, 'client', { name: 'John Doe' });
+  const client = await mk(tenantId, userId, 'client', { name: 'John Doe' });
   const accountIdObj = await objectIdFor(tenantId, 'account');
-  const account = await mk(tenantId, userId, accountIdObj, 'account', { name: 'John Account', account_number: 'ACC-001' });
+  const account = await mk(tenantId, userId, 'account', { name: 'John Account', account_number: 'ACC-001' });
   const policyIdObj = await objectIdFor(tenantId, 'policy');
-  const policy = await mk(tenantId, userId, policyIdObj, 'policy', {
+  const policy = await mk(tenantId, userId, 'policy', {
     status: 'active',
     status_effective_date: '2026-01-01',
     application_channel: 'website',
@@ -171,7 +171,7 @@ async function createTestData(tenantId, userId) {
 
   // Policy party
   const partyIdObj = await objectIdFor(tenantId, 'policy_party');
-  await mk(tenantId, userId, partyIdObj, 'policy_party', {
+  await mk(tenantId, userId, 'policy_party', {
     name: 'Premium Payer - John Doe',
     policy: policyId,
     client: String(client._id),
@@ -195,7 +195,7 @@ try {
   // Create communication templates for all events used in scheduler tests
   const templateIdObj = await objectIdFor(tenantId, 'communication_template');
   const mkTpl = (name, apiName, category, subject, body) =>
-    mk(tenantId, userId, templateIdObj, 'communication_template', {
+    mk(tenantId, userId, 'communication_template', {
       name,
       api_name: apiName,
       category,
@@ -307,9 +307,9 @@ try {
   const clientIdObj2 = await objectIdFor(tenantId, 'client');
   const accountIdObj2 = await objectIdFor(tenantId, 'account');
   const policyIdObj2 = await objectIdFor(tenantId, 'policy');
-  const client2 = await mk(tenantId, userId, clientIdObj2, 'client', { name: 'Jane Smith', email: 'jane@example.com' });
-  const account2 = await mk(tenantId, userId, accountIdObj2, 'account', { name: 'Jane Account', account_number: 'ACC-002' });
-  const policy2 = await mk(tenantId, userId, policyIdObj2, 'policy', {
+  const client2 = await mk(tenantId, userId, 'client', { name: 'Jane Smith', email: 'jane@example.com' });
+  const account2 = await mk(tenantId, userId, 'account', { name: 'Jane Account', account_number: 'ACC-002' });
+  const policy2 = await mk(tenantId, userId, 'policy', {
     status: 'active',
     status_effective_date: '2026-01-01',
     application_channel: 'website',
@@ -327,7 +327,7 @@ try {
 
   // Policy party
   const partyIdObj2 = await objectIdFor(tenantId, 'policy_party');
-  await mk(tenantId, userId, partyIdObj2, 'policy_party', {
+  await mk(tenantId, userId, 'policy_party', {
     name: 'Premium Payer - Jane',
     policy: policy2Id,
     client: String(client2._id),

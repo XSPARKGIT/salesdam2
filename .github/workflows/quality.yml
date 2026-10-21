@@ -58,6 +58,7 @@ jobs:
           node tests/record-merge.e2e.mjs
           node tests/conversation-capture.e2e.mjs
           node tests/insurance-endorsements.e2e.mjs
+          node tests/insurance-scheduler.e2e.mjs
       - name: Run insurance domain suites
         working-directory: backend
         run: npm run test:insurance

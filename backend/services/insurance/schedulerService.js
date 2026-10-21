@@ -175,8 +175,12 @@ export const runMissedPaymentNotifications = async (tenantId, systemUserId) => {
 
     // Load premium transactions
     const txns = await findMany(tenantId, 'premium_transaction', { 'data.policy': String(policy._id) });
-    console.log('[runMissedPaymentNotifications] loaded txns for policy', String(policy._id), ':', txns.length);
-    const debits = txns.filter((t) => dataOf(t).direction === 'debit' && dataOf(t).status === 'posted');
+    // evaluateArrears reads flat fields (status, type, due_date, amount), but a
+    // DynamicRecord keeps them in its `data` map — pass the field values, not
+    // the record, or every debit is filtered out and nothing is ever missed.
+    const debits = txns
+      .filter((t) => dataOf(t).direction === 'debit' && dataOf(t).status === 'posted')
+      .map((t) => ({ _id: String(t._id), ...dataOf(t) }));
 
     if (!debits.length) continue;
 
@@ -190,7 +194,6 @@ export const runMissedPaymentNotifications = async (tenantId, systemUserId) => {
 
     // Check if we just crossed a missed payment threshold (1, 2, or 3)
     const missedCount = evaluation.missedCount;
-    console.log('[runMissedPaymentNotifications] policy:', String(policy._id), 'missedCount:', missedCount, 'allowedMissed:', Number(pvData.max_missed_payments) || 3);
     if ([1, 2, 3].includes(missedCount)) {
       const triggerFn = missedCount === 1 ? triggerMissedPayment1 :
                         missedCount === 2 ? triggerMissedPayment2 :
@@ -263,7 +266,19 @@ export const runInsuranceSchedulerForTenant = async (tenantId, systemUserId) => 
     console.error(`Billing run failed for tenant ${tenantId}:`, e.message);
   }
 
-  // 2. Auto-lapse evaluation
+  // 2. Missed payment notifications
+  //    Before auto-lapse on purpose: auto-lapse lapses a policy that has just
+  //    crossed the three-missed threshold, and the missed-payment job only
+  //    looks at active/inactive/arrears policies — so the "3rd missed payment"
+  //    notice was never sent, the customer only ever got the lapse notice.
+  try {
+    results.missedPayments = await runMissedPaymentNotifications(tenantId, systemUserId);
+  } catch (e) {
+    results.missedPayments = { error: e.message };
+    console.error(`Missed payment notifications failed for tenant ${tenantId}:`, e.message);
+  }
+
+  // 3. Auto-lapse evaluation
   try {
     results.autoLapse = await runAutoLapseEvaluation(tenantId, systemUserId);
   } catch (e) {
@@ -271,26 +286,12 @@ export const runInsuranceSchedulerForTenant = async (tenantId, systemUserId) => 
     console.error(`Auto-lapse failed for tenant ${tenantId}:`, e.message);
   }
 
-  // 3. Payment due reminders
+  // 4. Payment due reminders
   try {
     results.paymentDue = await runPaymentDueReminders(tenantId, systemUserId);
   } catch (e) {
     results.paymentDue = { error: e.message };
     console.error(`Payment due reminders failed for tenant ${tenantId}:`, e.message);
-  }
-
-  // 4. Missed payment notifications
-  try {
-    const policies = await findMany(
-      tenantId,
-      'policy',
-      { 'data.status': { $in: [POLICY_STATUS.ACTIVE, POLICY_STATUS.INACTIVE, POLICY_STATUS.ARREARS] } },
-    );
-    console.log('[runMissedPaymentNotifications] found policies:', policies.map(p => ({ id: String(p._id), status: dataOf(p).status })));
-    results.missedPayments = await runMissedPaymentNotifications(tenantId, systemUserId);
-  } catch (e) {
-    results.missedPayments = { error: e.message };
-    console.error(`Missed payment notifications failed for tenant ${tenantId}:`, e.message);
   }
 
   // 5. Child age events
