@@ -151,7 +151,7 @@ const testEmailSender = asyncHandler(async (req, res) => {
       from:    `"${sender.name}" <${sender.email}>`,
       replyTo: sender.replyTo || undefined,
       to,
-      subject: 'Test email from Salesforce Mini CRM',
+      subject: 'Test email from Salesdam',
       text:    `This is a test email from the "${sender.name}" sender configuration.\n\nIf you received this, the SMTP settings are working correctly.`,
     });
 

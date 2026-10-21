@@ -2,11 +2,12 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import { APP_URL } from '../config';
 ---
 
 <BaseLayout
-  title="Getting Started - Mini CRM"
-  description="Learn how to set up and start using Mini CRM in minutes"
+  title="Getting Started - Salesdam"
+  description="Learn how to set up and start using Salesdam in minutes"
 >
   <Header />
 
@@ -14,7 +15,7 @@ import Footer from '../components/Footer.astro';
     <section class="hero-small">
       <div class="container">
         <div class="hero-content">
-          <h1>Getting Started with Mini CRM</h1>
+          <h1>Getting Started with Salesdam</h1>
           <p>Follow this guide to set up your workspace and start managing customer relationships in minutes.</p>
         </div>
       </div>
@@ -24,9 +25,9 @@ import Footer from '../components/Footer.astro';
       <div class="container">
         <div class="content">
           <div class="intro">
-            <h2>Welcome to Mini CRM</h2>
+            <h2>Welcome to Salesdam</h2>
             <p>
-              This guide will walk you through everything you need to know to get started with Mini CRM.
+              This guide will walk you through everything you need to know to get started with Salesdam.
               From creating your workspace to building automation flows, we'll help you become productive
               quickly.
             </p>
@@ -39,10 +40,10 @@ import Footer from '../components/Footer.astro';
             </div>
             <p>
               Your workspace is your isolated environment where all your data lives. Each workspace is
-              completely separate from others, making Mini CRM perfect for multi-tenant applications.
+              completely separate from others, making Salesdam perfect for multi-tenant applications.
             </p>
             <ol>
-              <li>Go to <a href="http://localhost:3000/register">http://localhost:3000/register</a></li>
+              <li>Go to <a href={APP_URL + '/register'}>{APP_URL}/register</a></li>
               <li>Enter your workspace name (e.g., "Acme Corp")</li>
               <li>Provide your email address and create a password</li>
               <li>Enter your full name</li>
@@ -65,7 +66,7 @@ import Footer from '../components/Footer.astro';
             </div>
             <p>
               Objects are the foundation of your data model. Think of them like database tables or
-              spreadsheet tabs. Mini CRM comes with flexibility to create any object you need.
+              spreadsheet tabs. Salesdam comes with flexibility to create any object you need.
             </p>
             <h3>Creating Your First Object</h3>
             <ol>

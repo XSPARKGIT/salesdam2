@@ -3,11 +3,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { MessageCircle, ShoppingCart, Wrench, Handshake, Clock, BookOpen, HelpCircle, Rocket, Sparkles } from 'lucide-astro';
+import { APP_URL } from '../config';
 ---
 
 <BaseLayout
-  title="Get in Touch — Mini CRM"
-  description="Contact the Mini CRM team for sales, support, or general enquiries. We're here to help."
+  title="Get in Touch — Salesdam"
+  description="Contact the Salesdam team for sales, support, or general enquiries. We're here to help."
 >
   <Header />
 
@@ -105,7 +106,7 @@ import { MessageCircle, ShoppingCart, Wrench, Handshake, Clock, BookOpen, HelpCi
                   </div>
                   <div>
                     <div class="si-title">General Enquiries</div>
-                    <div class="si-desc">Questions about Mini CRM, how it works, or if it's right for your business.</div>
+                    <div class="si-desc">Questions about Salesdam, how it works, or if it's right for your business.</div>
                   </div>
                 </div>
                 <div class="support-item">
@@ -176,7 +177,7 @@ import { MessageCircle, ShoppingCart, Wrench, Handshake, Clock, BookOpen, HelpCi
                   <Rocket size={18} strokeWidth={2} />
                   <span>Getting Started</span>
                 </a>
-                <a href="http://localhost:3000/register" class="ql-item">
+                <a href={APP_URL + '/register'} class="ql-item">
                   <Sparkles size={18} strokeWidth={2} />
                   <span>Create Free Account</span>
                 </a>

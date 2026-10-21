@@ -17,11 +17,11 @@ const faqs = [
       },
       {
         q: "How long does setup take?",
-        a: "Most users are up and running in under 10 minutes. If you choose AI onboarding, we automatically create standard objects (Contacts, Leads, Accounts, etc.) for your industry so you can start using Mini CRM immediately."
+        a: "Most users are up and running in under 10 minutes. If you choose AI onboarding, we automatically create standard objects (Contacts, Leads, Accounts, etc.) for your industry so you can start using Salesdam immediately."
       },
       {
         q: "Can I import data from another CRM?",
-        a: "Yes. You can import records via CSV upload. Go to any object list, click 'Import', map your columns to Mini CRM fields, and your data will be imported in seconds."
+        a: "Yes. You can import records via CSV upload. Go to any object list, click 'Import', map your columns to Salesdam fields, and your data will be imported in seconds."
       },
     ]
   },
@@ -29,7 +29,7 @@ const faqs = [
     category: "Objects & Data",
     items: [
       {
-        q: "What is an 'Object' in Mini CRM?",
+        q: "What is an 'Object' in Salesdam?",
         a: "An object is a type of record — for example, Contact, Lead, Account, Deal, or any custom entity your business needs. You define the object's fields, layout, and relationships through Object Settings."
       },
       {
@@ -38,7 +38,7 @@ const faqs = [
       },
       {
         q: "What field types are supported?",
-        a: "Mini CRM supports 20+ field types: Text, Textarea, Rich Text, Number, Currency, Percent, Date, DateTime, Boolean (checkbox), Picklist, Multi-Select Picklist, Lookup, Master-Detail, Email, Phone, URL, Address, Formula, and Auto-Number."
+        a: "Salesdam supports 20+ field types: Text, Textarea, Rich Text, Number, Currency, Percent, Date, DateTime, Boolean (checkbox), Picklist, Multi-Select Picklist, Lookup, Master-Detail, Email, Phone, URL, Address, Formula, and Auto-Number."
       },
       {
         q: "Can objects reference each other?",
@@ -92,16 +92,16 @@ const faqs = [
     category: "Integrations & API",
     items: [
       {
-        q: "Does Mini CRM have an API?",
+        q: "Does Salesdam have an API?",
         a: "Yes. Every object and record is accessible via a REST API. You can generate API keys under Settings → API Keys, scope them to specific objects, and use them from any external application."
       },
       {
         q: "What are webhooks used for?",
-        a: "Webhooks let Mini CRM push data to external systems when events happen (record created, updated, deleted). You configure a URL, choose the events, and Mini CRM will POST a JSON payload to your endpoint in real time."
+        a: "Webhooks let Salesdam push data to external systems when events happen (record created, updated, deleted). You configure a URL, choose the events, and Salesdam will POST a JSON payload to your endpoint in real time."
       },
       {
-        q: "Can I connect Mini CRM to Zapier or Make?",
-        a: "Yes, using the API key integration. You can call Mini CRM's REST API from Zapier, Make (formerly Integromat), or any other automation platform that supports custom HTTP requests."
+        q: "Can I connect Salesdam to Zapier or Make?",
+        a: "Yes, using the API key integration. You can call Salesdam's REST API from Zapier, Make (formerly Integromat), or any other automation platform that supports custom HTTP requests."
       },
     ]
   },
@@ -110,7 +110,7 @@ const faqs = [
     items: [
       {
         q: "What are the plan differences?",
-        a: "Starter (R495/mo): 1 user, ideal for solo operators. Basic (R695/mo): 3 users, for small teams. Standard (R1,485/mo): 10 users, for growing businesses. Enterprise (R2,805/mo): 20 users, for larger organisations with higher limits."
+        a: "Salesdam is licensed per user, per year. The platform itself is the same on every licence; what varies is the number of users, records, custom objects and automations your tenant is allowed. We quote per user, so talk to us for pricing on your team size."
       },
       {
         q: "How does the debit order work?",
@@ -122,7 +122,7 @@ const faqs = [
       },
       {
         q: "What happens if I exceed my user or record limit?",
-        a: "You'll receive a notification when you approach 80% of any limit. If you exceed a limit, you'll be prompted to upgrade. Existing data is never deleted — you simply need to upgrade to continue adding more."
+        a: "You will be stopped at the limit: the action that would exceed it is rejected with a message telling you which limit you reached. Nothing you have already stored is ever removed — you simply need a bigger licence to continue adding."
       },
     ]
   },
@@ -135,11 +135,11 @@ const faqs = [
       },
       {
         q: "Where is my data stored?",
-        a: "Data is stored on servers within your selected region. We apply encryption at rest and in transit (HTTPS/TLS)."
+        a: "Data is stored on the servers hosting your Salesdam installation, and every request is encrypted in transit over HTTPS/TLS. Sessions are held server-side and sent back as HTTP-only cookies, and passwords are hashed with bcrypt."
       },
       {
         q: "Can I export my data?",
-        a: "Yes. You can export records from any object list as CSV. You can also use the API to programmatically export your entire dataset."
+        a: "Yes. Admin Settings → Data Export lets you export any object to CSV or JSON, and the API can pull the same data programmatically."
       },
     ]
   },
@@ -147,8 +147,8 @@ const faqs = [
 ---
 
 <BaseLayout
-  title="FAQ — Mini CRM"
-  description="Answers to the most common questions about Mini CRM — plans, objects, automation, users, and more."
+  title="FAQ — Salesdam"
+  description="Answers to the most common questions about Salesdam — plans, objects, automation, users, and more."
 >
   <Header />
 
@@ -219,7 +219,7 @@ const faqs = [
         <div class="bottom-card">
           <div class="bc-left">
             <h3>Still have questions?</h3>
-            <p>Our team is here to help you get the most out of Mini CRM.</p>
+            <p>Our team is here to help you get the most out of Salesdam.</p>
           </div>
           <div class="bc-right">
             <a href="/contact" class="btn btn-primary">Contact Support</a>

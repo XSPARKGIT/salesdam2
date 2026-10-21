@@ -4,7 +4,7 @@ import Sidebar from './Sidebar/Sidebar';
 import Topbar from './Topbar/Topbar';
 import { useAppContext } from '../context/AppContext';
 
-const APP_NAME = 'Salesforce Mini CRM';
+const APP_NAME = 'Salesdam';
 
 const Layout = ({ title, description, children }) => {
   const { sidebarCollapsed } = useAppContext();

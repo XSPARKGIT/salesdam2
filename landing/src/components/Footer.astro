@@ -1,5 +1,6 @@
 ---
 import { Zap } from 'lucide-astro';
+import { APP_URL } from '../config';
 
 const year = new Date().getFullYear();
 ---
@@ -12,18 +13,18 @@ const year = new Date().getFullYear();
           <div class="footer-logo-icon">
             <Zap size={18} strokeWidth={2.5} />
           </div>
-          <span>Mini CRM</span>
+          <span>Salesdam</span>
         </a>
         <p>
           A powerful multi-tenant CRM platform built for modern businesses.
           Custom objects, automation, and AI — all in one place.
         </p>
         <div class="footer-app-links">
-          <a href="http://localhost:3000/login" class="footer-app-btn"
+          <a href={APP_URL + '/login'} class="footer-app-btn"
             >Sign In</a
           >
           <a
-            href="http://localhost:3000/register"
+            href={APP_URL + '/register'}
             class="footer-app-btn footer-app-btn-primary">Start Free</a
           >
         </div>
@@ -94,7 +95,7 @@ const year = new Date().getFullYear();
     </div>
 
     <div class="footer-bottom">
-      <p>&copy; {year} Mini CRM. All rights reserved.</p>
+      <p>&copy; {year} Salesdam. All rights reserved.</p>
       <div class="footer-legal">
         <a href="/privacy">Privacy Policy</a>
         <a href="/terms">Terms of Service</a>

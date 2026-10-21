@@ -2,14 +2,16 @@
 import '../styles/global.css';
 
 const {
-  title = "Mini CRM — The CRM Built for Growth",
+  title = "Salesdam — Multi-tenant CRM & Insurance Platform",
   description = "A powerful multi-tenant CRM platform with custom objects, automation, analytics, and AI-powered onboarding. Build the exact CRM your business needs.",
   image = "/og-image.svg",
   type = "website",
   canonicalUrl,
 } = Astro.props;
 
-const siteUrl = "http://localhost:4321";
+// Canonical base for this site. Override at build time with PUBLIC_SITE_URL
+// (the marketing site's own host — the app host lives in config.js).
+const siteUrl = (import.meta.env.PUBLIC_SITE_URL || 'https://www.salesdam.com').replace(/\/$/, '');
 const fullUrl = canonicalUrl || siteUrl + Astro.url.pathname;
 ---
 
@@ -30,7 +32,7 @@ const fullUrl = canonicalUrl || siteUrl + Astro.url.pathname;
   <meta property="og:description" content={description} />
   <meta property="og:url" content={fullUrl} />
   <meta property="og:image" content={siteUrl + image} />
-  <meta property="og:site_name" content="Mini CRM" />
+  <meta property="og:site_name" content="Salesdam" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />

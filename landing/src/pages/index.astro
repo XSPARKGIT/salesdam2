@@ -4,12 +4,13 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import FeatureCard from '../components/FeatureCard.astro';
 import PlanCard from '../components/PlanCard.astro';
+import { APP_URL } from '../config';
 import { Target, Zap, BarChart3, Users, Shield, RefreshCw, Mail, Sparkles } from 'lucide-astro';
 ---
 
 <BaseLayout
-  title="Mini CRM — The CRM Built for Growth"
-  description="Build powerful customer relationships with Mini CRM. Custom objects, automation, analytics, and AI onboarding. Start building in minutes."
+  title="Salesdam — Multi-tenant CRM & Insurance Platform"
+  description="Build powerful customer relationships with Salesdam. Custom objects, automation, analytics, and AI onboarding. Start building in minutes."
 >
   <Header />
 
@@ -18,40 +19,41 @@ import { Target, Zap, BarChart3, Users, Shield, RefreshCw, Mail, Sparkles } from
     <section class="hero">
       <div class="container">
         <div class="hero-content">
-          <h1 class="hero-title">The CRM Platform Built for Growth</h1>
+          <h1 class="hero-title">CRM and Insurance Workspace on One Platform</h1>
           <p class="hero-subtitle">
-            Mini CRM delivers enterprise-grade customer relationship management with custom objects,
-            automation workflows, analytics dashboards, and multi-tenant architecture. Built for teams
-            that need flexibility without complexity.
+            Salesdam is a multi-tenant CRM with a configurable data model — custom objects,
+            fields, validations and formulas — plus approval workflows, duplicate management
+            and a documented REST API. On top of that sits a full insurance workspace: new
+            business, policy servicing, premium billing and claims.
           </p>
           <div class="hero-buttons">
-            <a href="http://localhost:3000/register" class="btn btn-primary btn-large">Get Started Free</a>
-            <a href="#features" class="btn btn-secondary btn-large">View Demo</a>
+            <a href={APP_URL + '/login'} class="btn btn-primary btn-large">Sign in</a>
+            <a href="#features" class="btn btn-secondary btn-large">See what it does</a>
           </div>
-          <p class="hero-note">No credit card required. Start building in minutes.</p>
+          <p class="hero-note">Objects, fields, workflows and permissions are configured — not hard-coded.</p>
         </div>
       </div>
     </section>
 
-    <!-- Social Proof Section -->
+    <!-- What it is Section -->
     <section class="section social-proof">
       <div class="container">
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-value">500+</div>
-            <div class="stat-label">Companies</div>
+            <div class="stat-value stat-value-text">Multi-tenant</div>
+            <div class="stat-label">Every query is scoped to the organisation that owns it</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">50K+</div>
-            <div class="stat-label">Records Managed</div>
+            <div class="stat-value stat-value-text">Configurable</div>
+            <div class="stat-label">Objects, fields, validations and formulas defined per tenant</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">99.9%</div>
-            <div class="stat-label">Uptime</div>
+            <div class="stat-value stat-value-text">Governed</div>
+            <div class="stat-label">Role, object and field-level permissions, with a full audit trail</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">R695</div>
-            <div class="stat-label">Starting Price/mo</div>
+            <div class="stat-value stat-value-text">Documented</div>
+            <div class="stat-label">REST API, API keys, webhooks and product documentation</div>
           </div>
         </div>
       </div>
@@ -64,7 +66,7 @@ import { Target, Zap, BarChart3, Users, Shield, RefreshCw, Mail, Sparkles } from
           <span class="section-label">Platform Features</span>
           <h2 class="section-title">Everything You Need to Manage Customer Relationships</h2>
           <p class="section-subtitle">
-            Mini CRM combines powerful features with intuitive design, giving you the tools
+            Salesdam combines powerful features with intuitive design, giving you the tools
             to customize your CRM exactly how you need it.
           </p>
         </div>
@@ -158,7 +160,7 @@ import { Target, Zap, BarChart3, Users, Shield, RefreshCw, Mail, Sparkles } from
           <div class="step">
             <div class="step-number">4</div>
             <h3>Automate & Analyze</h3>
-            <p>Build automation flows and create dashboards. Let Mini CRM work for you while you focus on customers.</p>
+            <p>Build automation flows and create dashboards. Let Salesdam work for you while you focus on customers.</p>
           </div>
         </div>
       </div>
@@ -168,115 +170,62 @@ import { Target, Zap, BarChart3, Users, Shield, RefreshCw, Mail, Sparkles } from
     <section class="section pricing" id="pricing">
       <div class="container">
         <div class="section-header">
-          <span class="section-label">Pricing</span>
-          <h2 class="section-title">Simple, Transparent Pricing</h2>
+          <span class="section-label">Licensing</span>
+          <h2 class="section-title">Annual Licensing, Priced Per User</h2>
           <p class="section-subtitle">
-            Choose the plan that fits your team size and needs. All plans include core features.
+            Salesdam is licensed per user, per year. Configuration, data migration and
+            integration work are scoped to your business, so we quote those separately.
           </p>
         </div>
 
         <div class="pricing-grid">
-          <PlanCard
-            name="Starter"
-            price="495"
-            users="1 user included"
-            features={[
-              'Up to 5 custom objects',
-              '1,000 records',
-              'Basic automation flows',
-              '3 dashboards',
-              'Email support',
-              'API access'
-            ]}
-          />
-          <PlanCard
-            name="Basic"
-            price="695"
-            users="3 users included"
-            features={[
-              'Up to 15 custom objects',
-              '10,000 records',
-              'Advanced automation',
-              'Unlimited dashboards',
-              'Priority email support',
-              'API access',
-              'Custom roles'
-            ]}
-          />
-          <PlanCard
-            name="Standard"
-            price="1485"
-            users="10 users included"
-            featured={true}
-            features={[
-              'Unlimited custom objects',
-              '100,000 records',
-              'Advanced automation',
-              'Unlimited dashboards',
-              'Priority support',
-              'API access',
-              'Custom roles & permissions',
-              'Email templates'
-            ]}
-          />
-          <PlanCard
-            name="Enterprise"
-            price="2805"
-            users="20 users included"
-            features={[
-              'Everything in Standard',
-              'Unlimited records',
-              'AI onboarding assistant',
-              'Dedicated support',
-              'Custom integrations',
-              'SLA guarantees',
-              'Advanced security',
-              'White-label options'
-            ]}
-          />
+          <div class="plan-card">
+            <h3 class="plan-name">What's included</h3>
+            <ul class="plan-features">
+              <li>The full CRM: objects, fields, list views, dashboards, reports</li>
+              <li>Approval workflows, duplicate rules, record merge and audit trail</li>
+              <li>The insurance workspace, if you need it</li>
+              <li>REST API, API keys, webhooks and documentation</li>
+              <li>Hosting, upgrades and support</li>
+            </ul>
+            <a href="/contact" class="btn btn-primary btn-large">Request a quote</a>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- Testimonials Section -->
+    <!-- Who it is for Section -->
     <section class="section testimonials">
       <div class="container">
         <div class="section-header">
-          <span class="section-label">Testimonials</span>
-          <h2 class="section-title">Trusted by Growing Teams</h2>
-          <p class="section-subtitle">See what our customers are saying about Mini CRM</p>
+          <span class="section-label">Where it fits</span>
+          <h2 class="section-title">Built for Teams That Outgrew a Spreadsheet</h2>
+          <p class="section-subtitle">
+            The same platform covers a client book, a sales pipeline and a policy book.
+          </p>
         </div>
 
         <div class="testimonials-grid">
           <div class="testimonial">
+            <h3 class="testimonial-title">Insurance providers</h3>
             <p class="testimonial-text">
-              "Mini CRM transformed how we manage customer data. The custom object builder is incredibly
-              powerful, and automation flows save us hours every week."
+              Take a policy from application through quote, acceptance and issue, then service
+              it: lapse, reinstate, suspend, cancel, endorse, bill the premium and pay claims.
             </p>
-            <div class="testimonial-author">
-              <strong>Sarah Johnson</strong>
-              <span>Operations Manager, TechStart Inc</span>
-            </div>
           </div>
           <div class="testimonial">
+            <h3 class="testimonial-title">Agencies and consultancies</h3>
             <p class="testimonial-text">
-              "We switched from Salesforce to Mini CRM and haven't looked back. It's more affordable,
-              easier to customize, and the multi-tenant architecture is perfect for our agency."
+              Give every client their own workspace and their own data model inside one
+              installation, with roles deciding who sees what.
             </p>
-            <div class="testimonial-author">
-              <strong>Michael Chen</strong>
-              <span>Founder, Digital Solutions Agency</span>
-            </div>
           </div>
           <div class="testimonial">
+            <h3 class="testimonial-title">B2B sales teams</h3>
             <p class="testimonial-text">
-              "The role-based access control is exactly what we needed. We can give clients access to
-              their data without worrying about security. Outstanding platform."
+              Leads, deals, orders, quotes and invoices with approvals where you need them,
+              dashboards over the pipeline, and tender opportunities tracked alongside.
             </p>
-            <div class="testimonial-author">
-              <strong>Emma Williams</strong>
-              <span>CTO, CloudServe</span>
-            </div>
           </div>
         </div>
       </div>
@@ -286,11 +235,11 @@ import { Target, Zap, BarChart3, Users, Shield, RefreshCw, Mail, Sparkles } from
     <section class="section cta-section">
       <div class="container">
         <div class="cta-content">
-          <h2>Ready to Transform Your Customer Management?</h2>
-          <p>Join hundreds of teams using Mini CRM to build better customer relationships.</p>
+          <h2>Ready to See Salesdam in Action?</h2>
+          <p>Sign in to the platform, or ask us to walk you through a workspace end to end.</p>
           <div class="cta-buttons">
-            <a href="http://localhost:3000/register" class="btn btn-primary btn-large">Start Free Trial</a>
-            <a href="/getting-started" class="btn btn-secondary btn-large">View Getting Started Guide</a>
+            <a href={APP_URL + '/login'} class="btn btn-primary btn-large">Sign in</a>
+            <a href="/contact" class="btn btn-secondary btn-large">Talk to us</a>
           </div>
         </div>
       </div>
@@ -393,6 +342,12 @@ import { Target, Zap, BarChart3, Users, Shield, RefreshCw, Mail, Sparkles } from
     margin-bottom: 8px;
   }
 
+  /* Words rather than figures — a smaller size keeps them on one line. */
+  .stat-value-text {
+    font-size: 1.4rem;
+    line-height: 1.25;
+  }
+
   .stat-label {
     font-size: 0.9rem;
     color: var(--text-secondary);
@@ -478,6 +433,13 @@ import { Target, Zap, BarChart3, Users, Shield, RefreshCw, Mail, Sparkles } from
     padding: 32px;
     border-radius: 12px;
     box-shadow: var(--shadow);
+  }
+
+  .testimonial-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
   }
 
   .testimonial-text {

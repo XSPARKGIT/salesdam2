@@ -1,4 +1,5 @@
 ---
+import { APP_URL } from '../config';
 const { name, price, users, features, popular = false, featured = false } = Astro.props;
 const isHighlighted = popular || featured;
 ---
@@ -25,7 +26,7 @@ const isHighlighted = popular || featured;
     ))}
   </ul>
 
-  <a href="http://localhost:3000/register" class={`btn ${isHighlighted ? 'btn-primary' : 'btn-secondary'}`}>
+  <a href={APP_URL + '/register'} class={`btn ${isHighlighted ? 'btn-primary' : 'btn-secondary'}`}>
     Get Started
   </a>
 </div>

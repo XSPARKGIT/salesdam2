@@ -77,13 +77,13 @@ requests.delete(f'{BASE}/records/contact/{record["_id"]}', headers=HEADERS)`);
 ---
 
 <DocsLayout
-  title="Integrations - User Guide - Mini CRM"
-  description="Connect Mini CRM to external systems with APIs and webhooks"
+  title="Integrations - User Guide - Salesdam"
+  description="Connect Salesdam to external systems with APIs and webhooks"
 >
   <h1>Integrations</h1>
 
   <p>
-    Mini CRM's integration capabilities allow you to connect with external systems,
+    Salesdam's integration capabilities allow you to connect with external systems,
     automate data synchronization, and build custom integrations. This guide covers
     API keys, webhooks, and best practices for integrations.
   </p>
@@ -91,7 +91,7 @@ requests.delete(f'{BASE}/records/contact/{record["_id"]}', headers=HEADERS)`);
   <h2>API Overview</h2>
 
   <p>
-    Mini CRM provides a RESTful API that allows external applications to interact
+    Salesdam provides a RESTful API that allows external applications to interact
     with your data. The API supports all core operations: create, read, update, and delete.
   </p>
 
@@ -159,7 +159,7 @@ DELETE /api/records/:objectName/:id       # Delete record</code></pre>
   <h2>Webhooks</h2>
 
   <p>
-    Webhooks allow Mini CRM to send real-time data to external systems when events
+    Webhooks allow Salesdam to send real-time data to external systems when events
     occur. Perfect for integrating with other applications.
   </p>
 
@@ -194,7 +194,7 @@ DELETE /api/records/:objectName/:id       # Delete record</code></pre>
   <h3>Webhook Security</h3>
   <p>Verify webhook authenticity:</p>
   <ul>
-    <li>Mini CRM sends a signature header: <code>X-Webhook-Signature</code></li>
+    <li>Salesdam sends a signature header: <code>X-Webhook-Signature</code></li>
     <li>Compare with HMAC-SHA256 hash of payload</li>
     <li>Use webhook secret for verification</li>
     <li>Reject requests with invalid signatures</li>
@@ -204,7 +204,7 @@ DELETE /api/records/:objectName/:id       # Delete record</code></pre>
 
   <p>
     External objects let you view and interact with data from other systems without
-    importing it into Mini CRM.
+    importing it into Salesdam.
   </p>
 
   <h3>Creating an External Object</h3>
@@ -215,7 +215,7 @@ DELETE /api/records/:objectName/:id       # Delete record</code></pre>
       <ul>
         <li><strong>Data Source:</strong> External API URL</li>
         <li><strong>Authentication:</strong> API key, OAuth, or basic auth</li>
-        <li><strong>Mapping:</strong> Map external fields to Mini CRM fields</li>
+        <li><strong>Mapping:</strong> Map external fields to Salesdam fields</li>
       </ul>
     </li>
     <li>Test connection</li>
@@ -254,7 +254,7 @@ DELETE /api/records/:objectName/:id       # Delete record</code></pre>
   <p>Sync tasks and events with Google Calendar or Outlook:</p>
   <ul>
     <li>Authorize calendar access (OAuth)</li>
-    <li>Map Mini CRM fields to calendar properties</li>
+    <li>Map Salesdam fields to calendar properties</li>
     <li>Enable two-way sync</li>
     <li>Set sync frequency</li>
   </ul>
@@ -263,7 +263,7 @@ DELETE /api/records/:objectName/:id       # Delete record</code></pre>
   <p>Send notifications to Slack channels:</p>
   <ol>
     <li>Create Slack webhook URL in Slack workspace</li>
-    <li>Add webhook to Mini CRM</li>
+    <li>Add webhook to Salesdam</li>
     <li>Configure which events trigger notifications</li>
     <li>Customize message format</li>
   </ol>
@@ -271,8 +271,8 @@ DELETE /api/records/:objectName/:id       # Delete record</code></pre>
   <h3>Zapier Integration</h3>
   <p>Connect to 5,000+ apps via Zapier:</p>
   <ol>
-    <li>Create API key in Mini CRM</li>
-    <li>Add Mini CRM app in Zapier</li>
+    <li>Create API key in Salesdam</li>
+    <li>Add Salesdam app in Zapier</li>
     <li>Authenticate with API key</li>
     <li>Create Zaps for automation</li>
   </ol>
@@ -305,8 +305,8 @@ DELETE /api/records/:objectName/:id       # Delete record</code></pre>
   <h3>SDK and Libraries</h3>
   <p>Use official SDKs for easier integration:</p>
   <ul>
-    <li><strong>JavaScript/Node.js:</strong> <code>npm install mini-crm-sdk</code></li>
-    <li><strong>Python:</strong> <code>pip install mini-crm</code></li>
+    <li><strong>JavaScript/Node.js:</strong> <code>npm install salesdam-sdk</code></li>
+    <li><strong>Python:</strong> <code>pip install salesdam</code></li>
     <li><strong>PHP:</strong> Composer package available</li>
   </ul>
 

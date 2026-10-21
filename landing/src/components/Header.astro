@@ -1,5 +1,6 @@
 ---
 import { Zap } from 'lucide-astro';
+import { APP_URL } from '../config';
 
 const currentPath = Astro.url.pathname;
 const isActive = (path) => {
@@ -15,7 +16,7 @@ const isActive = (path) => {
         <div class="logo-icon">
           <Zap size={20} strokeWidth={2.5} />
         </div>
-        <span class="logo-text">Mini CRM</span>
+        <span class="logo-text">Salesdam</span>
       </a>
 
       <ul class="nav-links" id="navLinks">
@@ -33,8 +34,8 @@ const isActive = (path) => {
       </ul>
 
       <div class="nav-cta">
-        <a href="http://localhost:3000/login" class="btn btn-ghost btn-sm">Sign in</a>
-        <a href="http://localhost:3000/register" class="btn btn-primary btn-sm">Get Started Free</a>
+        <a href={APP_URL + '/login'} class="btn btn-ghost btn-sm">Sign in</a>
+        <a href={APP_URL + '/register'} class="btn btn-primary btn-sm">Get Started Free</a>
       </div>
 
       <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle menu">
@@ -56,8 +57,8 @@ const isActive = (path) => {
         <li><a href="/contact">Contact</a></li>
       </ul>
       <div class="mobile-cta">
-        <a href="http://localhost:3000/login" class="btn btn-ghost btn-sm">Sign in</a>
-        <a href="http://localhost:3000/register" class="btn btn-primary btn-sm">Get Started Free</a>
+        <a href={APP_URL + '/login'} class="btn btn-ghost btn-sm">Sign in</a>
+        <a href={APP_URL + '/register'} class="btn btn-primary btn-sm">Get Started Free</a>
       </div>
     </div>
   </div>

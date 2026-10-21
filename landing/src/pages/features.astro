@@ -3,11 +3,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { Database, FileText, Zap, BarChart3, Shield, Mail, Link2, Sparkles, Search, Network, Key } from 'lucide-astro';
+import { APP_URL } from '../config';
 ---
 
 <BaseLayout
-  title="Features — Mini CRM"
-  description="Discover everything Mini CRM can do. From custom objects and automation to AI onboarding and analytics."
+  title="Features — Salesdam"
+  description="Discover everything Salesdam can do. From custom objects and automation to AI onboarding and analytics."
 >
   <Header />
 
@@ -19,9 +20,9 @@ import { Database, FileText, Zap, BarChart3, Shield, Mail, Link2, Sparkles, Sear
         <div class="hero-content">
           <div class="hero-label">Platform Features</div>
           <h1>Everything your team needs to <span class="accent">close more deals</span></h1>
-          <p>Mini CRM is a fully configurable platform. Build the exact CRM your business needs — no code required.</p>
+          <p>Salesdam is a fully configurable platform. Build the exact CRM your business needs — no code required.</p>
           <div class="hero-cta">
-            <a href="http://localhost:3000/register" class="btn btn-primary btn-lg">Start Free Trial</a>
+            <a href={APP_URL + '/register'} class="btn btn-primary btn-lg">Start Free</a>
             <a href="/getting-started" class="btn btn-secondary btn-lg">See How It Works</a>
           </div>
         </div>
@@ -274,7 +275,7 @@ import { Database, FileText, Zap, BarChart3, Shield, Mail, Link2, Sparkles, Sear
                 <Link2 size={24} strokeWidth={2} />
               </div>
               <h4>Integrations &amp; Webhooks</h4>
-              <p>Connect Mini CRM to any external system using REST API, API keys, and outgoing webhooks.</p>
+              <p>Connect Salesdam to any external system using REST API, API keys, and outgoing webhooks.</p>
             </div>
             <div class="more-card">
               <div class="more-icon" style="background:#ffedd5; color:#f97316;">
@@ -314,9 +315,9 @@ import { Database, FileText, Zap, BarChart3, Shield, Mail, Link2, Sparkles, Sear
     <section class="features-cta">
       <div class="container">
         <h2>Ready to see it in action?</h2>
-        <p>Create your free workspace in under 2 minutes. No credit card required.</p>
+        <p>Register your workspace in a couple of minutes. The free plan needs no card, and we can configure your tenant for you if you would rather not.</p>
         <div class="cta-btns">
-          <a href="http://localhost:3000/register" class="btn btn-primary btn-lg">Start Free</a>
+          <a href={APP_URL + '/register'} class="btn btn-primary btn-lg">Start Free</a>
           <a href="/getting-started" class="btn" style="background:rgba(255,255,255,0.15); color:white; border:2px solid rgba(255,255,255,0.4);">View Getting Started Guide</a>
         </div>
       </div>
