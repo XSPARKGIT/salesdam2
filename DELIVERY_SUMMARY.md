@@ -4,6 +4,9 @@
 **Status**: Feature-complete for the insurance workspace; **NOT signed off for
 production** (see `API_CONTRACT_CONFORMANCE.md` and the audit go-live assessment).
 **Verified on 2026-10-16**: see [Verification log](#verification-log-2026-10-16) below.
+**Updated 2026-10-21**: see `V3_SPECIFICATIONS.md` for the current, code-derived
+description of what exists — including which features have screens and which are
+API-only.
 
 > Correction (2026-10-16): earlier versions of this document stated
 > "PRODUCTION READY" and "130/130 checks passing in CI/CD". The platform is not
@@ -16,7 +19,12 @@ production** (see `API_CONTRACT_CONFORMANCE.md` and the audit go-live assessment
 
 ## Executive Summary
 
-The Salesdam V3 Insurance Workspace has been fully implemented, tested, and is ready for production deployment. All core insurance functionality required by the BRD (Business Requirements Document) v1.0 has been delivered with comprehensive test coverage.
+The Salesdam V3 Insurance Workspace backend and API are implemented and tested
+against the BRD (Business Requirements Document) v1.0. Insurance records are
+viewed and edited through the generic CRM record screens; the insurance
+operations themselves — quote, accept, issue, lapse/reinstate, billing,
+endorsements and claims payout — are **API-only**, with no dedicated screens.
+The platform is **not signed off for production** (see Status above).
 
 ---
 
@@ -102,18 +110,18 @@ Seven platform capabilities from the Core BRD previously flagged as not
 started were built as new, tenant-scoped `/api/v1` surfaces. Each ships with an
 end-to-end suite and is wired into `.github/workflows/quality.yml`.
 
-| BRD | Feature | Surface | Suite | Checks |
-|-----|---------|---------|-------|--------|
-| §14 | Platform-wide TenantConfiguration resolution | `/configuration` | `configuration.e2e.mjs` | 18/18 |
-| §8 | Configurable multi-step approval-process builder | `/approval-processes` | `approval-process.e2e.mjs` | 32/32 |
-| §3.4 | Configurable duplicate detection & matching | `/duplicate-rules` | `duplicate-detection.e2e.mjs` | 20/20 |
-| §23 | Communication consent & preferences | `/consents` | `consent.e2e.mjs` | 19/19 |
-| §24 | Activity & customer interaction timeline | `/activities` | `activity.e2e.mjs` | 17/17 |
-| §13 | Metadata deployment & change sets | `/change-sets` | `change-set.e2e.mjs` | 47/47 |
-| §16 | Omnichannel inbox, channels & messaging templates | `/channels`, `/conversations`, `/message-templates` | `omnichannel.e2e.mjs` | 42/42 |
-| §18 | Call centre/telephony presence, dispositions & wrap-up | `/telephony` | `telephony.e2e.mjs` | 16/16 |
-| §3.4 | Duplicate record merge — survivor fills blanks, repoints lookups, soft-deletes the rest | `POST /records/:objectApiName/merge` | `record-merge.e2e.mjs` | 21/21 |
-| §16.4 | Create a record from an inbox conversation | `POST /conversations/:id/create-record` | `conversation-capture.e2e.mjs` | 14/14 |
+| BRD | Feature | Surface | Suite | Checks | UI (2026-10-21) |
+|-----|---------|---------|-------|--------|-----------------|
+| §14 | Platform-wide TenantConfiguration resolution | `/configuration` | `configuration.e2e.mjs` | 18/18 | API-only |
+| §8 | Configurable multi-step approval-process builder | `/approval-processes` | `approval-process.e2e.mjs` | 43/43 | Setup › Approval Processes builder, approval panel on records, My Approvals |
+| §3.4 | Configurable duplicate detection & matching | `/duplicate-rules` | `duplicate-detection.e2e.mjs` | 21/21 | Setup › Duplicate Rules, save-time warning/block dialog |
+| §23 | Communication consent & preferences | `/consents` | `consent.e2e.mjs` | 19/19 | API-only |
+| §24 | Activity & customer interaction timeline | `/activities` | `activity.e2e.mjs` | 17/17 | Activity tab on every record |
+| §13 | Metadata deployment & change sets | `/change-sets` | `change-set.e2e.mjs` | 47/47 | API-only |
+| §16 | Omnichannel inbox, channels & messaging templates | `/channels`, `/conversations`, `/message-templates` | `omnichannel.e2e.mjs` | 42/42 | API-only |
+| §18 | Call centre/telephony presence, dispositions & wrap-up | `/telephony` | `telephony.e2e.mjs` | 16/16 | API-only |
+| §3.4 | Duplicate record merge — survivor fills blanks, repoints lookups, soft-deletes the rest | `POST /records/:objectApiName/merge` | `record-merge.e2e.mjs` | 23/23 | Merge screen (from list selection or the duplicate dialog) |
+| §16.4 | Create a record from an inbox conversation | `POST /conversations/:id/create-record` | `conversation-capture.e2e.mjs` | 14/14 | API-only |
 
 ### Provider readiness & environment management (delivered 2026-10-16)
 
@@ -133,7 +141,10 @@ credentials or the Insurance ERD — plus explicit seams for the parts that do:
 
 - Approval requests lock the underlying record (`423` on update/delete while a
   request is pending); waiting steps carry no approver so `pending/mine` cannot
-  match future steps.
+  match future steps, and it only matches the active step, so past approvers
+  no longer see a request.
+- Each approval stage (submit, approve, reject) can launch a flow with the
+  outcome and comment as variables; a failing flow never undoes the decision.
 - Duplicate rules `block` with `409 + duplicates` or `warn` with
   `duplicateMatches` on the create/update response.
 - Cross-tenant metadata promotion is superuser-only; deployment is blocked
@@ -144,6 +155,8 @@ credentials or the Insurance ERD — plus explicit seams for the parts that do:
 - Outbound omnichannel replies are stored `queued` with an explicit provider
   status and are never reported as delivered while providers are unwired.
 - Consent enforcement gates outbound replies when `consent.enforcement` is on.
+- Duplicate merge also moves the duplicates' activities (as primary or related
+  record) to the survivor's timeline.
 - Duplicate merge keeps the survivor's fields, fills its blanks from the
   duplicates, repoints every inbound lookup, soft-deletes the duplicates
   (`mergedIntoId`) and appends `mergeHistory`; a merge rejected by validation
@@ -162,7 +175,7 @@ credentials or the Insurance ERD — plus explicit seams for the parts that do:
   The provider layer is now ready: credentials/contracts drop into the declared
   provider definitions and the call-control seam.
 - **Deferred, noted in commits**: Meta Lead Ads capture (§16.1) pending a lead
-  field-mapping contract; on-approve flow triggering.
+  field-mapping contract. (On-approve flow triggering was delivered 2026-10-21.)
 
 ---
 
@@ -174,7 +187,7 @@ credentials or the Insurance ERD — plus explicit seams for the parts that do:
 |-------------|---------|----------------|
 | §2 | Multi-channel application (web/branch/phone) | Single authoritative engine |
 | §3 | Identity matching (exact ID first) | Tenant-scoped, ID-first matching |
-| §4 | Insurance Workspace | 15 nav items, 7 object groups |
+| §4 | Insurance Workspace | Workspace navigation: 7 groups over generic record screens (17 objects configured; objects missing from a tenant are hidden) |
 | §5 | Data model | 20 objects, opt-in per tenant |
 | §6 | Leads & attribution | Core lead object + assignment |
 | §7 | New business | Application → quote → accept → submit → issue |
@@ -191,6 +204,10 @@ credentials or the Insurance ERD — plus explicit seams for the parts that do:
 | §21 | Claims | Intake → requirements → approval → payout |
 | §23 | Reporting | Analytics core (dashboards pending) |
 
+> "Implemented" in this table means the backend/API. Insurance operations
+> (§7, §11, §12, §13, §17, §21) have no dedicated UI — see §9 of
+> `V3_SPECIFICATIONS.md`.
+
 ### ⚠️ External Dependencies (Not Implemented)
 
 | Area | Status | Blocker |
@@ -204,7 +221,7 @@ credentials or the Insurance ERD — plus explicit seams for the parts that do:
 
 ## Deployment Package
 
-### Systemd Services (Production Ready)
+### Systemd Services
 ```
 deploy/
 ├── systemd/

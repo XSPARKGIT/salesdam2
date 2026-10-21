@@ -555,13 +555,13 @@ Login. Used by platform operators for cross-tenant administration.
 | `tests/configuration.e2e.mjs` | 18/18 |
 | `tests/approval-process.e2e.mjs` | 43/43 |
 | `tests/admin-guards.e2e.mjs` | 19/19 |
-| `tests/duplicate-detection.e2e.mjs` | 20/20 |
+| `tests/duplicate-detection.e2e.mjs` | 21/21 |
 | `tests/consent.e2e.mjs` | 19/19 |
 | `tests/activity.e2e.mjs` | 17/17 |
 | `tests/change-set.e2e.mjs` | 47/47 |
 | `tests/omnichannel.e2e.mjs` | 42/42 |
 | `tests/telephony.e2e.mjs` | 16/16 |
-| `tests/record-merge.e2e.mjs` | 21/21 |
+| `tests/record-merge.e2e.mjs` | 23/23 |
 | `tests/conversation-capture.e2e.mjs` | 14/14 |
 | `backend/tests/insurance-endorsements.e2e.mjs` | 33/33 |
 | `npm run test:insurance` | exit 0 (9/9, 33/33, 32/32, 8/8, 11/11, 18/18, 15/15, 4/4) |
