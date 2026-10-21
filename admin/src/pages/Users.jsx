@@ -31,7 +31,7 @@ export default function Users() {
       if (roleFilter) params.systemRole = roleFilter;
       const res = await api.get('/superadmin/users', { params });
       setUsers(res.data.data || []);
-      setPagination({ total: res.data.total || 0, totalPages: res.data.totalPages || 1 });
+      setPagination({ total: res.data.pagination?.total || 0, totalPages: res.data.pagination?.totalPages || 1 });
     } catch {
       toast.error('Failed to load users');
     } finally {

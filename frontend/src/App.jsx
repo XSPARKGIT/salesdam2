@@ -13,6 +13,7 @@ import Profile from './pages/Profile/Profile';
 import RecordList from './pages/Records/RecordList/RecordList';
 import RecordDetail from './pages/Records/RecordDetail/RecordDetail';
 import RecordForm from './pages/Records/RecordForm/RecordForm';
+import RecordMerge from './pages/Records/RecordMerge/RecordMerge';
 import ObjectsManager from './pages/Objects/ObjectsManager';
 import ObjectBuilder from './pages/Objects/ObjectBuilder';
 import SchemaBuilder from './pages/Objects/SchemaBuilder';
@@ -50,6 +51,10 @@ import Integrations from './pages/Admin/settings/Integrations';
 import OtherSettings from './pages/Admin/settings/OtherSettings';
 import TendersConfig from './pages/Admin/settings/TendersConfig';
 import LeadApprovalSettings from './pages/Admin/settings/LeadApprovalSettings';
+import ApprovalProcessList from './pages/Approvals/ApprovalProcessList';
+import ApprovalProcessEditor from './pages/Approvals/ApprovalProcessEditor';
+import MyApprovals from './pages/Approvals/MyApprovals';
+import DuplicateRules from './pages/DuplicateRules/DuplicateRules';
 import StorageUsage from './pages/Admin/settings/StorageUsage';
 import Tenders from './pages/Tenders/Tenders';
 import OrdersDashboard from './pages/SalesdamDashboards/OrdersDashboard/OrdersDashboard';
@@ -179,6 +184,14 @@ export default function App() {
         element={
           <Guard>
             <RecordForm />
+          </Guard>
+        }
+      />
+      <Route
+        path="/o/:objectApiName/merge"
+        element={
+          <Guard>
+            <RecordMerge />
           </Guard>
         }
       />
@@ -441,6 +454,48 @@ export default function App() {
         element={
           <Guard requireSuperuser>
             <IncidentMonitoring />
+          </Guard>
+        }
+      />
+
+      <Route
+        path="/approvals"
+        element={
+          <Guard>
+            <MyApprovals />
+          </Guard>
+        }
+      />
+      <Route
+        path="/setup/approval-processes"
+        element={
+          <Guard requireAdmin>
+            <ApprovalProcessList />
+          </Guard>
+        }
+      />
+      <Route
+        path="/setup/approval-processes/new"
+        element={
+          <Guard requireAdmin>
+            <ApprovalProcessEditor />
+          </Guard>
+        }
+      />
+      <Route
+        path="/setup/approval-processes/:id"
+        element={
+          <Guard requireAdmin>
+            <ApprovalProcessEditor />
+          </Guard>
+        }
+      />
+
+      <Route
+        path="/setup/duplicate-rules"
+        element={
+          <Guard requireAdmin>
+            <DuplicateRules />
           </Guard>
         }
       />

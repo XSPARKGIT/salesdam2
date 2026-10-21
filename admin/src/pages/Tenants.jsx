@@ -43,7 +43,7 @@ export default function Tenants() {
       if (planFilter) params.plan = planFilter;
       const res = await api.get('/superadmin/tenants', { params });
       setTenants(res.data.data || []);
-      setPagination({ total: res.data.total || 0, totalPages: res.data.totalPages || 1 });
+      setPagination({ total: res.data.pagination?.total || 0, totalPages: res.data.pagination?.totalPages || 1 });
     } catch {
       toast.error('Failed to load tenants');
     } finally {

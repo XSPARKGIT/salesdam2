@@ -392,11 +392,15 @@ const getMe = asyncHandler(async (req, res) => {
     );
   }
 
+  // Same rule as GET /workspaces/mine and POST /workspaces/switch: the
+  // user's own workspaces plus the tenant default, which everyone may use.
   const workspaces = await Workspace.find({
     tenantId: user.tenantId,
-    memberIds: user._id, // Only those where the user is in memberIds
     status: 'active',
-  }).select('_id name slug color icon allowedObjects objectGroups isDefault');
+    $or: [{ memberIds: user._id }, { isDefault: true }],
+  })
+    .select('_id name slug color icon allowedObjects objectGroups isDefault')
+    .sort({ isDefault: -1, name: 1 });
 
   sendSuccess(res, {
     data: {
@@ -416,6 +420,8 @@ const getMe = asyncHandler(async (req, res) => {
         preferences: user.preferences,
         activeTenantId: req.sessionData?.tenantId,
         workspaces: workspaces || [],
+        // Last workspace chosen on the server session (POST /workspaces/switch).
+        activeWorkspaceId: req.sessionData?.workspaceId || null,
       },
       tenant: {
         ...tenant.toObject(),

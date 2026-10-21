@@ -6,10 +6,27 @@ import {
   useCallback,
 } from 'react';
 import api from '../services/api';
+import { WORKSPACES_CHANGED_EVENT } from './workspaceEvents';
 
 const AuthContext = createContext(null);
 
 const ACTIVE_WORKSPACE_KEY = 'activeWorkspaceId';
+
+const sameId = (a, b) => a != null && b != null && String(a) === String(b);
+
+/**
+ * Choose the workspace to show: the one picked on this device, else the one
+ * on the server session, else the default, else the first. An id that no
+ * longer matches (deleted, or the user was removed) falls through instead of
+ * leaving no workspace — which would show every object.
+ */
+const pickActiveWorkspace = (list, ...preferredIds) => {
+  for (const id of preferredIds) {
+    const match = id && list.find((w) => sameId(w._id, id));
+    if (match) return match;
+  }
+  return list.find((w) => w.isDefault) || list[0] || null;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -44,16 +61,15 @@ export const AuthProvider = ({ children }) => {
       const userWorkspaces = userData?.workspaces || [];
       setWorkspaces(userWorkspaces);
 
-      const activeWorkspaceId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
-
-      const activeWs = activeWorkspaceId
-        ? userWorkspaces.find(
-            (w) =>
-              w._id === activeWorkspaceId ||
-              w._id?.toString() === activeWorkspaceId,
-          )
-        : userWorkspaces.find((w) => w.isDefault) || userWorkspaces[0] || null;
-      setActiveWorkspace(activeWs || null);
+      const storedId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+      const activeWs = pickActiveWorkspace(
+        userWorkspaces,
+        storedId,
+        userData?.activeWorkspaceId,
+      );
+      setActiveWorkspace(activeWs);
+      if (activeWs) localStorage.setItem(ACTIVE_WORKSPACE_KEY, String(activeWs._id));
+      else localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
 
       buildPermissions(userData);
     } catch (err) {
@@ -140,15 +156,51 @@ export const AuthProvider = ({ children }) => {
     setPermissions({});
   };
 
-  const switchWorkspace = (workspaceId) => {
-    const ws = workspaces.find(
-      (w) => w._id === workspaceId || w._id?.toString() === workspaceId,
-    );
-    if (ws) {
-      setActiveWorkspace(ws);
-      localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+  /**
+   * Reload the user's workspaces (e.g. after an admin edits one), keeping the
+   * current selection when it still exists.
+   */
+  const refreshWorkspaces = useCallback(async (preferredId) => {
+    const res = await api.get('/workspaces/mine');
+    const list = res.data.data || [];
+    // localStorage always mirrors the current selection, so it stands in for it.
+    const next = pickActiveWorkspace(list, preferredId, localStorage.getItem(ACTIVE_WORKSPACE_KEY));
+    setWorkspaces(list);
+    setActiveWorkspace(next);
+    if (next) localStorage.setItem(ACTIVE_WORKSPACE_KEY, String(next._id));
+    else localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+    return { list, active: next };
+  }, []);
+
+  /**
+   * Switch the active workspace. The server validates membership and records
+   * it on the session; the list is refreshed so the new workspace's objects
+   * and groups are current. Throws with the server's message on failure.
+   */
+  const switchWorkspace = async (workspaceId) => {
+    try {
+      await api.post('/workspaces/switch', { workspaceId });
+    } catch (err) {
+      throw new Error(err.response?.data?.message || 'Failed to switch workspace.');
     }
+    const res = await api.get('/workspaces/mine').catch(() => null);
+    const list = res?.data?.data || workspaces;
+    const ws = list.find((w) => sameId(w._id, workspaceId));
+    if (!ws) throw new Error('That workspace is no longer available.');
+    setWorkspaces(list);
+    setActiveWorkspace(ws);
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, String(ws._id));
+    return ws;
   };
+
+  useEffect(() => {
+    if (!user) return undefined;
+    const onChanged = () => {
+      refreshWorkspaces().catch(() => {});
+    };
+    window.addEventListener(WORKSPACES_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(WORKSPACES_CHANGED_EVENT, onChanged);
+  }, [user, refreshWorkspaces]);
 
   const updateUser = (updates) => {
     setUser((prev) => ({ ...prev, ...updates }));
@@ -181,6 +233,7 @@ export const AuthProvider = ({ children }) => {
         register,
         logout,
         switchWorkspace,
+        refreshWorkspaces,
         updateUser,
         fetchMe,
         hasPermission,

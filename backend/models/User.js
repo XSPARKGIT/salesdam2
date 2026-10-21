@@ -75,6 +75,16 @@ const userSchema = new mongoose.Schema(
         ref: 'Dashboard',
         default: null,
       },
+      // First-login welcome modal and guided tour progress
+      // (frontend OnboardingProvider). Must be declared here: strict mode
+      // drops unknown keys, which made the welcome modal reappear on reload.
+      onboarding: {
+        welcomeSeenAt: { type: Date },
+        tourStatus: {
+          type: String,
+          enum: ['in_progress', 'skipped', 'completed', 'dismissed'],
+        },
+      },
     },
 
     lastLogin: { type: Date },

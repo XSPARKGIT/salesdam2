@@ -21,6 +21,7 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import Notification from '../models/Notification.js';
 import ApprovalProcess from '../models/ApprovalProcess.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
+import Automation from '../models/Automation.js';
 import TenantConfiguration from '../models/TenantConfiguration.js';
 import configurationService from '../services/configurationService.js';
 import { seedDefaultRoles } from '../services/roleService.js';
@@ -232,6 +233,35 @@ try {
     `status=${step1.json?.data?.status} step=${step1.json?.data?.currentStep}`,
   );
 
+  const pendingA = await req('/api/v1/approval-processes/pending/mine', { cookie: cookieA });
+  check(
+    'a past approver no longer sees the request in their pending queue',
+    pendingA.status === 200 && !pendingA.json?.data?.some((r) => r._id === multiReqId),
+    `ids=${JSON.stringify(pendingA.json?.data?.map((r) => r._id))}`,
+  );
+
+  const stateFor = (cookie) =>
+    req(`/api/v1/approval-processes/state?objectApiName=policy&recordId=${recMulti._id}`, { cookie });
+  const stateB = await stateFor(cookieB);
+  const stateA = await stateFor(cookieA);
+  const stateSub = await stateFor(cookieSubmitter);
+  check(
+    'record state says the current approver can decide',
+    stateB.json?.meta?.canDecide === true && stateA.json?.meta?.canDecide === false,
+    `B=${stateB.json?.meta?.canDecide} A=${stateA.json?.meta?.canDecide}`,
+  );
+  check(
+    'record state lets only the submitter recall',
+    stateSub.json?.meta?.canRecall === true && stateB.json?.meta?.canRecall === false,
+    `sub=${stateSub.json?.meta?.canRecall} B=${stateB.json?.meta?.canRecall}`,
+  );
+  check(
+    'record state resolves approver and submitter names',
+    stateB.json?.data?.steps?.[1]?.approverUserId?.firstName === 'approverb' &&
+      stateB.json?.data?.submittedBy?.firstName === 'submitter',
+    JSON.stringify(stateB.json?.data?.steps?.[1]?.approverUserId),
+  );
+
   const pendingB = await req('/api/v1/approval-processes/pending/mine', { cookie: cookieB });
   check(
     'the next approver sees the request in their pending queue',
@@ -243,6 +273,91 @@ try {
     method: 'POST', cookie: cookieB, body: {},
   });
   check('final step approves the whole request', step2.json?.data?.status === 'approved', `status=${step2.json?.data?.status}`);
+  check(
+    'the queue shows record name and submitter',
+    pendingB.json?.data?.find((r) => r._id === multiReqId)?.recordName === 'M1' &&
+      pendingB.json?.data?.find((r) => r._id === multiReqId)?.submittedByName === 'submitter APPR',
+    JSON.stringify(pendingB.json?.data?.find((r) => r._id === multiReqId)?.recordName),
+  );
+
+  const stateAfter = await stateFor(cookieSubmitter);
+  check(
+    'a decided record can be submitted again to a matching process',
+    stateAfter.json?.meta?.canSubmit === true &&
+      stateAfter.json?.meta?.eligibleProcesses?.some((p) => p._id === multiId),
+    JSON.stringify(stateAfter.json?.meta?.eligibleProcesses?.map((p) => p.name)),
+  );
+
+  // ── Flows launched by approval stages ───────────────────────────────────
+  const mkFlow = (name) =>
+    Automation.create({
+      tenantId, name, apiName: `${name.toLowerCase()}_${RUN}`, type: 'autolaunched', isActive: true,
+      nodes: [
+        { id: 'start', type: 'trigger', label: 'Start', nextNodes: [{ nodeId: 'upd' }] },
+        {
+          id: 'upd', type: 'action_update_record', label: 'Stamp',
+          config: { fields: { flow_note: '{approvalOutcome}|{approvalComment}|{approvalProcessName}' } },
+        },
+      ],
+    });
+  const approveFlow = await mkFlow('OnApproveFlow');
+  const rejectFlow = await mkFlow('OnRejectFlow');
+  const flowProc = await createProcess({
+    name: 'Flow Process', objectApiName: 'policy',
+    entryCriteria: { logic: 'AND', conditions: [{ field: 'name', operator: 'contains', value: 'FLOW' }] },
+    steps: [{ order: 1, approverType: 'user', approverUserId: approverA._id }],
+    actions: { onApprove: { flowId: approveFlow._id }, onReject: { flowId: rejectFlow._id } },
+  });
+  check('a process can reference flows', flowProc.status === 201 && String(flowProc.json?.data?.actions?.onApprove?.flowId) === String(approveFlow._id), `HTTP ${flowProc.status}`);
+  const flowProcId = flowProc.json?.data?._id;
+
+  const recFlowOk = await mkRecord({ name: 'FLOW-1' });
+  const sub1 = await req('/api/v1/approval-processes/submit', {
+    method: 'POST', cookie: cookieSubmitter, body: { objectApiName: 'policy', recordId: recFlowOk._id, processId: flowProcId },
+  });
+  await req(`/api/v1/approval-processes/${sub1.json?.data?._id}/approve`, {
+    method: 'POST', cookie: cookieA, body: { comment: 'looks good' },
+  });
+  const flowOkAfter = await DynamicRecord.findById(recFlowOk._id);
+  check(
+    'the onApprove flow runs with the outcome and comment',
+    flowOkAfter.getField('flow_note') === 'approved|looks good|Flow Process',
+    `flow_note=${flowOkAfter.getField('flow_note')}`,
+  );
+
+  const recFlowNo = await mkRecord({ name: 'FLOW-2' });
+  const sub2 = await req('/api/v1/approval-processes/submit', {
+    method: 'POST', cookie: cookieSubmitter, body: { objectApiName: 'policy', recordId: recFlowNo._id, processId: flowProcId },
+  });
+  await req(`/api/v1/approval-processes/${sub2.json?.data?._id}/reject`, {
+    method: 'POST', cookie: cookieA, body: { comment: 'too high' },
+  });
+  const flowNoAfter = await DynamicRecord.findById(recFlowNo._id);
+  check(
+    'the onReject flow runs instead of the onApprove flow',
+    flowNoAfter.getField('flow_note') === 'rejected|too high|Flow Process',
+    `flow_note=${flowNoAfter.getField('flow_note')}`,
+  );
+  const flowStats = await Automation.findById(approveFlow._id).lean();
+  check('flow run stats are recorded', flowStats?.stats?.successRuns === 1, `runs=${flowStats?.stats?.successRuns}`);
+
+  // A broken flow must not undo the decision.
+  await Automation.updateOne({ _id: approveFlow._id }, { $set: { nodes: [
+    { id: 'start', type: 'trigger', label: 'Start', nextNodes: [{ nodeId: 'bad' }] },
+    { id: 'bad', type: 'action_update_record', label: 'Bad', config: { fields: { x: '1' }, targetRecordId: 'not-an-id' } },
+  ] } });
+  const recFlowBad = await mkRecord({ name: 'FLOW-3' });
+  const sub3 = await req('/api/v1/approval-processes/submit', {
+    method: 'POST', cookie: cookieSubmitter, body: { objectApiName: 'policy', recordId: recFlowBad._id, processId: flowProcId },
+  });
+  const badApprove = await req(`/api/v1/approval-processes/${sub3.json?.data?._id}/approve`, {
+    method: 'POST', cookie: cookieA, body: {},
+  });
+  check(
+    'a failing flow does not undo the approval',
+    badApprove.status === 200 && badApprove.json?.data?.status === 'approved',
+    `HTTP ${badApprove.status} status=${badApprove.json?.data?.status}`,
+  );
 
   // ── Recall + record lock ────────────────────────────────────────────────
   const lockProc = await createProcess({
@@ -360,7 +475,7 @@ try {
     await Tenant.deleteMany({ _id: { $in: ids } });
     await Promise.all([
       User, Role, Session, ObjectMeta, DynamicRecord, Notification,
-      ApprovalProcess, ApprovalRequest,
+      ApprovalProcess, ApprovalRequest, Automation,
     ].map((M) => M.deleteMany({ tenantId: { $in: ids } }).catch(() => {})));
     await TenantConfiguration.deleteMany({ tenantId: { $in: ids } });
   }

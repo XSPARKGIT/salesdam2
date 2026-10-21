@@ -15,6 +15,7 @@ const audit = async (params) => {
       resourceId,
       objectApiName,
       details,
+      metadata, // some callers pass `metadata`; the model field is `details`
       req,
       status = 'success',
       errorMessage,
@@ -29,7 +30,7 @@ const audit = async (params) => {
       resource,
       resourceId: resourceId ? resourceId.toString() : undefined,
       objectApiName,
-      details,
+      details: details ?? metadata,
       ipAddress: req?.ip,
       userAgent: req?.headers?.['user-agent'],
       sessionId: req?.session?.id,

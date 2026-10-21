@@ -13,10 +13,15 @@ const ACTIONS = [
   '', 'login', 'logout', 'login_failed',
   'create', 'read', 'update', 'delete',
   'tenant_create', 'tenant_suspend', 'tenant_delete',
-  'user_invite', 'user_activate', 'user_deactivate',
+  'user_invite', 'add_user', 'remove_user', 'user_activate', 'user_deactivate',
   'export', 'import',
   'api_key_create', 'api_key_revoke',
-  'password_change', 'settings_change',
+  'password_change', 'password_verify', 'password_reset_requested',
+  'password_reset_completed', 'profile_update', 'settings_change',
+  'permission_change', 'role_assign', 'role_remove', 'add_member', 'remove_member',
+  'merge', 'generate', 'session_revoke',
+  'automation_run', 'automation_error', 'webhook_fire', 'webhook_fail',
+  'incident_create', 'incident_update', 'incident_comment_create',
 ];
 
 const STATUS_COLOR = {
@@ -52,7 +57,7 @@ export default function AuditLogs() {
       if (actionFilter) params.action = actionFilter;
       const res = await api.get('/superadmin/audit-logs', { params });
       setLogs(res.data.data || []);
-      setPagination({ total: res.data.total || 0, totalPages: res.data.totalPages || 1 });
+      setPagination({ total: res.data.pagination?.total || 0, totalPages: res.data.pagination?.totalPages || 1 });
     } catch {
       toast.error('Failed to load audit logs');
     } finally {

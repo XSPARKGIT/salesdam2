@@ -229,12 +229,26 @@ commit `8bc6696`.
     `GET /approval-processes/pending/mine`,
     `POST /approval-processes/:id/approve|reject|recall`.
 - **Behaviour**:
-  - only the **active** step carries an approver, so future steps cannot match
-    `pending/mine`;
+  - only the **active** step carries an approver, and `pending/mine` matches
+    only the pending step, so neither future nor past approvers see a request;
+  - `GET /approval-processes/state` returns the latest request with people
+    resolved to names, plus `meta` (`canDecide`, `canRecall`, `canSubmit`,
+    `eligibleProcesses`) for the current user;
+  - each stage (`onSubmit`, `onApprove`, `onReject`) can launch a Flow
+    (`actions.<stage>.flowId`) with the variables `approvalOutcome`,
+    `approvalComment`, `approvalProcessName` and `approvalRequestId`; a failing
+    flow is logged in its run stats and never undoes the decision;
   - an underlying record is locked while a request is pending — updates/deletes
     return **HTTP 423**;
   - approval/rejection/recall are recorded against the step.
-- **Evidence**: `approval-process.e2e.mjs` — 32/32.
+- **UI**: Setup › Approval Processes (`/setup/approval-processes`, admins) to
+  build processes — entry criteria, ordered steps (named user, submitter's
+  manager, user field on the record, or role queue), and per-stage field
+  updates, record lock and flow; an approval panel on every record page
+  (submit, approve/reject with comment — a reason is required to reject —
+  recall, step tracker and history); and **My Approvals** (`/approvals`, all
+  users) with a pending-count badge in the sidebar.
+- **Evidence**: `approval-process.e2e.mjs` — 43/43.
 
 ### 7.3 Duplicate detection & merge — Core BRD §3.4
 
@@ -242,6 +256,10 @@ commit `8bc6696`.
 
 - **Collection**: `DuplicateRule`.
 - **Routes**: `POST /duplicate-rules/check`, and CRUD on `/duplicate-rules`.
+- **UI**: Setup › Duplicate Rules (`/setup/duplicate-rules`, admins) to create,
+  edit, activate/deactivate and delete rules — object, match fields
+  (ignore-case-and-spacing or exact), all/any logic, and warn or block. The
+  record form checks these rules before saving and lists the matches.
 - **Behaviour**: on record create/update a rule either `block`s
   (**409 + `duplicates`**) or `warn`s (write succeeds and the response carries
   `duplicateMatches`). No rules → `allow`.
@@ -256,13 +274,21 @@ commit `8bc6696`.
   - blank survivor fields are filled; non-blank values are kept;
   - computed fields (`formula`, `rollup_summary`, `auto_number`) are
     **recomputed**, not copied;
-  - inbound lookups across objects are repointed to the survivor;
+  - inbound lookups across objects are repointed to the survivor, and
+    activities on a duplicate (as primary or related record) move to the
+    survivor's timeline; both are reported in `repointedReferences`;
   - duplicates are **soft-deleted** (`isDeleted`) and stamped `mergedIntoId`;
   - the survivor gains an append-only `mergeHistory`;
   - audit action `'merge'` is written;
   - if the merged result fails validation the request is rejected and the
     duplicates are **restored** — a rejected merge changes nothing.
-- **Evidence**: `duplicate-detection.e2e.mjs` 20/20; `record-merge.e2e.mjs` 21/21.
+- **UI**: select 2–3 records in a list and choose **Merge**, or choose
+  **Merge instead** in the duplicate dialog while editing a record. The merge
+  screen (`/o/:objectApiName/merge?ids=…`) shows the records side by side:
+  pick the record to keep, then the value to keep per field (only differing
+  fields by default; fields the user can't edit stay on the kept record's
+  value), confirm, and land on the kept record.
+- **Evidence**: `duplicate-detection.e2e.mjs` 21/21; `record-merge.e2e.mjs` 23/23.
 
 ### 7.4 Communication consent & preferences — Core BRD §23
 
@@ -458,15 +484,22 @@ Route groups: `/login`, `/register`, `/forgot-password`, `/reset-password`,
 `/` (home), `/o/:objectApiName` (list/record/new/edit, task calendar, kanban),
 `/setup/objects` (+ schema builder), `/setup/pdf-templates`, `/automation`,
 `/dashboards`, `/email-templates`, `/dashboards/:id`, `/analytics`, `/search`,
-`/incidents`, `/admin/*` (users, roles, settings, email senders, incidents),
+`/incidents`, `/approvals`, `/setup/approval-processes` (+ `/new`, `/:id`),
+`/setup/duplicate-rules`, `/o/:objectApiName/merge`,
+`/admin/*` (users, roles, settings, email senders, incidents),
 `/workspaces`, `/tenders`, and the Salesdam module pages `/sd/orders`,
 `/sd/accounting`, `/sd/deals`, `/sd/leads`, `/sd/revenue`, `/sd/sales`,
 `/sd/roi`.
 
-UI components relevant to the newest capabilities: approval
-submission/decision buttons and status badge on records, and duplicate warning
-surfacing in `RecordForm`. The omnichannel inbox, channels, message templates,
-telephony, change sets, consent, sandbox clone, record merge and
+UI components relevant to the newest capabilities: an approval panel on
+every record (any object, driven by the configured approval processes; the
+older lead-specific approval buttons remain for the Lead approval setting),
+the approval-process builder and My Approvals queue, a pre-save duplicate
+dialog in `RecordForm` (lists matching records; "Save anyway" for warn rules,
+no save for block rules), and an **Activity** tab on every record page showing
+the chronological timeline with a composer for notes, calls, meetings, emails
+and tasks. The omnichannel inbox, channels, message templates,
+telephony, change sets, consent, sandbox clone and
 conversation-capture surfaces are **API-only** — there is no dedicated screen
 for them yet.
 
@@ -505,7 +538,7 @@ Login. Used by platform operators for cross-tenant administration.
 - Node 22, Mongo 7 service.
 - `npm test` (Jest: 3 suites, 21 tests).
 - Database-backed integration suites:
-  `tenant-isolation`, `password-reset`, `configuration`,
+  `tenant-isolation`, `admin-guards`, `password-reset`, `configuration`,
   `approval-process`, `duplicate-detection`, `consent`, `activity`,
   `change-set`, `omnichannel`, `telephony`, `record-merge`,
   `conversation-capture`, `insurance-endorsements`.
@@ -520,7 +553,8 @@ Login. Used by platform operators for cross-tenant administration.
 | `tests/tenant-isolation.e2e.mjs` | 23/23 |
 | `tests/password-reset.e2e.mjs` | 9/9 |
 | `tests/configuration.e2e.mjs` | 18/18 |
-| `tests/approval-process.e2e.mjs` | 32/32 |
+| `tests/approval-process.e2e.mjs` | 43/43 |
+| `tests/admin-guards.e2e.mjs` | 19/19 |
 | `tests/duplicate-detection.e2e.mjs` | 20/20 |
 | `tests/consent.e2e.mjs` | 19/19 |
 | `tests/activity.e2e.mjs` | 17/17 |
@@ -580,8 +614,6 @@ Go-live sequence:
 
 ### 13.2 Deferred (internal)
 
-- **On-approve flow triggering (§8)**: approvals record decisions but do not
-  yet fire a downstream Flow on approval/rejection.
 - **Meta Lead Ads capture (§16.1)**: the receive/mapping layer is not built;
   pending a lead field-mapping contract.
 
@@ -591,7 +623,7 @@ Go-live sequence:
   after soft-deleting duplicates but before saving the survivor would leave
   them soft-deleted (recoverable by clearing `isDeleted`).
 - The platform has no UI for omnichannel, telephony, change sets, consent,
-  sandbox, merge or conversation-capture; these are API-only today.
+  sandbox or conversation-capture; these are API-only today.
 - `name` is read-only for non-admins, so a contact name prefilled from a
   conversation is dropped for standard users (only the matched identifier
   lands).

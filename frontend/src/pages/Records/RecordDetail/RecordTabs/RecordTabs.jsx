@@ -1,11 +1,7 @@
-import { Zap } from 'lucide-react';
+import { Zap, History } from 'lucide-react';
 import styles from '../RecordDetail.module.css';
 
 const RecordTabs = ({ activeTab, setActiveTab, customScreens, embeddedFlows }) => {
-  if ((customScreens?.length || 0) === 0 && (embeddedFlows?.length || 0) === 0) {
-    return null;
-  }
-
   return (
     <div className={styles.screenTabs}>
       <button
@@ -13,6 +9,13 @@ const RecordTabs = ({ activeTab, setActiveTab, customScreens, embeddedFlows }) =
         onClick={() => setActiveTab('details')}
       >
         Details
+      </button>
+      <button
+        className={`${styles.screenTab} ${activeTab === 'activity' ? styles.screenTabActive : ''}`}
+        onClick={() => setActiveTab('activity')}
+      >
+        <History size={12} style={{ marginRight: 4 }} />
+        Activity
       </button>
       {customScreens?.map((screen) => (
         <button

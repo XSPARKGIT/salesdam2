@@ -2,6 +2,7 @@ import { Zap } from 'lucide-react';
 import ScreenRenderer from '../../../../components/screens/ScreenRenderer';
 import ScreenFlowRunner from '../../../../components/records/ScreenFlowRunner';
 import RecordFields from '../RecordFields/RecordFields';
+import ActivityTimeline from '../../../../components/records/ActivityTimeline/ActivityTimeline';
 import styles from '../RecordDetail.module.css';
 
 const RecordContent = ({
@@ -17,6 +18,10 @@ const RecordContent = ({
 }) => {
   return (
     <>
+      {activeTab === 'activity' && (
+        <ActivityTimeline objectApiName={objectApiName} recordId={record?.id || record?._id} />
+      )}
+
       {/* Custom screen content */}
       {activeTab !== 'details' && customScreens.some((s) => s._id === activeTab) && (
         <ScreenRenderer screenId={activeTab} record={record} fields={fields} />

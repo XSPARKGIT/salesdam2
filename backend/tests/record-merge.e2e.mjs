@@ -21,6 +21,7 @@ import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import AuditLog from '../models/AuditLog.js';
+import Activity from '../models/Activity.js';
 import { seedDefaultRoles } from '../services/roleService.js';
 
 const RUN = Date.now().toString(36);
@@ -62,7 +63,7 @@ const loginCookie = async (username) => {
 
 let tenantAId = null;
 let tenantBId = null;
-const models = [User, Role, Session, ObjectMeta, FieldMeta, DynamicRecord, AuditLog];
+const models = [User, Role, Session, ObjectMeta, FieldMeta, DynamicRecord, AuditLog, Activity];
 
 try {
   await connectDB();
@@ -120,6 +121,15 @@ try {
   const dealId = deal.json?.data?.id;
   check('a deal referencing the duplicate record is created', deal.status === 201, `HTTP ${deal.status}`);
 
+  // Activities logged on the duplicate, as primary record and as a related one.
+  const noteOnB = await Activity.create({
+    tenantId: tenantAId, type: 'note', subject: 'Called Bob', objectApiName: 'contact', recordId: bId,
+  });
+  const meetingRelB = await Activity.create({
+    tenantId: tenantAId, type: 'meeting', subject: 'Deal review', objectApiName: 'deal', recordId: dealId,
+    relatedRecords: [{ objectApiName: 'contact', recordId: bId }],
+  });
+
   const merged = await merge('contact', { masterId: aId, duplicateIds: [bId] });
   check('a merge returns the surviving record', merged.status === 200, `HTTP ${merged.status}`);
   check('blank master fields are filled from the duplicate', merged.json?.data?.master?.phone === '+27821111111', `phone=${merged.json?.data?.master?.phone}`);
@@ -134,6 +144,21 @@ try {
 
   const dealAfter = await DynamicRecord.findById(dealId);
   check('references are repointed to the survivor', String(dealAfter?.data?.get('contact_id')) === String(aId), `contact_id=${dealAfter?.data?.get('contact_id')}`);
+
+  const noteAfter = await Activity.findById(noteOnB._id).lean();
+  const meetingAfter = await Activity.findById(meetingRelB._id).lean();
+  check(
+    "the duplicate's activities move to the survivor's timeline",
+    String(noteAfter?.recordId) === String(aId) &&
+      String(meetingAfter?.relatedRecords?.[0]?.recordId) === String(aId) &&
+      String(meetingAfter?.recordId) === String(dealId),
+    `note=${noteAfter?.recordId} related=${meetingAfter?.relatedRecords?.[0]?.recordId}`,
+  );
+  check(
+    'moved activities are reported with the merge',
+    merged.json?.data?.repointedReferences?.some((r) => r.objectApiName === 'activity' && r.count === 2),
+    JSON.stringify(merged.json?.data?.repointedReferences),
+  );
 
   const auditEntry = await AuditLog.findOne({ tenantId: tenantAId, action: 'merge' });
   check('the merge is written to the audit log', Boolean(auditEntry) && String(auditEntry.resourceId) === String(aId), `found=${Boolean(auditEntry)}`);

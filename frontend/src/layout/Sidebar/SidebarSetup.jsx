@@ -9,6 +9,8 @@ import {
   Shield,
   Send,
   FileText,
+  ClipboardCheck,
+  CopyCheck,
 } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import SidebarNavGroup from './SidebarNavGroup';
@@ -74,6 +76,26 @@ const SidebarSetup = ({
           to="/integrations"
           icon={<Globe size={15} />}
           label="Integrations"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {isAdmin && (
+        <SidebarNavItem
+          to="/setup/approval-processes"
+          icon={<ClipboardCheck size={15} />}
+          label="Approval Processes"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {isAdmin && (
+        <SidebarNavItem
+          to="/setup/duplicate-rules"
+          icon={<CopyCheck size={15} />}
+          label="Duplicate Rules"
           collapsed={sidebarCollapsed}
           onNavigate={onNavigate}
         />

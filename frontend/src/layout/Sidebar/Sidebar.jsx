@@ -1,8 +1,10 @@
 import styles from './Sidebar.module.css';
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
-import { LayoutDashboard, ScrollText, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, ScrollText, AlertTriangle, Inbox } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { getMyPendingApprovals } from '../../services/api/approvals';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppContext } from '../../context/AppContext';
 import { useTenantContext } from '../../context/TenantContext';
@@ -29,6 +31,16 @@ const Sidebar = () => {
   const { sidebarCollapsed, toggleSidebar } = useAppContext();
   const { objects, loadingObjects } = useTenantContext();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Count for the "My Approvals" badge; refreshed alongside notifications.
+  const { data: pendingApprovals = [] } = useQuery({
+    queryKey: ['my-pending-approvals'],
+    queryFn: getMyPendingApprovals,
+    enabled: !!user,
+    refetchInterval: 60000,
+    staleTime: 0,
+  });
 
   const [wsDropOpen, setWsDropOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -53,11 +65,18 @@ const Sidebar = () => {
     }, 0);
   };
 
-  const handleSwitchWorkspace = async (ws) => {
+  // Called with the workspace id by the switcher, which shows the toast and
+  // any error. Leaves an object page the new workspace doesn't include.
+  const handleSwitchWorkspace = async (workspaceId) => {
     setSwitching(true);
     try {
-      await switchWorkspace(ws._id);
+      const ws = await switchWorkspace(workspaceId);
       setWsDropOpen(false);
+      const objectApiName = location.pathname.match(/^\/o\/([^/]+)/)?.[1];
+      const allowed = ws?.allowedObjects || [];
+      if (objectApiName && allowed.length > 0 && !allowed.includes(objectApiName)) {
+        navigate('/');
+      }
     } finally {
       setSwitching(false);
     }
@@ -153,6 +172,15 @@ const Sidebar = () => {
             collapsed={sidebarCollapsed}
             onNavigate={handleMobileNav}
             dataTour="home"
+          />
+
+          <SidebarNavItem
+            to="/approvals"
+            icon={<Inbox size={17} />}
+            label="My Approvals"
+            badge={pendingApprovals.length > 0 ? String(pendingApprovals.length) : undefined}
+            collapsed={sidebarCollapsed}
+            onNavigate={handleMobileNav}
           />
 
           {tenantFeatures.enableSalesdamFeatures && tenantFeatures.salesdamFindTenders && (

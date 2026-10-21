@@ -72,8 +72,10 @@ const deleteRole = asyncHandler(async (req, res) => {
 
   if (role.isSystem) throw new AppError('System roles cannot be deleted.', 403);
 
-  // Check if any users are using this role
-  const usersWithRole = await User.countDocuments({ tenantId: req.tenantId, roles: role._id });
+  // Check if any users are using this role. A user holds a single `role` ref,
+  // so query that field — a `roles` array query never matches and let
+  // in-use roles be deleted.
+  const usersWithRole = await User.countDocuments({ tenantId: req.tenantId, role: role._id });
   if (usersWithRole > 0) {
     throw new AppError(`Cannot delete role - ${usersWithRole} user(s) are assigned to it.`, 409);
   }

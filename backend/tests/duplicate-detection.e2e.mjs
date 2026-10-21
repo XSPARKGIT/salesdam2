@@ -246,6 +246,17 @@ try {
     previewOther.status === 200 && previewOther.json?.data?.matches?.length === 0,
     `matches=${previewOther.json?.data?.matches?.length}`,
   );
+
+  // An update must not be able to move a rule into another tenant.
+  const moveAttempt = await req(`/api/v1/duplicate-rules/${emailRuleId}`, {
+    method: 'PUT', cookie: cookieAdmin, body: { tenantId: tenantBId, name: 'Moved?' },
+  });
+  const stillHere = await DuplicateRule.findById(emailRuleId).lean();
+  check(
+    'an update cannot move a rule to another tenant',
+    moveAttempt.status === 200 && String(stillHere?.tenantId) === String(tenantId) && stillHere?.name === 'Moved?',
+    `tenant=${stillHere?.tenantId}`,
+  );
 } catch (err) {
   check('test harness ran without error', false, err.message);
 } finally {

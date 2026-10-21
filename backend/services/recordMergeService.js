@@ -1,6 +1,7 @@
 import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
+import Activity from '../models/Activity.js';
 import { AppError, ValidationError } from '../utils/errors.js';
 import { validateRecordData, runObjectValidationRules } from './validationService.js';
 import { buildSearchText } from './searchService.js';
@@ -143,6 +144,26 @@ const mergeRecords = async ({
         count: res.modifiedCount,
       });
     }
+  }
+
+  // Activities (notes, calls, tasks, channel messages) are keyed by record id
+  // rather than a lookup field, so move them explicitly or they'd disappear
+  // from the kept record's timeline.
+  const activityPrimary = await Activity.updateMany(
+    { tenantId, objectApiName, recordId: { $in: duplicateObjectIds } },
+    { $set: { recordId: master._id } },
+  );
+  const activityRelated = await Activity.updateMany(
+    {
+      tenantId,
+      relatedRecords: { $elemMatch: { objectApiName, recordId: { $in: duplicateObjectIds } } },
+    },
+    { $set: { 'relatedRecords.$[rel].recordId': master._id } },
+    { arrayFilters: [{ 'rel.objectApiName': objectApiName, 'rel.recordId': { $in: duplicateObjectIds } }] },
+  );
+  const movedActivities = activityPrimary.modifiedCount + activityRelated.modifiedCount;
+  if (movedActivities) {
+    repointed.push({ objectApiName: 'activity', fieldApiName: 'recordId', count: movedActivities });
   }
 
   Object.entries(validated).forEach(([key, value]) => master.setField(key, value));

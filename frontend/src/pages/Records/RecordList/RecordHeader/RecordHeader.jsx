@@ -2,13 +2,14 @@ import styles from './RecordHeader.module.css';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
-import { Plus, Trash2, RefreshCw, Calendar, LayoutGrid } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Calendar, LayoutGrid, GitMerge } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../../services/api';
 import Button from '../../../../components/common/Button/Button';
 import ActionFlowRunner from '../../../../components/records/ActionFlowRunner';
 import RecurringTaskModal from '../../../../components/tasks/RecurringTaskModal';
 import DeleteConfirmationModal from '../../../../components/records/DeleteConfirmationModal/DeleteConfirmationModal';
+import { MAX_MERGE_RECORDS } from '../../RecordMerge/mergeConstants';
 
 const RecordHeader = ({
   objectApiName,
@@ -120,6 +121,25 @@ const RecordHeader = ({
           <span className={styles.selectionBadge}>
             {selected.length} selected
           </span>
+        )}
+
+        {perms.canDelete && perms.canUpdate && (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<GitMerge size={14} />}
+            disabled={selected.length < 2 || selected.length > MAX_MERGE_RECORDS}
+            onClick={() => navigate(`/o/${objectApiName}/merge?ids=${selected.join(',')}`)}
+            title={
+              selected.length < 2
+                ? `Select 2–${MAX_MERGE_RECORDS} records to merge`
+                : selected.length > MAX_MERGE_RECORDS
+                  ? `You can merge up to ${MAX_MERGE_RECORDS} records at a time`
+                  : `Merge ${selected.length} records`
+            }
+          >
+            Merge
+          </Button>
         )}
 
         {perms.canDelete && (

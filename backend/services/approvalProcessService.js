@@ -5,6 +5,7 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import configurationService from './configurationService.js';
+import { runAutomation } from './automationService.js';
 import { AppError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 
@@ -222,6 +223,21 @@ const applyFieldUpdates = (record, updates) => {
   return changed;
 };
 
+/**
+ * Launch the flow configured on an approval stage, if any. Runs after the
+ * decision is saved and never throws, so a failing flow cannot undo it.
+ */
+const launchStageFlow = async (stage, process, request, record, outcome, comment = '') => {
+  const flowId = process.actions?.[stage]?.flowId;
+  if (!flowId || !record) return;
+  await runAutomation(flowId, record, request.tenantId, {
+    approvalOutcome: outcome,
+    approvalComment: comment || '',
+    approvalProcessName: process.name,
+    approvalRequestId: String(request._id),
+  });
+};
+
 const stepDefinitionFor = (process, order) =>
   (process?.steps || []).find((s) => s.order === order);
 
@@ -345,6 +361,7 @@ const submit = async ({ tenantId, objectApiName, recordId, processId, user }) =>
   }
 
   await notifyStepApprover(tenantId, process, request, 0);
+  await launchStageFlow('onSubmit', process, request, record, 'submitted');
   return request;
 };
 
@@ -414,6 +431,7 @@ const decide = async ({ tenantId, requestId, user, decision, comment = '' }) => 
     }
     await request.save();
     await notifySubmitter(tenantId, process, request, 'rejected', comment);
+    await launchStageFlow('onReject', process, request, record, 'rejected', comment);
     return request;
   }
 
@@ -464,6 +482,7 @@ const decide = async ({ tenantId, requestId, user, decision, comment = '' }) => 
   }
   await request.save();
   await notifySubmitter(tenantId, process, request, 'approved', comment);
+  await launchStageFlow('onApprove', process, request, record, 'approved', comment);
   return request;
 };
 
@@ -509,10 +528,76 @@ const getState = async ({ tenantId, objectApiName, recordId }) => {
     .lean();
 };
 
+/**
+ * Everything a record page needs to render its approval panel: the latest
+ * request (with people resolved to names), what the current user may do,
+ * and which processes the record could be submitted to right now.
+ */
+const describeRecordState = async ({ tenantId, objectApiName, recordId, user }) => {
+  const request = await ApprovalRequest.findOne({ tenantId, objectApiName, recordId })
+    .sort({ createdAt: -1 })
+    .populate('submittedBy', 'firstName lastName')
+    .populate('decidedBy', 'firstName lastName')
+    .populate('steps.approverUserId', 'firstName lastName')
+    .populate('steps.approverRoleId', 'name label')
+    .populate('steps.decidedBy', 'firstName lastName')
+    .populate('history.by', 'firstName lastName')
+    .lean();
+
+  const userId = String(user._id);
+  const roleId = String(user.role?._id || user.role || '');
+  const idOf = (ref) => String(ref?._id || ref || '');
+
+  let canDecide = false;
+  let canRecall = false;
+  if (request?.status === 'pending') {
+    const step = request.steps?.[request.currentStep];
+    canDecide = Boolean(
+      step &&
+        ((step.approverUserId && idOf(step.approverUserId) === userId) ||
+          (step.approverType === 'queue' && step.approverRoleId && idOf(step.approverRoleId) === roleId)),
+    );
+    canRecall = idOf(request.submittedBy) === userId;
+  }
+
+  let eligibleProcesses = [];
+  if (request?.status !== 'pending') {
+    const record = await DynamicRecord.findOne({
+      _id: recordId,
+      tenantId,
+      objectApiName,
+      isDeleted: false,
+    });
+    if (record) {
+      const candidates = await ApprovalProcess.find({ tenantId, objectApiName, active: true })
+        .sort({ createdAt: 1 })
+        .select('name description entryCriteria');
+      for (const candidate of candidates) {
+        if (await evaluateEntryCriteria(candidate, record, tenantId)) {
+          eligibleProcesses.push({ _id: candidate._id, name: candidate.name });
+        }
+      }
+    }
+  }
+
+  return {
+    request,
+    canDecide,
+    canRecall,
+    canSubmit: eligibleProcesses.length > 0,
+    eligibleProcesses,
+  };
+};
+
 const listPendingForUser = async ({ tenantId, user }) => {
   const roleId = user.role?._id || user.role;
-  const or = [{ 'steps.approverUserId': user._id }];
-  if (roleId) or.push({ 'steps.approverRoleId': roleId });
+  // Match only the active step: earlier steps keep their approver after
+  // being decided, so a plain `steps.approverUserId` match would keep a
+  // request in a past approver's queue.
+  const or = [{ steps: { $elemMatch: { status: 'pending', approverUserId: user._id } } }];
+  if (roleId) {
+    or.push({ steps: { $elemMatch: { status: 'pending', approverRoleId: roleId } } });
+  }
   return ApprovalRequest.find({ tenantId, status: 'pending', $or: or })
     .sort({ createdAt: -1 })
     .lean();
@@ -526,5 +611,6 @@ export default {
   decide,
   recall,
   getState,
+  describeRecordState,
   listPendingForUser,
 };

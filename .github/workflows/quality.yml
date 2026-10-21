@@ -13,11 +13,14 @@ jobs:
     services:
       mongo:
         image: mongo:7
+        # A replica set is required: the merge/approval/tenant-isolation suites
+        # use Mongo transactions, which a standalone mongod rejects.
+        command: ["--replSet", "rs0", "--bind_ip_all"]
         ports:
           - 27017:27017
     env:
       NODE_ENV: test
-      MONGO_URI: mongodb://127.0.0.1:27017/salesdam_ci
+      MONGO_URI: mongodb://127.0.0.1:27017/salesdam_ci?replicaSet=rs0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,6 +28,13 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
+      - name: Initiate the Mongo replica set
+        run: >
+          docker exec ${{ job.services.mongo.id }} mongosh --quiet --eval
+          "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+          && for i in $(seq 1 30); do
+          mongosh --quiet --eval "db.hello().isWritablePrimary" && break || sleep 2;
+          done
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
@@ -35,6 +45,7 @@ jobs:
         working-directory: backend
         run: |
           node tests/tenant-isolation.e2e.mjs
+          node tests/admin-guards.e2e.mjs
           node tests/password-reset.e2e.mjs
           node tests/configuration.e2e.mjs
           node tests/approval-process.e2e.mjs

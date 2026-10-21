@@ -35,9 +35,12 @@ const createRule = asyncHandler(async (req, res) => {
 });
 
 const updateRule = asyncHandler(async (req, res) => {
+  // Never let the body move a rule to another tenant or rewrite its author.
+  // eslint-disable-next-line no-unused-vars
+  const { tenantId, createdBy, _id, ...updates } = req.body || {};
   const rule = await DuplicateRule.findOneAndUpdate(
     { _id: req.params.id, tenantId: req.tenantId },
-    { $set: req.body },
+    { $set: updates },
     { new: true, runValidators: true },
   );
   if (!rule) throw new AppError('Duplicate rule not found.', 404);

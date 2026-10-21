@@ -70,6 +70,10 @@ const actionSchema = new mongoose.Schema(
     lockRecord: { type: Boolean, default: false },
     unlockRecord: { type: Boolean, default: true },
     captureReason: { type: Boolean, default: true },
+    // Optional flow launched after this stage (approvalOutcome,
+    // approvalComment, approvalProcessName and approvalRequestId are passed
+    // as flow variables).
+    flowId: { type: mongoose.Schema.Types.ObjectId, ref: 'Automation', default: null },
   },
   { _id: false },
 );

@@ -14,6 +14,19 @@ import { ensureUserObject } from '../services/metadataService.js';
 import passwordResetService from '../services/passwordResetService.js';
 import { validateUserPermissions } from '../services/permissionValidationService.js';
 
+/**
+ * The superuser role is tenant-scoped and `user.role` is an unpopulated
+ * ObjectId ref, so guards have to compare role ids: a
+ * `countDocuments({ role: { name: 'superuser' } })` query against a ref field
+ * can never match, which left the guards inert.
+ */
+const superuserRoleId = async (tenantId) => {
+  const role = await Role.findOne({ tenantId, name: 'superuser' }).select('_id').lean();
+  return role?._id || null;
+};
+
+const roleIdOf = (user) => user?.role?._id || user?.role || null;
+
 const listUsers = asyncHandler(async (req, res) => {
   const { page = 1, limit = 50, search, status, role } = req.query;
   const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -250,10 +263,11 @@ const deactivateUser = asyncHandler(async (req, res) => {
     throw new AppError('Cannot deactivate yourself.', 403);
 
   // Prevent deactivating the only superuser
-  if (user.role?.name === 'superuser') {
+  const superId = await superuserRoleId(req.tenantId);
+  if (superId && String(roleIdOf(user)) === String(superId)) {
     const superuserCount = await User.countDocuments({
       tenantId: req.tenantId,
-      role: { name: 'superuser' },
+      role: superId,
     });
     if (superuserCount <= 1)
       throw new AppError('Cannot deactivate the only superuser in this tenant.', 403);
@@ -292,7 +306,23 @@ const updateMyProfile = asyncHandler(async (req, res) => {
   ];
 
   allowed.forEach((key) => {
-    if (req.body[key] !== undefined) user[key] = req.body[key];
+    if (req.body[key] === undefined) return;
+    if (key === 'preferences' && req.body.preferences && typeof req.body.preferences === 'object') {
+      // Merge rather than replace, so a partial update ({ theme: 'dark' })
+      // can't wipe other keys such as the welcome-tour progress. Nested
+      // groups (notifications, onboarding) merge one level deep.
+      const current = user.preferences?.toObject?.() || user.preferences || {};
+      const merged = { ...current };
+      for (const [k, v] of Object.entries(req.body.preferences)) {
+        const isGroup = v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
+        merged[k] = isGroup && current[k] && typeof current[k] === 'object'
+          ? { ...current[k], ...v }
+          : v;
+      }
+      user.preferences = merged;
+      return;
+    }
+    user[key] = req.body[key];
   });
 
   // Handle avatar upload
@@ -426,18 +456,22 @@ const updateUserRecord = asyncHandler(async (req, res) => {
   const customUpdates = {};
   for (const [key, val] of Object.entries(req.body)) {
     if (STANDARD_FIELDS.includes(key)) {
-      // Guard: prevent demoting last superuser
-      if (
-        key === 'role' &&
-        user.role.name?.toLowerCase() === 'superuser' &&
-        val.name !== 'superuser'
-      ) {
-        const count = await User.countDocuments({
-          tenantId: req.tenantId,
-          role: { name: 'superuser' },
-        });
-        if (count <= 1)
-          throw new AppError('Cannot demote the only superuser in this tenant. At least one superuser must exist.', 403);
+      if (key === 'role') {
+        // Guard: prevent demoting the last superuser
+        const superId = await superuserRoleId(req.tenantId);
+        const nextRoleId = val?._id || val;
+        if (
+          superId &&
+          String(roleIdOf(user)) === String(superId) &&
+          String(nextRoleId) !== String(superId)
+        ) {
+          const count = await User.countDocuments({
+            tenantId: req.tenantId,
+            role: superId,
+          });
+          if (count <= 1)
+            throw new AppError('Cannot demote the only superuser in this tenant. At least one superuser must exist.', 403);
+        }
       }
       user[key] = val;
     } else if (

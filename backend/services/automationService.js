@@ -110,6 +110,69 @@ const fireAutomations = async (event, objectApiName, record, tenantId) => {
   }
 };
 
+// ─── Public: run one named automation against a record ───────────────────────
+/**
+ * Launch a single active automation for `record`, outside the record-trigger
+ * path — used by approval processes to start a flow on submit/approve/reject.
+ * `variables` are exposed to the flow as `ctx.variables` (and `{name}` merge
+ * tokens). Shares the recursion guard and run stats with fireAutomations.
+ *
+ * Never throws: a failing flow must not undo the caller's work (e.g. a
+ * recorded approval decision). Returns 'success' | 'failed' | 'skipped'.
+ */
+const runAutomation = async (automationId, record, tenantId, variables = {}) => {
+  try {
+    const automation = await Automation.findOne({
+      _id: automationId,
+      tenantId,
+      isActive: true,
+    });
+    if (!automation || !record) return 'skipped';
+
+    const autoId = String(automation._id);
+    const maxDepth = automation.maxDepth ?? 1;
+    const currentDepth = _runningDepth.get(_depthKey(tenantId, autoId)) || 0;
+    if (!automation.allowRecursion && currentDepth >= maxDepth) {
+      logger.warn(
+        `Automation "${automation.name}" skipped — recursion depth ${currentDepth} ≥ maxDepth ${maxDepth}.`,
+      );
+      return 'skipped';
+    }
+
+    const depth = _enter(tenantId, autoId);
+    try {
+      const ctx = buildContext(record, variables, tenantId);
+      ctx._automationDepth = depth;
+      await executeFlow(automation, record, ctx, tenantId);
+      await Automation.updateOne(
+        { _id: automation._id },
+        {
+          $inc: { 'stats.totalRuns': 1, 'stats.successRuns': 1 },
+          'stats.lastRunAt': new Date(),
+          'stats.lastRunStatus': 'success',
+        },
+      );
+      return 'success';
+    } catch (err) {
+      logger.error(`Automation ${automation.name} failed:`, err);
+      await Automation.updateOne(
+        { _id: automation._id },
+        {
+          $inc: { 'stats.totalRuns': 1, 'stats.failedRuns': 1 },
+          'stats.lastRunAt': new Date(),
+          'stats.lastRunStatus': 'failed',
+        },
+      );
+      return 'failed';
+    } finally {
+      _exit(tenantId, autoId);
+    }
+  } catch (err) {
+    logger.error('runAutomation error:', err);
+    return 'failed';
+  }
+};
+
 // ─── Condition evaluation ─────────────────────────────────────────────────────
 const evaluateConditions = (conditions, record, logic = 'all') => {
   if (!conditions || conditions.length === 0) return true;
@@ -654,4 +717,4 @@ function interpolate(template, record, ctx = {}) {
   });
 }
 
-export { fireAutomations, evaluateConditions };
+export { fireAutomations, runAutomation, evaluateConditions };

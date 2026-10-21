@@ -41,11 +41,11 @@ export default function DashboardBuilder() {
       .get(`/dashboards/${id}`)
       .then((res) => {
         const d = res.data.data;
-        // if (!res.data.canEdit) {
-        //   toast.error('No edit access');
-        //   navigate(`/dashboards/${id}`);
-        //   return;
-        // }
+        if (!res.data.canEdit) {
+          toast.error('No edit access');
+          navigate(`/dashboards/${id}`);
+          return;
+        }
         setDash(d);
         const sorted = [...(d.widgets || [])].sort(
           (a, b) => (a.order || 0) - (b.order || 0),

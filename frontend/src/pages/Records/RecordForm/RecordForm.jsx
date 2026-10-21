@@ -9,6 +9,9 @@ import {
   updateRecord,
   createRecord,
 } from '../../../services/api/records';
+import { checkDuplicates } from '../../../services/api/duplicateRules';
+import DuplicateWarningModal from '../../../components/records/DuplicateWarningModal/DuplicateWarningModal';
+import { MAX_MERGE_RECORDS } from '../RecordMerge/mergeConstants';
 import { useTenantContext } from '../../../context/TenantContext';
 import { useAuthContext } from '../../../context/AuthContext';
 import { useObjectPermissions } from '../../../hooks/useObjectPermissions';
@@ -36,6 +39,8 @@ const RecordForm = () => {
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  // { action: 'warn'|'block', matches, data } while the duplicate dialog is open
+  const [duplicates, setDuplicates] = useState(null);
 
   // Fetch form bundle (fields and layout)
   const { data: bundle, isLoading: bundleLoading } = useQuery({
@@ -109,11 +114,35 @@ const RecordForm = () => {
       return;
     }
 
+    // Convert datetime values from local time to UTC before submitting
+    const dataToSubmit = convertDatetimeToUTC(formData, fields);
+
+    setSaving(true);
+    // Check the tenant's duplicate rules before saving so the user sees the
+    // matching records and decides. If the check itself fails, save anyway:
+    // the server still enforces blocking rules on create and update.
+    let duplicateCheck = null;
+    try {
+      duplicateCheck = await checkDuplicates(
+        objectApiName,
+        dataToSubmit,
+        isEdit ? id : undefined,
+      );
+    } catch {
+      duplicateCheck = null;
+    }
+    if (duplicateCheck?.matches?.length && duplicateCheck.action !== 'allow') {
+      setDuplicates({ ...duplicateCheck, data: dataToSubmit });
+      setSaving(false);
+      return;
+    }
+
+    await saveRecord(dataToSubmit);
+  };
+
+  const saveRecord = async (dataToSubmit) => {
     setSaving(true);
     try {
-      // Convert datetime values from local time to UTC before submitting
-      const dataToSubmit = convertDatetimeToUTC(formData, fields);
-
       if (isEdit) {
         const updatedRecord = await updateRecord(objectApiName, id, dataToSubmit);
         toast.success('Record updated.');
@@ -132,6 +161,14 @@ const RecordForm = () => {
         navigate(`/o/${objectApiName}/${createdRecord.id}`);
       }
     } catch (err) {
+      // A blocking duplicate rule the pre-save check didn't catch (e.g. a
+      // record created in the meantime) comes back as a 409 with the matches.
+      const serverDuplicates = err?.response?.data?.duplicates;
+      if (err?.response?.status === 409 && serverDuplicates?.length) {
+        setDuplicates({ action: 'block', matches: serverDuplicates, data: dataToSubmit });
+        return;
+      }
+      setDuplicates(null);
       // Anything the server could pin to a specific input (a duplicate value on
       // a unique field, a bad email, a failed regex) is highlighted on that
       // field, the same as a client-side validation failure.
@@ -187,6 +224,32 @@ const RecordForm = () => {
           onSubmit={handleSubmit}
         />
       </div>
+
+      <DuplicateWarningModal
+        isOpen={!!duplicates}
+        action={duplicates?.action}
+        matches={duplicates?.matches}
+        fields={fields}
+        objectApiName={objectApiName}
+        objectLabel={objMeta?.label?.toLowerCase()}
+        saving={saving}
+        onSaveAnyway={() => saveRecord(duplicates.data)}
+        onMerge={
+          isEdit && perms.canDelete && perms.canUpdate && duplicates?.matches?.length <= MAX_MERGE_RECORDS - 1
+            ? () => {
+                if (
+                  window.confirm(
+                    'Unsaved changes on this form will be discarded. You can pick each field’s value on the merge screen.',
+                  )
+                ) {
+                  const ids = [id, ...duplicates.matches.map((m) => m.recordId)];
+                  navigate(`/o/${objectApiName}/merge?ids=${ids.join(',')}`);
+                }
+              }
+            : undefined
+        }
+        onClose={() => setDuplicates(null)}
+      />
     </Layout>
   );
 };
