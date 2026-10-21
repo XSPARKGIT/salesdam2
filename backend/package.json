@@ -16,6 +16,7 @@
     "seed:local": "node scripts/seed-local.js",
     "seed:insurance": "node scripts/seed-insurance-objects.js",
     "test:insurance": "node tests/insurance-metadata.e2e.mjs && node tests/insurance-application.e2e.mjs && node tests/insurance-servicing-claims.e2e.mjs && node --test tests/insurance-billing.test.mjs && node tests/insurance-auto-lapse.e2e.mjs && node tests/insurance-billing-run.e2e.mjs && node tests/insurance-reinstatement.e2e.mjs && node tests/insurance-communication-triggers.e2e.mjs && node tests/insurance-communications.e2e.mjs && node tests/insurance-scheduler.e2e.mjs",
+    "test:demo": "node tests/insurance-metadata.e2e.mjs && node tests/insurance-application.e2e.mjs && node tests/insurance-servicing-claims.e2e.mjs && node tests/insurance-scheduler.e2e.mjs && node tests/approval-process.e2e.mjs && node tests/duplicate-detection.e2e.mjs && node tests/record-merge.e2e.mjs && node tests/activity.e2e.mjs && node tests/tenant-isolation.e2e.mjs",
     "auto:lapse": "node scripts/run-auto-lapse.js",
     "billing:run": "node scripts/run-billing-cycle.js",
     "scheduler:run": "node scripts/run-insurance-scheduler.js",

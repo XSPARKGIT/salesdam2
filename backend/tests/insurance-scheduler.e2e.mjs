@@ -366,6 +366,79 @@ try {
   console.log('[DEBUG] missed3Comms:', missed3Comms.map(c => dataOf(c)));
   check('payment_missed_3 communication logged for 3 missed', missed3Comms.length >= 1);
 
+  // --- Test 5: the arrears progression a customer actually sees ---
+  // One premium falls due each month and goes unpaid: a reminder after the
+  // first, another after the second, a third before the policy lapses, then
+  // the lapse notice. This is the sequence the policy owner receives.
+  await mkTpl('Payment Missed 1 Email', 'payment_missed_1_email', 'payment_missed_1',
+    'Missed Premium - Policy {{policy.policy_number}}',
+    'Dear {{client.name}},\n\nWe have not received your premium for policy {{policy.policy_number}}.');
+  await mkTpl('Payment Missed 2 Email', 'payment_missed_2_email', 'payment_missed_2',
+    'Second Missed Premium - Policy {{policy.policy_number}}',
+    'Dear {{client.name}},\n\nYour premium for policy {{policy.policy_number}} is still outstanding.');
+
+  const client3 = await mk(tenantId, userId, 'client', { name: 'Nomsa Dlamini', email: 'nomsa@example.com' });
+  const account3 = await mk(tenantId, userId, 'account', { name: 'Nomsa Premium Account', account_number: 'ACC-003' });
+  const policy3 = await mk(tenantId, userId, 'policy', {
+    status: 'active',
+    status_effective_date: '2026-01-01',
+    application_channel: 'website',
+    product_version: String(pv._id),
+    product: String(product._id),
+    current_premium: 250,
+    billing_frequency: 'monthly',
+    // Far enough ahead that the billing run does not add debits of its own:
+    // each arrears step below adds exactly one.
+    next_billing_date: '2026-12-01',
+    premium_payer: String(client3._id),
+    main_member: String(client3._id),
+    account: String(account3._id),
+  });
+  const policy3Id = String(policy3._id);
+  await mk(tenantId, userId, 'policy_party', {
+    name: 'Premium Payer - Nomsa',
+    policy: policy3Id,
+    client: String(client3._id),
+    role: 'premium_payer',
+  });
+
+  const commsFor = (policyId, event) =>
+    DynamicRecord.find({
+      tenantId,
+      objectApiName: 'policy_communication',
+      'data.policy': policyId,
+      'data.event': event,
+    });
+  const statusOf = async (policyId) => {
+    const p = await DynamicRecord.findOne({ tenantId, objectApiName: 'policy', _id: policyId }).lean();
+    return p?.data?.get ? p.data.get('status') : p?.data?.status;
+  };
+
+  // One unpaid premium per step, each long past due so the grace period
+  // (whatever it is set to) cannot hide it.
+  for (const [step, period] of [['2026-05', '2026-05-01'], ['2026-06', '2026-06-01'], ['2026-07', '2026-07-01']]) {
+    await mkTxn(tenantId, userId, preparePremiumDebit({
+      policyId: policy3Id,
+      accountId: String(account3._id),
+      amount: 250,
+      billingPeriod: step,
+      dueDate: period,
+      transactionDate: period,
+    }));
+    await runInsuranceSchedulerForTenant(tenantId, userId);
+  }
+
+  const missed1 = await commsFor(policy3Id, 'payment_missed_1');
+  const missed2 = await commsFor(policy3Id, 'payment_missed_2');
+  const missed3 = await commsFor(policy3Id, 'payment_missed_3');
+  const lapsedComms = await commsFor(policy3Id, 'policy_lapsed');
+
+  check('the first missed premium sends a reminder', missed1.length >= 1, `comms=${missed1.length}`);
+  check('the second missed premium sends a reminder', missed2.length >= 1, `comms=${missed2.length}`);
+  check('the third missed premium sends a reminder before the lapse', missed3.length >= 1, `comms=${missed3.length}`);
+  check('the policy lapses after three missed premiums', (await statusOf(policy3Id)) === 'lapsed', `status=${await statusOf(policy3Id)}`);
+  check('the lapse notice is logged', lapsedComms.length >= 1, `comms=${lapsedComms.length}`);
+
 } catch (err) {
   check('test harness ran without error', false, err.message);
   console.error(err);
