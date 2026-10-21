@@ -22,7 +22,7 @@ export const OPENAPI = {
   openapi: '3.0.3',
   info: {
     title: 'Salesdam CRM API',
-    version: '3.2.0',
+    version: '3.3.0',
     description:
       'REST API for the Salesdam CRM platform. Objects, fields and records are ' +
       'metadata-driven: the same endpoints serve standard and custom objects, ' +

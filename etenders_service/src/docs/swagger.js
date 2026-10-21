@@ -5,7 +5,7 @@ const options = {
     openapi: '3.0.0',
     info: {
       title: 'eTenders Service API',
-      version: '3.2.0',
+      version: '3.3.0',
       description:
         'API for browsing tenders synced from the eTenders SA portal. All /api/tenders and /api/admin routes require an access token.',
     },
