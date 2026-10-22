@@ -25,7 +25,7 @@ const Layout = ({ title, description, children }) => {
       <Sidebar />
       <div className={styles.main}>
         <Topbar />
-        <main className={styles.content}>
+        <main className={styles.content} data-tour="page">
           <div className={styles.contentInner}>{children}</div>
         </main>
       </div>

@@ -9,8 +9,26 @@ const TOOLTIP_WIDTH = 340;
 const TOOLTIP_HEIGHT = 220;
 const GAP = 14;
 const MAX_GROUP_ATTEMPTS = 3;
+// How long to keep looking for a step's target after the page changes. A
+// page that loads its data renders the marker late, and skipping it would
+// mean a click appears to do nothing.
+const TARGET_WAIT_MS = 2000;
+const POLL_MS = 80;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+/**
+ * The first of the step's selectors that exists on the page. Later selectors
+ * are fallbacks, so a step still points at something when its own marker is
+ * not rendered.
+ */
+const findTarget = (selectors) => {
+  for (const selector of selectors || []) {
+    const el = document.querySelector(selector);
+    if (el) return el;
+  }
+  return null;
+};
 
 const positionFor = (rect, placement) => {
   const vw = window.innerWidth;
@@ -56,6 +74,11 @@ const Tour = () => {
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState(null);
   const navigatedFor = useRef(-1);
+  const pathRef = useRef(pathname);
+
+  useEffect(() => {
+    pathRef.current = pathname;
+  }, [pathname]);
 
   const step = TOUR_STEPS[index];
 
@@ -71,17 +94,20 @@ const Tour = () => {
     // user cannot reach (a Guard redirect) can't bounce us back and forth.
     if (step.path && pathname !== step.path && navigatedFor.current !== index) {
       navigatedFor.current = index;
+      setRect(null);
       navigate(step.path);
       return undefined;
     }
 
     let cancelled = false;
     let attempts = 0;
+    let waited = 0;
+    let timer = null;
 
     const place = () => {
       if (cancelled) return;
 
-      const el = document.querySelector(step.selector);
+      const el = findTarget(step.selectors);
       if (el) {
         el.scrollIntoView({ block: 'nearest' });
         setRect(el.getBoundingClientRect());
@@ -96,8 +122,24 @@ const Tour = () => {
         attempts < MAX_GROUP_ATTEMPTS
       ) {
         attempts += 1;
-        toggle.click();
-        setTimeout(place, 80);
+        timer = setTimeout(place, 80);
+        return;
+      }
+
+      // The page may still be loading its data, so keep looking for a moment
+      // before giving up on the step.
+      if (waited < TARGET_WAIT_MS) {
+        // The route redirected us somewhere else (the signed-in user has no
+        // access to that page), so there is nothing to point at: skip it now
+        // rather than waiting out the budget.
+        if (step.path && pathRef.current !== step.path) {
+          setRect(null);
+          if (index < TOUR_STEPS.length - 1) setIndex(index + 1);
+          else finishTour('completed');
+          return;
+        }
+        waited += POLL_MS;
+        timer = setTimeout(place, POLL_MS);
         return;
       }
 
@@ -106,10 +148,10 @@ const Tour = () => {
       else finishTour('completed');
     };
 
-    const id = setTimeout(place, 0);
+    timer = setTimeout(place, 0);
     return () => {
       cancelled = true;
-      clearTimeout(id);
+      clearTimeout(timer);
     };
   }, [step, index, finishTour, navigate, pathname]);
 
@@ -118,7 +160,7 @@ const Tour = () => {
     if (!step) return undefined;
 
     const onMove = () => {
-      const el = document.querySelector(step.selector);
+      const el = findTarget(step.selectors);
       if (el) setRect(el.getBoundingClientRect());
     };
 
@@ -195,7 +237,10 @@ const Tour = () => {
               <button
                 type="button"
                 className={styles.tourBack}
-                onClick={() => setIndex((i) => i - 1)}
+                onClick={() => {
+                  setRect(null);
+                  setIndex((i) => i - 1);
+                }}
               >
                 <ArrowLeft size={14} /> Back
               </button>
@@ -203,9 +248,16 @@ const Tour = () => {
             <button
               type="button"
               className={styles.tourNext}
-              onClick={() =>
-                isLast ? finishTour('completed') : setIndex((i) => i + 1)
-              }
+              onClick={() => {
+                if (isLast) {
+                  finishTour('completed');
+                  return;
+                }
+                // Clear the old spotlight so the page visibly changes with
+                // every click, then move on.
+                setRect(null);
+                setIndex((i) => i + 1);
+              }}
             >
               {isLast ? 'Finish' : 'Next'}
               {!isLast && <ArrowRight size={14} />}
