@@ -55,7 +55,10 @@ export const logCommunication = async ({
   channel,
   subject,
   body,
-  status = 'sent',
+  // Queued until the dispatcher actually delivers it (it only picks up
+  // 'queued' records, then marks them sent or failed). Logging as 'sent'
+  // claimed delivery that never happened and kept the dispatcher idle.
+  status = 'queued',
   attachments = [],
 }) => {
   if (!COMMUNICATION_EVENTS.includes(event)) {
@@ -79,7 +82,10 @@ export const logCommunication = async ({
     body,
     status,
     client: String(client),
-    sent_at: new Date(),
+    logged_at: new Date(),
+    // Only a communication that has actually gone out has a sent time; the
+    // dispatcher stamps it on delivery.
+    sent_at: status === 'sent' ? new Date() : undefined,
     attachments: attachments.length ? attachments : undefined,
   };
   if (policyId) data.policy = String(policyId);

@@ -22,6 +22,7 @@ import { seedStandardObjects, ensureUserObject } from '../services/metadataServi
 import { seedInsuranceObjects, seedInsuranceWorkspace } from '../services/insuranceMetadataService.js';
 import connectDB from '../config/db.js';
 import app from '../app.js';
+import { dispatchCommunications } from '../services/insurance/communicationDispatcher.js';
 
 const RUN = Date.now().toString(36);
 const PASSWORD = 'InsSvc123!';
@@ -185,6 +186,27 @@ try {
 
   const lapse = await req(`/api/v1/insurance/policies/${policy1}/lapse`, { method: 'POST', cookie: ca, body: { reason: 'non-payment' } });
   check('lapse → lapsed', lapse.json?.data?.policy?.status === 'lapsed', `HTTP ${lapse.status}`);
+  const lapseComms = await req(`/api/v1/insurance/policies/${policy1}/communications`, { cookie: ca });
+  const lapseNotice = (lapseComms.json?.data || []).find((c) => c.event === 'policy_lapsed');
+  check(
+    'a lapse notice is queued for delivery, not claimed as sent',
+    lapseNotice?.status === 'queued' && !lapseNotice?.sent_at && !!lapseNotice?.logged_at,
+    JSON.stringify({ status: lapseNotice?.status, sent_at: lapseNotice?.sent_at, logged_at: !!lapseNotice?.logged_at }),
+  );
+  // The dispatcher must never hand a reserved test domain to a real SMTP
+  // server (a developer's configured account would send and bounce mail).
+  const lapsedPolicy = await DynamicRecord.findById(policy1);
+  await DynamicRecord.updateOne(
+    { _id: lapsedPolicy.getField('premium_payer'), tenantId: A.tenant._id },
+    { $set: { 'data.email': `payer-${RUN}@example.com` } },
+  );
+  await dispatchCommunications(String(A.tenant._id));
+  const afterDispatch = await DynamicRecord.findById(lapseNotice?.id);
+  check(
+    'mail to a reserved test domain is never sent, and stays queued',
+    afterDispatch?.getField('status') === 'queued' && !afterDispatch?.getField('sent_at'),
+    `status=${afterDispatch?.getField('status')}`,
+  );
   check(
     'a lapsed policy offers reinstate, not reactivate',
     sameSet(lapse.json?.data?.allowed_actions, ['reinstate', 'cancel', 'close']),

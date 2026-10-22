@@ -39,7 +39,7 @@ this marketing site (`landing/`).
 | Automation | Automation | Record-triggered flows and screen flows with conditions, decisions, notifications, emails and HTTP actions |
 | Notifications | Top bar | In-app notifications with unread count, produced by approvals, automations and billing |
 | Insurance — new business | `/insurance/new-business` | Product and channel → main member (entry ages enforced) → family → payer and beneficiary → server-priced quote → acceptance evidence → submit → optional issue |
-| Insurance — servicing | Any policy record → servicing panel | Status and billing facts, documents (contract, schedule, certificate) and the communication log; lapse, reinstate, suspend, reactivate, cancel and close, each with a required reason |
+| Insurance — servicing | Any policy record → servicing panel | Status and billing facts, documents (contract, schedule, certificate) and the communication log; lapse, reinstate, suspend, reactivate, cancel and close — a reason is required to lapse, suspend, cancel or close, and optional to reinstate or reactivate |
 | Platform administration | `admin/` | Tenants, users, incidents and the audit log |
 
 **What a customer sees when a premium is missed** — verified end to end: a
@@ -80,6 +80,10 @@ capabilities — they simply are not in the application.
 
 The provider layer is built: credentials drop into the declared provider
 definitions, and nothing is reported as delivered while a provider is unwired.
+Policy and claim notices are logged as **queued** and marked sent only when the
+dispatcher actually delivers them; without an email server they stay queued and
+are retried. Mail to reserved test domains (example.com, .test, .invalid) is
+never sent.
 
 ---
 
@@ -95,7 +99,7 @@ definitions, and nothing is reported as delivered while a provider is unwired.
 
 | | |
 |---|---|
-| Automated checks | **580** — 535 across 25 end-to-end API suites, plus 45 unit tests. Every suite is currently green |
+| Automated checks | **582** — 537 across 25 end-to-end API suites, plus 45 unit tests. Every suite is currently green |
 | Coverage | Tenant isolation, approvals, duplicate rules, merge, activity, configuration, consent, change sets, omnichannel, telephony, conversation capture, and thirteen insurance suites (new business, servicing, billing, arrears, lapse, claims, documents, communications, scheduler) |
 | Builds | API, CRM application, admin console, documentation site and marketing site all build clean |
 | CI | Runs on every push and pull request: unit tests, the integration suites against a MongoDB replica set, and the frontend and admin builds |
@@ -107,8 +111,9 @@ definitions, and nothing is reported as delivered while a provider is unwired.
 
 - The insurance workspace has screens for **new business and policy servicing
   only**. Billing operations, endorsements and claims are run through the API.
-- Dashboards and automation are behind a feature flag that is on in the local
-  and demo builds; ask us to have them enabled for your tenant.
+- Dashboards and automation are switched on per deployment (they are built in
+  or left out when the application is built), not per tenant. They are on in
+  the local and demo builds and in the Render deployment configuration.
 - External messaging, telephony and payment channels work up to the point of
   the provider credential — they are not proven against a live account.
 - The platform has not been signed off for production. It is complete for the

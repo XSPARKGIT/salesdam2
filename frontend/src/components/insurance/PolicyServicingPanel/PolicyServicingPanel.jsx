@@ -394,7 +394,7 @@ const PolicyServicingPanel = ({ policyId, fields = [], canUpdate }) => {
                     {humanize(c.event)} · {humanize(c.channel)} · {humanize(c.status)}
                   </span>
                 </div>
-                <time className={styles.rowMeta}>{fmtDate(c.sent_at)}</time>
+                <time className={styles.rowMeta}>{fmtDate(c.sent_at || c.logged_at)}</time>
               </li>
             ))}
           </ul>

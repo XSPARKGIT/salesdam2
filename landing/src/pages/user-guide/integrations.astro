@@ -3,7 +3,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const curlExample = esc(`curl -X GET \\
-  'http://localhost:5001/api/records/contact' \\
+  'http://localhost:5000/api/v1/records/contact' \\
   -H 'X-API-Key: YOUR_API_KEY' \\
   -H 'Content-Type: application/json'`);
 
@@ -37,7 +37,7 @@ const nodeExample = esc(`// Node.js — using the REST API with axios
 const axios = require('axios');
 
 const client = axios.create({
-  baseURL: 'http://localhost:5001/api',
+  baseURL: 'http://localhost:5000/api/v1',
   headers: { 'X-API-Key': 'YOUR_API_KEY' }
 });
 
@@ -60,7 +60,7 @@ await client.put('/records/contact/' + recordId, {
 
 const pythonExample = esc(`import requests
 
-BASE = 'http://localhost:5001/api'
+BASE = 'http://localhost:5000/api/v1'
 HEADERS = {'X-API-Key': 'YOUR_API_KEY'}
 
 # Create record
@@ -96,7 +96,7 @@ requests.delete(f'{BASE}/records/contact/{record["_id"]}', headers=HEADERS)`);
   </p>
 
   <h3>API Base URL</h3>
-  <pre><code>http://localhost:5001/api</code></pre>
+  <pre><code>http://localhost:5000/api/v1</code></pre>
 
   <h3>Authentication</h3>
   <p>All API requests require authentication via API keys:</p>

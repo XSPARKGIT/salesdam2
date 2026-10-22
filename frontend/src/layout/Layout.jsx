@@ -11,7 +11,7 @@ const Layout = ({ title, description, children }) => {
 
   const pageTitle = title ? `${title} | ${APP_NAME}` : APP_NAME;
   const pageDescription =
-    description || 'Salesforce Mini - Modern CRM for growing teams';
+    description || 'Salesdam — CRM and insurance administration platform';
 
   return (
     <div

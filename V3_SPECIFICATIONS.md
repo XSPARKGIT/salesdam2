@@ -587,7 +587,7 @@ Login. Used by platform operators for cross-tenant administration.
 | `tests/record-merge.e2e.mjs` | 23/23 |
 | `tests/conversation-capture.e2e.mjs` | 14/14 |
 | `backend/tests/insurance-endorsements.e2e.mjs` | 33/33 |
-| `npm run test:insurance` | exit 0 (9/9, 40/40, 36/36, 8/8, 11/11, 18/18, 15/15, 4/4) |
+| `npm run test:insurance` | exit 0 — 13 suites: metadata 9/9, application 40/40, servicing & claims 38/38, billing 16/16, communication templates 8/8, auto-lapse 8/8, billing run 11/11, reinstatement 18/18, approval 16/16, documents 15/15, communication triggers 15/15, communications 4/4, scheduler 19/19 |
 | `frontend && npm run build` | pass |
 | `admin && npm run build` | pass |
 

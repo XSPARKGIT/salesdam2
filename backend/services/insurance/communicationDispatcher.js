@@ -26,6 +26,18 @@ const COMMUNICATION_STATUSES = {
 };
 
 /**
+ * Domains reserved for documentation and testing (RFC 2606, RFC 6761). Mail
+ * to them can never be delivered, and the test suites use them — so they are
+ * never handed to a real SMTP server, which would otherwise send (and bounce)
+ * mail from a developer's configured account on every test run.
+ */
+const RESERVED_DOMAIN = /(^|\.)(example\.(com|net|org)|[^.]+\.(test|example|invalid|localhost))$/i;
+export const isReservedEmailDomain = (email) => {
+  const domain = String(email || '').split('@')[1] || '';
+  return RESERVED_DOMAIN.test(domain) || /^(test|example|invalid|localhost)$/i.test(domain);
+};
+
+/**
  * Resolve the SMTP transporter for a tenant.
  * Prefers a configured EmailSender; falls back to env vars.
  */
@@ -102,7 +114,9 @@ export const deliverCommunication = async (tenantId, communication) => {
     ? Object.fromEntries(communication.data)
     : communication.data;
 
-  const { channel, subject, body, client, policyId } = cData;
+  const { channel, subject, body, client } = cData;
+  // Logged communications store the policy as `policy`.
+  const policyId = cData.policy || cData.policyId;
 
   // Build the recipient context
   const context = {
@@ -175,6 +189,10 @@ const deliverEmail = async (tenantId, communication, context) => {
     }
   }
   if (!to) return { success: false, error: 'No recipient email address' };
+  // Left queued (not failed): nothing was attempted.
+  if (isReservedEmailDomain(to)) {
+    return { success: false, error: `Not sent: ${to} is a reserved test domain` };
+  }
 
   const renderedSubject = commTemplates.renderTemplate(subject, context);
   const renderedBody = commTemplates.renderTemplate(body, context);
