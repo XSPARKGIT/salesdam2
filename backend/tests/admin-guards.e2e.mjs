@@ -228,6 +228,33 @@ try {
     JSON.stringify(prefs4?.onboarding ?? null),
   );
 
+  // The CRM welcome guide has its own off switch: it is stored, and clearing
+  // it turns the guide back on, without touching the console's flag.
+  const crmOff = await req('/api/v1/users/me/profile', {
+    method: 'PATCH', cookie: ca,
+    body: { preferences: { onboarding: { welcomeTurnedOffAt: seenAt } } },
+  });
+  const me5 = await req('/api/v1/auth/me', { cookie: ca });
+  const prefs5 = me5.json?.data?.user?.preferences || me5.json?.user?.preferences;
+  check(
+    'the CRM welcome guide can be turned off',
+    crmOff.status === 200 &&
+      !!prefs5?.onboarding?.welcomeTurnedOffAt &&
+      prefs5?.onboarding?.adminWelcomeSeenAt === null,
+    JSON.stringify(prefs5?.onboarding ?? null),
+  );
+  const crmOn = await req('/api/v1/users/me/profile', {
+    method: 'PATCH', cookie: ca,
+    body: { preferences: { onboarding: { welcomeTurnedOffAt: null } } },
+  });
+  const me6 = await req('/api/v1/auth/me', { cookie: ca });
+  const prefs6 = me6.json?.data?.user?.preferences || me6.json?.user?.preferences;
+  check(
+    'the CRM welcome guide can be turned back on',
+    crmOn.status === 200 && prefs6?.onboarding?.welcomeTurnedOffAt === null,
+    JSON.stringify(prefs6?.onboarding ?? null),
+  );
+
   const verify = await req('/api/v1/users/me/verify-password', {
     method: 'POST', cookie: ca, body: { currentPassword: PASSWORD },
   });

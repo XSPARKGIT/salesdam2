@@ -5,21 +5,37 @@ import { useAuth } from '../../hooks/useAuth';
 const OnboardingContext = createContext(null);
 
 /**
- * Owns the first-login welcome modal and the guided tour.
- * Progress lives on the user's own preferences
- * (PATCH /users/me/profile -> user.preferences.onboarding), so there is no
- * schema change and "replay" is just the tour flag again.
+ * Owns the welcome modal and the guided tour.
+ *
+ * The welcome guide shows on every visit — each sign-in and each page load —
+ * for every user, until they turn it off with "Don't show this again".
+ * Closing it, finishing the tour or skipping it only hides it until the next
+ * visit. The off switch lives on the user's own preferences
+ * (PATCH /users/me/profile -> user.preferences.onboarding.welcomeTurnedOffAt),
+ * so it follows the person to the next browser.
  */
 export const OnboardingProvider = ({ children }) => {
   const { user, updateUser } = useAuth();
   const [tourOpen, setTourOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  // Opened from the profile menu: shown even when the guide is turned off, so
+  // the user can turn it back on.
+  const [reopened, setReopened] = useState(false);
 
-  // Derived rather than an effect: after the PATCH the stored flag is already
-  // set, and if the PATCH fails the welcome is simply offered again later.
+  // Signing out (or in as someone else) ends the visit, so the next sign-in
+  // shows the guide again.
+  const userId = user?._id || user?.id || null;
+  const [visitOf, setVisitOf] = useState(userId);
+  if (visitOf !== userId) {
+    setVisitOf(userId);
+    setDismissed(false);
+    setReopened(false);
+    setTourOpen(false);
+  }
+
+  const turnedOff = Boolean(user?.preferences?.onboarding?.welcomeTurnedOffAt);
   const welcomeOpen =
-    Boolean(user) &&
-    !tourOpen &&
-    !user.preferences?.onboarding?.welcomeSeenAt;
+    Boolean(user) && !tourOpen && (reopened || (!turnedOff && !dismissed));
 
   const save = useCallback(
     (patch) => {
@@ -34,14 +50,32 @@ export const OnboardingProvider = ({ children }) => {
     [user, updateUser],
   );
 
-  const startTour = useCallback(() => {
-    save({ welcomeSeenAt: new Date().toISOString(), tourStatus: 'in_progress' });
-    setTourOpen(true);
-  }, [save]);
+  // Closing the welcome modal either way records the "Don't show this again"
+  // box, but only writes when the choice actually changed.
+  const closeWelcome = useCallback(
+    (patch, dontShowAgain) => {
+      const now = new Date().toISOString();
+      const toggle =
+        dontShowAgain !== turnedOff ? { welcomeTurnedOffAt: dontShowAgain ? now : null } : {};
+      save({ welcomeSeenAt: now, ...patch, ...toggle });
+      setDismissed(true);
+      setReopened(false);
+    },
+    [save, turnedOff],
+  );
 
-  const exploreOnMyOwn = useCallback(() => {
-    save({ welcomeSeenAt: new Date().toISOString(), tourStatus: 'skipped' });
-  }, [save]);
+  const startTour = useCallback(
+    (dontShowAgain = false) => {
+      closeWelcome({ tourStatus: 'in_progress' }, dontShowAgain);
+      setTourOpen(true);
+    },
+    [closeWelcome],
+  );
+
+  const exploreOnMyOwn = useCallback(
+    (dontShowAgain = false) => closeWelcome({ tourStatus: 'skipped' }, dontShowAgain),
+    [closeWelcome],
+  );
 
   const finishTour = useCallback(
     (status) => {
@@ -51,16 +85,22 @@ export const OnboardingProvider = ({ children }) => {
     [save],
   );
 
+  const openWelcome = useCallback(() => {
+    setTourOpen(false);
+    setReopened(true);
+  }, []);
+
   const value = useMemo(
     () => ({
       welcomeOpen,
+      turnedOff,
       tourOpen,
       startTour,
       exploreOnMyOwn,
       finishTour,
-      replayTour: startTour,
+      openWelcome,
     }),
-    [welcomeOpen, tourOpen, startTour, exploreOnMyOwn, finishTour],
+    [welcomeOpen, turnedOff, tourOpen, startTour, exploreOnMyOwn, finishTour, openWelcome],
   );
 
   return (

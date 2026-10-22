@@ -80,6 +80,9 @@ const userSchema = new mongoose.Schema(
       // drops unknown keys, which made the welcome modal reappear on reload.
       onboarding: {
         welcomeSeenAt: { type: Date },
+        // The CRM welcome guide shows on every visit until the user turns it
+        // off with "Don't show this again"; null means "show it".
+        welcomeTurnedOffAt: { type: Date },
         // Platform console (admin app) welcome guide. Separate from
         // welcomeSeenAt so the two apps have independent guides, and null
         // means "show it" — the guide stays up until the operator turns it

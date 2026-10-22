@@ -20,7 +20,7 @@ import { useOnboarding } from '../../components/onboarding/OnboardingProvider';
 
 const Topbar = () => {
   const { user, logout } = useAuth();
-  const { replayTour } = useOnboarding();
+  const { openWelcome } = useOnboarding();
   const {
     sidebarCollapsed,
     toggleTheme,
@@ -255,10 +255,10 @@ const Topbar = () => {
                 className={styles.dropdownItem}
                 onClick={() => {
                   setProfileOpen(false);
-                  replayTour();
+                  openWelcome();
                 }}
               >
-                <Sparkles size={14} /> Welcome tour
+                <Sparkles size={14} /> Welcome guide
               </button>
               <button className={styles.dropdownItem} onClick={handleLogout}>
                 <User size={14} /> Logout

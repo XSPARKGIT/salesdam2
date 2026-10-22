@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Database, LayoutDashboard, Zap, Users, Sparkles } from 'lucide-react';
 import { useOnboarding } from './OnboardingProvider';
 import styles from './Onboarding.module.css';
@@ -26,9 +27,21 @@ const BENEFITS = [
 ];
 
 const WelcomeModal = () => {
-  const { welcomeOpen, startTour, exploreOnMyOwn } = useOnboarding();
+  const { welcomeOpen } = useOnboarding();
 
-  if (!welcomeOpen) return null;
+  // Mounted fresh each time it opens, so the box always starts from the
+  // user's saved choice.
+  return welcomeOpen ? <Welcome /> : null;
+};
+
+/**
+ * Shown on every visit until the user ticks "Don't show this again". Either
+ * button closes it and records the box; reopening it from the profile menu
+ * shows the box ticked, so unticking it turns the guide back on.
+ */
+const Welcome = () => {
+  const { turnedOff, startTour, exploreOnMyOwn } = useOnboarding();
+  const [dontShowAgain, setDontShowAgain] = useState(turnedOff);
 
   return (
     <div
@@ -66,22 +79,32 @@ const WelcomeModal = () => {
           <button
             type="button"
             className={styles.ghostBtn}
-            onClick={exploreOnMyOwn}
+            onClick={() => exploreOnMyOwn(dontShowAgain)}
           >
             Explore on my own
           </button>
           <button
             type="button"
             className={styles.primaryBtn}
-            onClick={startTour}
+            onClick={() => startTour(dontShowAgain)}
           >
             Let&rsquo;s get started
           </button>
         </div>
 
-        <p className={styles.footnote}>
-          Guided tour &middot; about a minute
-        </p>
+        <div className={styles.footer}>
+          <label className={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={dontShowAgain}
+              onChange={(e) => setDontShowAgain(e.target.checked)}
+            />
+            <span>Don&rsquo;t show this again</span>
+          </label>
+          <p className={styles.footnote}>
+            Guided tour &middot; about a minute
+          </p>
+        </div>
       </div>
     </div>
   );
