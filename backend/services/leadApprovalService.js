@@ -62,7 +62,7 @@ class LeadApprovalService {
       }
 
       const info = await transporter.sendMail({
-        from: process.env.SMTP_FROM_EMAIL || 'noreply@salesdam.com',
+        from: process.env.SMTP_FROM || process.env.SMTP_FROM_EMAIL || 'noreply@salesdam.com',
         to,
         subject,
         html: htmlContent,

@@ -90,7 +90,7 @@ async function sendEmailNotification(toEmail, subject, htmlContent) {
   try {
     const transporter = initEmailTransporter();
     await transporter.sendMail({
-      from: process.env.EMAIL_FROM || 'noreply@salesdam.com',
+      from: process.env.SMTP_FROM || process.env.EMAIL_FROM || 'noreply@salesdam.com',
       to: toEmail,
       subject,
       html: htmlContent,

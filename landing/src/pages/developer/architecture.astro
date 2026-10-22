@@ -119,7 +119,7 @@ const jsonClose = '}';
   </ol>
 
   <h3>Middleware Stack</h3>
-  <pre><code>{'// app.js middleware order\napp.use(express.json());\napp.use(express.urlencoded({ extended: true }));\napp.use(session({\n  secret: process.env.SESSION_SECRET,\n  store: MongoStore.create({ mongoUrl }),\n  resave: false,\n  saveUninitialized: false,\n  cookie: {\n    maxAge: 24 * 60 * 60 * 1000,\n    httpOnly: true,\n    secure: process.env.NODE_ENV === "production"\n  }\n}));\n\n// Protected routes use:\nrouter.use(requireAuth);\nrouter.use(tenant);\nrouter.use(permissions("object", "read"));'}</code></pre>
+  <pre><code>{'// backend/app.js — order matters\napp.set(\'trust proxy\', 1);\napp.use(helmet({ ... }));\napp.use(cors({ origin: getAllowedOrigins(), credentials: true })); // CORS_ORIGINS\napp.use(compression());\napp.use(express.json({ limit: \'10mb\', verify: keepRawBody }));   // raw body for webhook signatures\napp.use(express.urlencoded({ extended: true, limit: \'10mb\' }));\napp.use(mongoSanitize());\napp.use(sessionMiddleware);   // crm.sid cookie → Session document → req.sessionData\napp.use(\'/api\', globalLimiter);\n\n// Protected routes, e.g. backend/routes/records.js:\nrouter.use(requireAuth, enforceTenant);\nrouter.get(\'/:objectApiName\', checkObjectPermission(\'read\'), listRecords);'}</code></pre>
 
   <h2>Frontend Architecture</h2>
 

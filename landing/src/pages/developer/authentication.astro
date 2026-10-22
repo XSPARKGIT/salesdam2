@@ -9,6 +9,7 @@ const sessionSchema = new mongoose.Schema({
   sessionId:      { type: String, required: true, unique: true, index: true },
   userId:         { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   tenantId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', default: null },
+  workspaceId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', default: null },
   data:           { type: mongoose.Schema.Types.Mixed, default: {} },
   expiresAt:      { type: Date, required: true, index: true },
   lastAccessedAt: { type: Date, default: Date.now },
@@ -22,155 +23,116 @@ sessionSchema.index({ userId: 1 });
 
 export default mongoose.model('Session', sessionSchema);`);
 
-const storeCode = esc(`import session from 'express-session';
+const middlewareCode = esc(`// backend/middleware/sessionMiddleware.js (abridged)
+import { v4 as uuidv4 } from 'uuid';
 import Session from '../models/Session.js';
-const { Store } = session;
 
-class MongoSessionStore extends Store {
-  constructor(options = {}) {
-    super(options);
-    this.maxAge = options.maxAge || 86400000;  // 24h default
-    this.touchAfter = options.touchAfter || 3600000;
+const SESSION_COOKIE = 'crm.sid';
+const SESSION_MAX_AGE = parseInt(process.env.SESSION_MAX_AGE) || 86400000; // 24 h
+
+const sessionMiddleware = async (req, res, next) => {
+  const sid = parseCookies(req.headers.cookie)[SESSION_COOKIE] || null;
+  req.sessionId = null;
+  req.sessionData = null;
+
+  if (sid) {
+    const session = await Session.findOne({ sessionId: sid, expiresAt: { $gt: new Date() } });
+    if (session) {
+      req.sessionId = sid;
+      req.sessionData = {
+        userId: session.userId?.toString() || null,
+        tenantId: session.tenantId?.toString() || null,
+        workspaceId: session.workspaceId?.toString() || null,
+      };
+    }
   }
 
-  // Load session by ID
-  get(sid, cb) {
-    Session.findOne({ sessionId: sid, expiresAt: { $gt: new Date() } })
-      .then(doc => {
-        if (!doc) return cb(null, null);
-        const sess = Object.assign({}, doc.data || {});
-        if (doc.userId)   sess.userId   = doc.userId.toString();
-        if (doc.tenantId) sess.tenantId = doc.tenantId.toString();
-        cb(null, sess);
-      })
-      .catch(err => cb(err));
-  }
-
-  // Create or update session
-  set(sid, sess, cb) {
-    const expiresAt = new Date(Date.now() + this.maxAge);
-    const update = { sessionId: sid, data: sess, expiresAt, lastAccessedAt: new Date() };
-    if (sess.userId)   update.userId   = sess.userId;
-    if (sess.tenantId) update.tenantId = sess.tenantId;
-    Session.findOneAndUpdate({ sessionId: sid }, update, { upsert: true, new: true })
-      .then(() => cb(null)).catch(err => cb(err));
-  }
-
-  // Delete a session
-  destroy(sid, cb) {
-    Session.deleteOne({ sessionId: sid })
-      .then(() => cb(null)).catch(err => cb(err));
-  }
-
-  // Refresh TTL (throttled by touchAfter)
-  touch(sid, sess, cb) {
-    const now = Date.now();
-    Session.findOneAndUpdate(
-      { sessionId: sid, lastAccessedAt: { $lt: new Date(now - this.touchAfter) } },
-      { expiresAt: new Date(now + this.maxAge), lastAccessedAt: new Date() }
-    ).then(() => cb(null)).catch(err => cb(err));
-  }
-}
-
-export default MongoSessionStore;`);
-
-const sessionConfig = esc(`// config/session.js
-import MongoSessionStore from './sessionStore.js';
-
-const maxAge = parseInt(process.env.SESSION_MAX_AGE) || 86400000;
-
-export default {
-  name:             'crm.sid',
-  secret:           process.env.SESSION_SECRET || 'change-in-production',
-  resave:           false,
-  saveUninitialized: false,
-  store:            new MongoSessionStore({ maxAge, touchAfter: 3600000 }),
-  cookie: {
-    httpOnly: true,
-    secure:   process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-    maxAge,
-  },
+  req.createSession = async (data) => {          // login / register
+    const newSid = uuidv4();                       // opaque, unguessable id
+    await Session.create({ sessionId: newSid, ...data,
+      expiresAt: new Date(Date.now() + SESSION_MAX_AGE) });
+    _setSessionCookie(res, newSid);
+  };
+  req.updateSession = async (updates) => { /* e.g. switch workspace */ };
+  req.destroySession = async () => {            // logout
+    await Session.deleteOne({ sessionId: req.sessionId });
+    _clearSessionCookie(res);
+  };
+  next();
 };`);
 
-const authMiddleware = esc(`// middleware/auth.js
+const cookieCode = esc(`const _setSessionCookie = (res, sid) => {
+  const isProd = process.env.NODE_ENV === 'production';
+  const parts = [
+    \`crm.sid=\${encodeURIComponent(sid)}\`,
+    'HttpOnly',
+    'Path=/',
+    \`Max-Age=\${Math.floor(SESSION_MAX_AGE / 1000)}\`,
+    \`SameSite=\${isProd ? 'None' : 'Lax'}\`,
+  ];
+  if (isProd) parts.push('Secure'); // required for SameSite=None
+  res.setHeader('Set-Cookie', parts.join('; '));
+};`);
+
+const authMiddleware = esc(`// backend/middleware/auth.js (abridged)
 const requireAuth = async (req, res, next) => {
   try {
-    // 1. API Key auth (for integrations)
-    const apiKey = req.headers['x-api-key'];
-    if (apiKey) return authenticateApiKey(req, res, next, apiKey);
+    // 1. API key (integrations)
+    const apiKeyHeader = req.headers['x-api-key'];
+    if (apiKeyHeader) return await authenticateApiKey(req, res, next, apiKeyHeader);
 
-    // 2. Cookie present?
-    if (!req.session?.userId) {
-      throw new AppError('Authentication required.', 401);
-    }
+    // 2. Session — already loaded from MongoDB by sessionMiddleware
+    if (!req.sessionData?.userId) throw new AppError('Authentication required. Please log in.', 401);
 
-    // 3. Validate cookie against Session collection in MongoDB.
-    //    Prevents forged cookies and respects server-side revocation.
-    const dbSession = await Session.findOne({
-      sessionId:  req.sessionID,          // signed session ID from cookie
-      userId:     req.session.userId,     // must match what was stored at login
-      expiresAt:  { $gt: new Date() },    // must not be expired
-    });
-    if (!dbSession) {
-      req.session.destroy(() => {});
-      throw new AppError('Session expired or invalid. Please log in again.', 401);
-    }
+    // 3. User must exist, be active and not locked
+    const user = await User.findById(req.sessionData.userId).populate('role');
+    if (!user) { await req.destroySession(); throw new AppError('User not found. Session invalidated.', 401); }
+    if (user.status !== 'active') throw new AppError('Your account has been deactivated.', 403);
+    if (user.isLocked())          throw new AppError('Account temporarily locked.', 403);
 
-    // 4. Load user
-    const user = await User.findById(req.session.userId).populate('role');
-    if (!user) { req.session.destroy(() => {}); throw new AppError('User not found.', 401); }
-    if (user.status !== 'active') throw new AppError('Account deactivated.', 403);
-    if (user.isLocked())          throw new AppError('Account locked.', 403);
+    // 4. Tenant comes ONLY from the server-side session —
+    //    a client-supplied X-Tenant-ID header is never trusted to set scope.
+    const tenantId = req.sessionData.tenantId;
+    if (!tenantId) throw new AppError('No active tenant. Please select a workspace.', 400);
 
-    const tenantId = req.session.tenantId || req.headers['x-tenant-id'];
-    if (!tenantId) throw new AppError('No active tenant.', 400);
-
-    req.user     = user;
+    req.user = user;
     req.tenantId = tenantId.toString();
-
-    // 5. Touch session + user activity (non-blocking)
-    Session.updateOne({ sessionId: req.sessionID }, { lastAccessedAt: new Date() }).catch(() => {});
-    User.updateOne({ _id: user._id }, { lastActivity: new Date() }).catch(() => {});
+    Session.updateOne({ sessionId: req.sessionId }, { lastAccessedAt: new Date() }).catch(() => {});
     next();
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 };`);
 
 const sessionLifecycle = esc(`
-Frontend (React, port 3000)          Vite Dev Proxy             Backend (Express, port 5001)
-─────────────────────────────────    ──────────────────────     ──────────────────────────────
+Browser (React app)                                   Backend (Express)
+────────────────────────────────────────              ─────────────────────────────────────────
 
-1. POST /api/auth/login
-   axios({ withCredentials: true })
-         ──────────────────────────► forwards to :5001 ──────► authController.login()
-                                                                  └─ bcrypt verify
-                                                                  └─ session.userId = user._id
-                                                                  └─ session.tenantId = ...
-                                                                  └─ await saveSession()  ← waits for MongoDB write
-                                                                  └─ res.json({ user, tenant })
-                                     ◄── Set-Cookie: crm.sid ──
-         ◄─── Set-Cookie forwarded ──
-   Browser stores crm.sid for localhost
+1. POST /api/v1/auth/login  (axios, withCredentials: true)
+   ─────────────────────────────────────────────────► authController.login()
+                                                        └─ verify password
+                                                        └─ await req.createSession({ userId, tenantId })
+                                                             └─ Session.create({ sessionId: uuid, ... })
+   ◄──────────────── 200 { user, tenant } + Set-Cookie: crm.sid=<uuid>; HttpOnly; ...
+   Browser stores crm.sid
 
-2. Subsequent request: GET /api/auth/me
-   Cookie: crm.sid=... (auto-attached)
-         ──────────────────────────► forwards + cookie ──────► requireAuth middleware
-                                                                  └─ Session.findOne({ sessionId, userId })
-                                                                       ↑ validates cookie against DB
-                                                                  └─ User.findById(session.userId)
-                                                                  └─ req.user = user
-                                                                  └─ next() → controller
-         ◄─────────────────────────────────────────────────────────── 200 + user data
+2. GET /api/v1/auth/me      (Cookie: crm.sid=<uuid>, attached automatically)
+   ─────────────────────────────────────────────────► sessionMiddleware
+                                                        └─ Session.findOne({ sessionId, expiresAt > now })
+                                                        └─ req.sessionData = { userId, tenantId, ... }
+                                                      requireAuth
+                                                        └─ User.findById(userId), active, not locked
+                                                        └─ req.tenantId from the session only
+   ◄─────────────────────────────────────────────────── 200 + user data
 
-3. Logout: POST /api/auth/logout
-         ──────────────────────────► forwards ───────────────► authController.logout()
-                                                                  └─ req.session.destroy()
-                                                                       └─ MongoSessionStore.destroy()
-                                                                            └─ Session.deleteOne({ sessionId })
-                                                                  └─ res.clearCookie('crm.sid')
+3. POST /api/v1/auth/logout
+   ─────────────────────────────────────────────────► authController.logout()
+                                                        └─ await req.destroySession()
+                                                             └─ Session.deleteOne({ sessionId })
+   ◄──────────────── 200 + Set-Cookie: crm.sid=; Max-Age=0
 `);
 
-const registerFlow = esc(`POST /api/auth/register
+const registerFlow = esc(`POST /api/v1/auth/register
 ─────────────────────────────────────────────
 1. Validate: firstName, lastName, email, password, tenantName
 2. Check tenantName uniqueness (case-insensitive)
@@ -178,30 +140,25 @@ const registerFlow = esc(`POST /api/auth/register
 4. Create Tenant document (with plan, phone, debitOrderDay)
 5. seedDefaultRoles(tenant._id) → creates superuser/admin/user roles
 6. Create User (systemRole: 'superuser', emailVerified: true)
-7. Set req.session.userId + req.session.tenantId
+7. await req.createSession({ userId, tenantId, userAgent, ipAddress })
 8. Optionally kick off AI onboarding in background
 9. Return { user, tenant }`);
 
-const loginFlow = esc(`POST /api/auth/login
+const loginFlow = esc(`POST /api/v1/auth/login
 ─────────────────────────────────────────────
-1. Find user by email (+ optional tenantId)
+1. Find user by username (+ optional tenantId)
 2. Check account not locked (failed login counter)
 3. bcrypt.compare(password, user.password)
 4. Check user.status === 'active'
 5. Check tenant.status === 'active'
 6. Reset failed login counter
-7. req.session.userId    = user._id.toString()
-   req.session.tenantId  = tenantId.toString()
-   req.session.ipAddress = req.ip
-   req.session.userAgent = req.headers['user-agent']
-8. await saveSession(req.session)
-   ↑ Waits for MongoSessionStore.set() to write the Session
-     document to MongoDB BEFORE the response is sent.
-     This prevents the race condition where /auth/me arrives
-     before the session exists in the DB.
-9. Set-Cookie: crm.sid=<signed-session-id>; HttpOnly; SameSite=Lax
-10. Audit log: action 'login'
-11. Return { user, tenant }`);
+7. await req.createSession({ userId, tenantId, userAgent, ipAddress })
+   ↑ Writes the Session document to MongoDB BEFORE the response
+     is sent, so the immediate /auth/me request always finds it.
+8. Set-Cookie: crm.sid=<random-uuid>; HttpOnly; SameSite=Lax
+   (SameSite=None; Secure in production)
+9. Audit log: action 'login'
+10. Return { user, tenant }`);
 
 const apiKeyCode = esc(`// API Key authentication flow
 const authenticateApiKey = async (req, res, next, rawKey) => {
@@ -231,7 +188,7 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
 
 <DevLayout
   title="Authentication — Developer Guide — Salesdam"
-  description="How session-based authentication, the Session model, custom MongoSessionStore, and API key auth work in Salesdam."
+  description="How session authentication, the Session model, the session middleware and API key auth work in Salesdam."
 >
   <h1>Authentication</h1>
 
@@ -242,15 +199,17 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
   </p>
 
   <div class="info-box">
-    <strong>Key decision:</strong> Sessions are stored in MongoDB using the app's own
-    <code>Session</code> model and a hand-written <code>MongoSessionStore</code> class
-    that implements the <code>express-session</code> <code>Store</code> interface.
-    This replaces <code>connect-mongo</code>.
+    <strong>Key decision:</strong> Sessions are managed by a small hand-written middleware,
+    <code>backend/middleware/sessionMiddleware.js</code> — not <code>express-session</code> and
+    not a session-store package. The <code>crm.sid</code> cookie carries an opaque, random
+    session id (a UUID); everything else lives in the <code>Session</code> collection. Nothing is
+    signed, so there is no session secret to configure: an unknown or expired id simply
+    finds no session.
   </div>
 
   <h2>Session Model — <code>backend/models/Session.js</code></h2>
 
-  <p>Each active user session is represented as a MongoDB document with TTL auto-deletion:</p>
+  <p>Each active session is a MongoDB document, removed automatically when it expires:</p>
 
   <pre><code set:html={sessionSchema}></code></pre>
 
@@ -258,50 +217,56 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
   <table class="doc-table">
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
-      <tr><td><code>sessionId</code></td><td>String</td><td>Unique session identifier (set by express-session), indexed</td></tr>
-      <tr><td><code>userId</code></td><td>ObjectId → User</td><td>The authenticated user (null for unauthenticated sessions)</td></tr>
-      <tr><td><code>tenantId</code></td><td>ObjectId → Tenant</td><td>Active workspace for this session</td></tr>
-      <tr><td><code>data</code></td><td>Mixed</td><td>Full session payload (mirrors express-session object)</td></tr>
-      <tr><td><code>expiresAt</code></td><td>Date</td><td>Expiry timestamp. MongoDB TTL index auto-deletes expired docs</td></tr>
-      <tr><td><code>lastAccessedAt</code></td><td>Date</td><td>Updated on each request (throttled by <code>touchAfter</code>)</td></tr>
-      <tr><td><code>ipAddress</code></td><td>String</td><td>Client IP, stored for security auditing</td></tr>
+      <tr><td><code>sessionId</code></td><td>String</td><td>Random UUID, also the <code>crm.sid</code> cookie value; unique, indexed</td></tr>
+      <tr><td><code>userId</code></td><td>ObjectId → User</td><td>The signed-in user</td></tr>
+      <tr><td><code>tenantId</code></td><td>ObjectId → Tenant</td><td>Active tenant — the only source of tenant scope for the request</td></tr>
+      <tr><td><code>workspaceId</code></td><td>ObjectId → Workspace</td><td>Last workspace chosen with <code>POST /workspaces/switch</code></td></tr>
+      <tr><td><code>data</code></td><td>Mixed</td><td>Spare payload (currently unused)</td></tr>
+      <tr><td><code>expiresAt</code></td><td>Date</td><td>Expiry; a MongoDB TTL index deletes expired documents</td></tr>
+      <tr><td><code>lastAccessedAt</code></td><td>Date</td><td>Updated on each authenticated request</td></tr>
+      <tr><td><code>ipAddress</code></td><td>String</td><td>Client IP at sign-in, for auditing</td></tr>
       <tr><td><code>userAgent</code></td><td>String</td><td>Browser / client identifier</td></tr>
     </tbody>
   </table>
 
-  <h2>Custom Session Store — <code>backend/config/sessionStore.js</code></h2>
+  <h2>Session Middleware — <code>backend/middleware/sessionMiddleware.js</code></h2>
 
   <p>
-    The <code>MongoSessionStore</code> class extends <code>express-session.Store</code> and
-    implements all required methods using the <code>Session</code> model directly.
-    No third-party packages needed.
+    Runs on every request. It reads the cookie, loads the matching unexpired session and
+    attaches <code>req.sessionData</code>, plus three helpers the auth controller uses.
   </p>
 
-  <pre><code set:html={storeCode}></code></pre>
+  <pre><code set:html={middlewareCode}></code></pre>
 
-  <h3>Store Method Summary</h3>
+  <h3>Helpers attached to each request</h3>
   <table class="doc-table">
-    <thead><tr><th>Method</th><th>Purpose</th></tr></thead>
+    <thead><tr><th>Helper</th><th>Used by</th><th>What it does</th></tr></thead>
     <tbody>
-      <tr><td><code>get(sid, cb)</code></td><td>Load a session. Returns <code>null</code> if expired or not found</td></tr>
-      <tr><td><code>set(sid, sess, cb)</code></td><td>Upsert session document. Hoists <code>userId</code>/<code>tenantId</code> to indexed top-level fields</td></tr>
-      <tr><td><code>destroy(sid, cb)</code></td><td>Delete session (logout)</td></tr>
-      <tr><td><code>touch(sid, sess, cb)</code></td><td>Refresh TTL, throttled by <code>touchAfter</code> (default 1h) to avoid excessive writes</td></tr>
-      <tr><td><code>all(cb)</code></td><td>Return all active sessions (admin panel use)</td></tr>
-      <tr><td><code>length(cb)</code></td><td>Count active sessions</td></tr>
-      <tr><td><code>clear(cb)</code></td><td>Delete all sessions (emergency use)</td></tr>
+      <tr><td><code>req.createSession(data)</code></td><td>Login, registration</td><td>Creates the Session document with a new UUID and sets the cookie</td></tr>
+      <tr><td><code>req.updateSession(updates)</code></td><td>Workspace switch</td><td>Patches the current session document</td></tr>
+      <tr><td><code>req.destroySession()</code></td><td>Logout, invalid user</td><td>Deletes the Session document and clears the cookie</td></tr>
     </tbody>
   </table>
 
-  <h2>Session Configuration — <code>backend/config/session.js</code></h2>
+  <h2>Session Cookie</h2>
 
-  <pre><code set:html={sessionConfig}></code></pre>
+  <pre><code set:html={cookieCode}></code></pre>
+
+  <table class="doc-table">
+    <thead><tr><th>Attribute</th><th>Development</th><th>Production</th></tr></thead>
+    <tbody>
+      <tr><td><code>HttpOnly</code></td><td>yes</td><td>yes — never readable from JavaScript</td></tr>
+      <tr><td><code>Secure</code></td><td>no — HTTP allowed</td><td>yes — HTTPS only</td></tr>
+      <tr><td><code>SameSite</code></td><td>Lax</td><td>None (with <code>Secure</code>), so it also works when the app and API are on different sites</td></tr>
+      <tr><td><code>Max-Age</code></td><td colspan="2">24 hours by default; set <code>SESSION_MAX_AGE</code> (milliseconds) to change it</td></tr>
+    </tbody>
+  </table>
 
   <h2>Authentication Middleware — <code>backend/middleware/auth.js</code></h2>
 
   <p>
     <code>requireAuth</code> is applied to all protected routes. It checks for an API key header
-    first, then falls back to session auth.
+    first, then uses the session loaded by the session middleware.
   </p>
 
   <pre><code set:html={authMiddleware}></code></pre>
@@ -309,55 +274,39 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
   <h3>Exported middleware</h3>
   <ul>
     <li><code>requireAuth</code> — Any authenticated user (session or API key)</li>
-    <li><code>requireAdmin</code> — systemRole must be <code>admin</code> or <code>superuser</code></li>
-    <li><code>requireSuperuser</code> — systemRole must be <code>superuser</code> only</li>
-    <li><code>optionalAuth</code> — Attaches user if session exists, never fails</li>
+    <li><code>requireAdmin</code> — the user's role must be <code>admin</code> or <code>superuser</code></li>
+    <li><code>requireSuperuser</code> — the user's role must be <code>superuser</code></li>
+    <li><code>optionalAuth</code> — Attaches the user if a session exists, never fails</li>
   </ul>
 
   <h2>Full Session Lifecycle</h2>
 
-  <p>
-    The diagram below shows the complete flow from login through every authenticated request to logout,
-    including the Vite dev proxy that sits between the React frontend and the Express backend.
-  </p>
+  <p>From sign-in, through an authenticated request, to sign-out:</p>
 
   <pre><code set:html={sessionLifecycle}></code></pre>
 
   <div class="info-box">
-    <strong>Key design decision — <code>await saveSession()</code>:</strong>
-    The session document is written to MongoDB <em>before</em> the login response is sent.
-    This prevents the race condition where the frontend's immediate follow-up request
-    (<code>/auth/me</code>) arrives before the session exists in the database,
-    which would cause a spurious 401 and redirect the user back to login.
+    <strong>The session exists before the login response is sent.</strong>
+    <code>createSession</code> awaits the MongoDB write, so the app's immediate follow-up
+    request (<code>/auth/me</code>) always finds it — no spurious 401 straight after signing in.
   </div>
 
-  <h3>Cookie settings (development vs production)</h3>
-  <table class="doc-table">
-    <thead><tr><th>Attribute</th><th>Development</th><th>Production</th></tr></thead>
-    <tbody>
-      <tr><td><code>HttpOnly</code></td><td>true</td><td>true — never accessible via JavaScript</td></tr>
-      <tr><td><code>Secure</code></td><td>false — HTTP allowed</td><td>true — HTTPS only</td></tr>
-      <tr><td><code>SameSite</code></td><td>Lax</td><td>Strict</td></tr>
-      <tr><td><code>MaxAge</code></td><td colspan="2">86 400 000 ms (24 hours); configurable via <code>SESSION_MAX_AGE</code> env var</td></tr>
-    </tbody>
-  </table>
-
-  <h3>Vite dev proxy cookie rewriting</h3>
+  <h2>Frontend and API origins</h2>
   <p>
-    In development, the Vite proxy (<code>vite.config.js</code>) intercepts all
-    <code>/api/*</code> requests from the React app and forwards them to <code>localhost:5001</code>.
-    It also rewrites the <code>Set-Cookie</code> response headers to:
+    There is no development proxy. The React app calls the API at
+    <code>VITE_API_URL</code> (e.g. <code>http://localhost:5000</code>) and appends
+    <code>/api/v1</code>, sending the cookie with <code>withCredentials: true</code>.
   </p>
   <ul>
-    <li>Strip the <code>Secure</code> flag so the cookie works over plain HTTP</li>
-    <li>Replace <code>SameSite=None</code> with <code>SameSite=Lax</code> if needed</li>
-    <li>Set the cookie domain to blank so it binds to the browser's current host (<code>localhost</code>)</li>
+    <li><strong>Development:</strong> the app on <code>localhost:5173</code> and the API on
+      <code>localhost:5000</code> are the same site (ports don't count), so the <code>Lax</code>
+      cookie is sent. The backend must allow the app's origin in <code>CORS_ORIGINS</code>,
+      with credentials.</li>
+    <li><strong>Production:</strong> either serve the API under the app's own domain (the
+      Render configuration rewrites <code>/api/*</code> to the API service, so the cookie is
+      first-party), or call the API on its own domain — which is what <code>SameSite=None</code>
+      plus <code>Secure</code> allows, with <code>CORS_ORIGINS</code> set to the app's origin.</li>
   </ul>
-  <p>
-    The result: the browser stores <code>crm.sid</code> for <code>localhost</code> and
-    automatically attaches it to every <code>/api/*</code> request, which the proxy
-    then forwards — including the cookie — to the Express backend.
-  </p>
 
   <h2>Registration Flow</h2>
 

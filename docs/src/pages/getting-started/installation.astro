@@ -7,8 +7,8 @@ cd Salesdam-v3`;
 const backendEnv = `# backend/.env
 NODE_ENV=development
 PORT=5000
-MONGODB_URI=mongodb://localhost:27017/salesdam
-SESSION_SECRET=<a long random string>
+MONGO_URI=mongodb://localhost:27017/salesdam
+CORS_ORIGINS=http://localhost:5173
 
 # Email (optional in development — messages are logged instead)
 SMTP_HOST=
@@ -93,8 +93,9 @@ npm run dev`;
   <h3>Backend</h3>
   <pre><code>{backendEnv}</code></pre>
   <p>
-    <code>SESSION_SECRET</code> signs session cookies — use a long random value, and
-    a different one per environment. Changing it invalidates every existing session.
+    Sessions need no secret: the <code>crm.sid</code> cookie holds an opaque session id
+    that is looked up in MongoDB, so signing out (or deleting the session record) ends it.
+    <code>CORS_ORIGINS</code> must include the frontend's origin.
   </p>
 
   <h3>Frontend</h3>

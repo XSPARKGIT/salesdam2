@@ -35,14 +35,15 @@ npm install</code></pre>
     <pre><code># Database
 MONGO_URI=mongodb://localhost:27017/salesdam
 
-# JWT
-JWT_SECRET=your_secret_key_here
+# The frontend's origin (Vite dev server)
+CORS_ORIGINS=http://localhost:5173
 
 # SMTP (Optional)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_password</code></pre>
+SMTP_PASS=your_password
+SMTP_FROM=noreply@salesdam.com</code></pre>
 
     <h3>Frontend (.env)</h3>
     <pre><code># API Configuration
@@ -59,11 +60,11 @@ npm run dev</code></pre>
 npm run dev</code></pre>
 
     <p>Backend runs at <code>http://localhost:5000</code></p>
-    <p>Frontend runs at <code>http://localhost:3000</code></p>
+    <p>Frontend runs at <code>http://localhost:5173</code></p>
 
     <h2>5. Create Your First Account</h2>
     <ol>
-      <li>Navigate to http://localhost:3000</li>
+      <li>Navigate to http://localhost:5173</li>
       <li>Click "Register" or "Sign Up"</li>
       <li>Fill in your details:
         <ul>

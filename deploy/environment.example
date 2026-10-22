@@ -2,17 +2,17 @@
 # Copy to /etc/salesdam/environment and fill in values
 
 # Database
-MONGODB_URI=mongodb://localhost:27017/salesdam?replicaSet=rs0
+MONGO_URI=mongodb://localhost:27017/salesdam?replicaSet=rs0
 
 # Server
 NODE_ENV=production
 PORT=5002
-CORS_ORIGIN=https://salesdam.example.com
+CORS_ORIGINS=https://salesdam.example.com
 
 # Session
-SESSION_SECRET=your-super-secret-session-key-min-32-chars
-SESSION_COOKIE_DOMAIN=.example.com
-SESSION_COOKIE_SECURE=true
+# Sessions are an opaque id in the crm.sid cookie, looked up in MongoDB — no
+# signing secret is involved (see backend/middleware/sessionMiddleware.js).
+SESSION_MAX_AGE=86400000
 
 # SMTP (for email delivery)
 SMTP_HOST=smtp.example.com
@@ -21,13 +21,9 @@ SMTP_SECURE=false
 SMTP_USER=noreply@example.com
 SMTP_PASS=your-smtp-password
 SMTP_FROM="Salesdam Insurance <noreply@example.com>"
-SMTP_FROM_EMAIL=noreply@example.com
 
 # Frontend URL (for email links)
 APP_URL=https://salesdam.example.com
-
-# JWT (for API keys)
-JWT_SECRET=your-jwt-secret-min-32-chars
 
 # External integrations (fill in when available)
 EUHORIA_API_KEY=
