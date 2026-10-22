@@ -195,6 +195,39 @@ try {
     JSON.stringify({ theme: prefs2?.theme, onboarding: prefs2?.onboarding }),
   );
 
+  // The platform console's welcome guide is a separate flag on the same
+  // preferences, so the two apps' guides are independent and either can be
+  // turned off without touching the other.
+  const adminSeen = await req('/api/v1/users/me/profile', {
+    method: 'PATCH', cookie: ca,
+    body: { preferences: { onboarding: { adminWelcomeSeenAt: seenAt } } },
+  });
+  const me3 = await req('/api/v1/auth/me', { cookie: ca });
+  const prefs3 = me3.json?.data?.user?.preferences || me3.json?.user?.preferences;
+  check(
+    'the console welcome flag is stored without disturbing the CRM guide',
+    adminSeen.status === 200 &&
+      !!prefs3?.onboarding?.adminWelcomeSeenAt &&
+      prefs3?.onboarding?.welcomeSeenAt === stored?.welcomeSeenAt &&
+      prefs3?.onboarding?.tourStatus === 'skipped',
+    JSON.stringify(prefs3?.onboarding ?? null),
+  );
+
+  // Turning it back on clears the flag so the guide returns.
+  const cleared = await req('/api/v1/users/me/profile', {
+    method: 'PATCH', cookie: ca,
+    body: { preferences: { onboarding: { adminWelcomeSeenAt: null } } },
+  });
+  const me4 = await req('/api/v1/auth/me', { cookie: ca });
+  const prefs4 = me4.json?.data?.user?.preferences || me4.json?.user?.preferences;
+  check(
+    'the console welcome flag can be cleared',
+    cleared.status === 200 &&
+      prefs4?.onboarding?.adminWelcomeSeenAt === null &&
+      prefs4?.onboarding?.tourStatus === 'skipped',
+    JSON.stringify(prefs4?.onboarding ?? null),
+  );
+
   const verify = await req('/api/v1/users/me/verify-password', {
     method: 'POST', cookie: ca, body: { currentPassword: PASSWORD },
   });

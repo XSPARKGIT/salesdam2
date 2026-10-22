@@ -80,6 +80,11 @@ const userSchema = new mongoose.Schema(
       // drops unknown keys, which made the welcome modal reappear on reload.
       onboarding: {
         welcomeSeenAt: { type: Date },
+        // Platform console (admin app) welcome guide. Separate from
+        // welcomeSeenAt so the two apps have independent guides, and null
+        // means "show it" — the guide stays up until the operator turns it
+        // off.
+        adminWelcomeSeenAt: { type: Date },
         tourStatus: {
           type: String,
           enum: ['in_progress', 'skipped', 'completed', 'dismissed'],

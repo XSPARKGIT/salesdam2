@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Users, ScrollText,
-  LogOut, Menu, X, ShieldCheck, ChevronRight, AlertTriangle,
+  LogOut, Menu, X, ShieldCheck, ChevronRight, AlertTriangle, Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
+import AdminWelcomeModal from './onboarding/AdminWelcomeModal.jsx';
 import './Layout.css';
 
 const NAV = [
@@ -16,11 +17,22 @@ const NAV = [
 ];
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, saveOnboarding } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // The welcome guide stays up on every visit until it is turned off.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
   const navigate = useNavigate();
 
   const closeSidebar = () => setSidebarOpen(false);
+
+  const welcomeTurnedOff = Boolean(user?.preferences?.onboarding?.adminWelcomeSeenAt);
+  const welcomeOpen = Boolean(user) && !welcomeTurnedOff && !welcomeDismissed;
+
+  // Turning it back on clears the stored flag, so the guide returns.
+  const restoreWelcome = async () => {
+    await saveOnboarding({ adminWelcomeSeenAt: null });
+    setWelcomeDismissed(false);
+  };
 
   return (
     <div className="layout">
@@ -67,6 +79,13 @@ export default function Layout() {
             <LogOut size={16} />
           </button>
         </div>
+
+        {welcomeTurnedOff && (
+          <button className="restore-welcome" onClick={restoreWelcome} title="Show the welcome guide again">
+            <Sparkles size={14} />
+            <span>Show welcome guide</span>
+          </button>
+        )}
       </aside>
 
       {/* Main */}
@@ -82,6 +101,10 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {welcomeOpen && (
+        <AdminWelcomeModal onDismiss={() => setWelcomeDismissed(true)} />
+      )}
     </div>
   );
 }
