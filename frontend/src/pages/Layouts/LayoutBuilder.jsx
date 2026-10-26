@@ -13,6 +13,8 @@ import {
   Minimize2,
   LayoutGrid,
   Zap,
+  Filter,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -40,6 +42,8 @@ export default function LayoutBuilder() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [screenFlows, setScreenFlows] = useState([]);
   const [leftTab, setLeftTab] = useState('fields'); // 'fields' | 'flows'
+  // Index of the section whose condition editor is open, or null
+  const [conditionEditorIdx, setConditionEditorIdx] = useState(null);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -249,6 +253,12 @@ export default function LayoutBuilder() {
                 ],
         };
       }),
+    );
+  };
+
+  const updateSectionVisibilityRule = (secIdx, rule) => {
+    setSections((prev) =>
+      prev.map((s, i) => (i === secIdx ? { ...s, visibilityRule: rule } : s))
     );
   };
 
@@ -564,6 +574,14 @@ export default function LayoutBuilder() {
                                   </button>
                                 )}
                                 <button
+                                  className={`${styles.sectionBtn} ${section.visibilityRule?.field ? styles.sectionBtnActive : ''}`}
+                                  onClick={() => setConditionEditorIdx(conditionEditorIdx === secIdx ? null : secIdx)}
+                                  title="Set visibility condition"
+                                >
+                                  <Filter size={14} />
+                                  {section.visibilityRule?.field ? 'Condition set' : 'Condition'}
+                                </button>
+                                <button
                                   className={`${styles.sectionBtn} ${styles.danger}`}
                                   onClick={() => removeSection(secIdx)}
                                   title="Remove section"
@@ -572,6 +590,69 @@ export default function LayoutBuilder() {
                                 </button>
                               </div>
                             </div>
+
+                            {/* Inline condition editor */}
+                            {conditionEditorIdx === secIdx && (
+                              <div className={styles.conditionEditor}>
+                                <span className={styles.conditionLabel}>Show this section only when</span>
+                                <select
+                                  className={styles.conditionSelect}
+                                  value={section.visibilityRule?.field || ''}
+                                  onChange={(e) => {
+                                    const field = e.target.value;
+                                    if (!field) {
+                                      updateSectionVisibilityRule(secIdx, null);
+                                    } else {
+                                      updateSectionVisibilityRule(secIdx, {
+                                        field,
+                                        operator: section.visibilityRule?.operator || 'eq',
+                                        value: section.visibilityRule?.value || '',
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <option value="">— always show —</option>
+                                  {allFields.map((f) => (
+                                    <option key={f.apiName} value={f.apiName}>{f.label}</option>
+                                  ))}
+                                </select>
+                                {section.visibilityRule?.field && (
+                                  <>
+                                    <select
+                                      className={styles.conditionSelect}
+                                      value={section.visibilityRule?.operator || 'eq'}
+                                      onChange={(e) => updateSectionVisibilityRule(secIdx, {
+                                        ...section.visibilityRule,
+                                        operator: e.target.value,
+                                      })}
+                                    >
+                                      <option value="eq">equals</option>
+                                      <option value="neq">does not equal</option>
+                                      <option value="is_set">is set</option>
+                                      <option value="is_blank">is blank</option>
+                                    </select>
+                                    {(section.visibilityRule?.operator === 'eq' || section.visibilityRule?.operator === 'neq') && (
+                                      <input
+                                        className={styles.conditionInput}
+                                        placeholder="value"
+                                        value={section.visibilityRule?.value || ''}
+                                        onChange={(e) => updateSectionVisibilityRule(secIdx, {
+                                          ...section.visibilityRule,
+                                          value: e.target.value,
+                                        })}
+                                      />
+                                    )}
+                                  </>
+                                )}
+                                <button
+                                  className={styles.conditionClose}
+                                  onClick={() => setConditionEditorIdx(null)}
+                                  title="Close"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
+                            )}
 
                             {section.type === 'flow' ? (
                               <div className={styles.flowPreviewTile}>

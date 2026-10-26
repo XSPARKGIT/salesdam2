@@ -131,7 +131,8 @@ const RecordForm = () => {
     } catch {
       duplicateCheck = null;
     }
-    if (duplicateCheck?.matches?.length && duplicateCheck.action !== 'allow') {
+    const CLIENT_SIDE_ACTIONS = new Set(['warn', 'block', 'present_matches']);
+    if (duplicateCheck?.matches?.length && CLIENT_SIDE_ACTIONS.has(duplicateCheck.action)) {
       setDuplicates({ ...duplicateCheck, data: dataToSubmit });
       setSaving(false);
       return;
@@ -197,7 +198,7 @@ const RecordForm = () => {
     );
   }
 
-  const sections = buildFormSections(layout, fields);
+  const sections = buildFormSections(layout, fields, formData, isEdit);
   const pageTitle = isEdit
     ? `Edit ${objMeta?.label || objectApiName}`
     : `New ${objMeta?.label || objectApiName}`;
@@ -234,12 +235,13 @@ const RecordForm = () => {
         objectLabel={objMeta?.label?.toLowerCase()}
         saving={saving}
         onSaveAnyway={() => saveRecord(duplicates.data)}
+        onSelectMatch={(recordId) => navigate(`/o/${objectApiName}/${recordId}`)}
         onMerge={
           isEdit && perms.canDelete && perms.canUpdate && duplicates?.matches?.length <= MAX_MERGE_RECORDS - 1
             ? () => {
                 if (
                   window.confirm(
-                    'Unsaved changes on this form will be discarded. You can pick each field’s value on the merge screen.',
+                    "Unsaved changes on this form will be discarded. You can pick each field's value on the merge screen.",
                   )
                 ) {
                   const ids = [id, ...duplicates.matches.map((m) => m.recordId)];

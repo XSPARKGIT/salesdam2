@@ -4,6 +4,7 @@ import Automation from '../models/Automation.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import ExternalObject from '../models/ExternalObject.js';
+import FlowError from '../models/FlowError.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 import { checkAppPermission } from '../middleware/permissions.js';
@@ -59,6 +60,35 @@ router.get(
       name: 1,
     });
     sendSuccess(res, { data: flows });
+  }),
+);
+
+// Flow error log — must be before /:id or Express intercepts it
+router.get(
+  '/errors',
+  asyncHandler(async (req, res) => {
+    const { page = 1, limit = 50, automationId } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const query = { tenantId: req.tenantId };
+    if (automationId) query.automationId = automationId;
+
+    const [errors, total] = await Promise.all([
+      FlowError.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      FlowError.countDocuments(query),
+    ]);
+    sendSuccess(res, paginate(errors, total, page, limit));
+  }),
+);
+
+router.delete(
+  '/errors/:id',
+  asyncHandler(async (req, res) => {
+    await FlowError.deleteOne({ _id: req.params.id, tenantId: req.tenantId });
+    sendSuccess(res, {}, 'Error log deleted');
   }),
 );
 
@@ -118,11 +148,7 @@ router.put(
     });
     if (!automation) throw new AppError('Automation not found.', 404);
 
-    // Deactivate when editing
-    if (automation.isActive && req.body.nodes) {
-      automation.isActive = false;
-      automation.isValid = false;
-    }
+    // Do not deactivate on node edits — the user controls active state explicitly.
 
     const allowed = [
       'name',

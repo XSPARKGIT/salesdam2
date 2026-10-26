@@ -223,7 +223,7 @@ export function FieldMapping({
       .then((r) =>
         setObjFields(
           (r.data.data?.fields || [])
-            .filter((f) => !f.isSystem || f.apiName === 'name')
+            .filter((f) => !['formula', 'rollup_summary', 'master_detail'].includes(f.type))
             .sort((a, b) => a.displayOrder - b.displayOrder),
         ),
       )
@@ -244,13 +244,41 @@ export function FieldMapping({
 
   return (
     <div className={styles.kvList}>
-      {Object.entries(mapping || {}).map(([k, v]) => (
+      {Object.entries(mapping || {}).map(([k, v]) => {
+        const fieldDef = objFields.find((f) => f.apiName === k);
+        const isPicklist = fieldDef?.type === 'picklist' || fieldDef?.type === 'multipicklist';
+        const isBoolean = fieldDef?.type === 'boolean' || fieldDef?.type === 'checkbox';
+        const picklistOpts = isPicklist
+          ? (fieldDef.picklistValues || []).filter((pv) => pv.isActive !== false)
+          : [];
+        return (
         <div key={k} className={styles.kvRow}>
           <span className={styles.pairField}>
-            {objFields.find((f) => f.apiName === k)?.label || k}
+            {fieldDef?.label || k}
           </span>
           <span className={styles.pairEq}>=</span>
-          {hasMergeCtx ? (
+          {isPicklist ? (
+            <select
+              className={styles.inp}
+              value={v || ''}
+              onChange={(e) => setVal(k, e.target.value)}
+            >
+              <option value="">— Select value —</option>
+              {picklistOpts.map((pv) => (
+                <option key={pv.value} value={pv.value}>{pv.label}</option>
+              ))}
+            </select>
+          ) : isBoolean ? (
+            <select
+              className={styles.inp}
+              value={v || ''}
+              onChange={(e) => setVal(k, e.target.value)}
+            >
+              <option value="">— Select —</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          ) : hasMergeCtx ? (
             <MergeInput
               value={v}
               onChange={(val) => setVal(k, val)}
@@ -271,7 +299,8 @@ export function FieldMapping({
             ×
           </button>
         </div>
-      ))}
+        );
+      })}
       <div className={styles.kvRow}>
         <Sel
           value={addKey}

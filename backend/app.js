@@ -57,6 +57,7 @@ import duplicateRuleRoutes from './routes/duplicateRules.js';
 import consentRoutes from './routes/consents.js';
 import activityRoutes from './routes/activities.js';
 import changeSetRoutes from './routes/changeSets.js';
+import globalValueSetRoutes from './routes/globalValueSets.js';
 import channelRoutes from './routes/channels.js';
 import conversationRoutes from './routes/conversations.js';
 import messageTemplateRoutes from './routes/messageTemplates.js';
@@ -219,6 +220,8 @@ app.use(`${API_V1_PREFIX}/consents`, consentRoutes);
 app.use(`${API_V1_PREFIX}/activities`, activityRoutes);
 // Metadata deployment & change sets (Core BRD §13).
 app.use(`${API_V1_PREFIX}/change-sets`, changeSetRoutes);
+// Shared picklist catalogue (Core BRD §3.2 — PICK-002).
+app.use(`${API_V1_PREFIX}/global-value-sets`, globalValueSetRoutes);
 // Omnichannel inbox: channel accounts, conversations & messaging templates
 // (Core BRD §16).
 app.use(`${API_V1_PREFIX}/channels`, channelRoutes);

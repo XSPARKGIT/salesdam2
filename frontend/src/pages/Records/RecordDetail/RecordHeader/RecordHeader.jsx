@@ -1,6 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
-import { ArrowLeft, Edit2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Edit2, Trash2, Lock } from 'lucide-react';
 import Button from '../../../../components/common/Button/Button';
 import ApprovalStatusBadge from '../../../../components/records/ApprovalStatusBadge';
 import SubmitForApprovalButton from '../../../../components/records/SubmitForApprovalButton';
@@ -21,6 +21,7 @@ const RecordHeader = ({
   generatingInvoice,
   approvalInfo,
   leadApprovalSettings,
+  isApprovalLocked,
   perms,
   onGenerateQuote,
   onGenerateInvoice,
@@ -210,15 +211,27 @@ const RecordHeader = ({
           />
         )}
         {perms.canUpdate && (
-          <Link to={`/o/${objectApiName}/${id}/edit`}>
+          isApprovalLocked ? (
             <Button
               variant="secondary"
               size="sm"
-              icon={<Edit2 size={14} />}
+              icon={<Lock size={14} />}
+              disabled
+              title="This record is locked while an approval is pending"
             >
-              Edit
+              Locked
             </Button>
-          </Link>
+          ) : (
+            <Link to={`/o/${objectApiName}/${id}/edit`}>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<Edit2 size={14} />}
+              >
+                Edit
+              </Button>
+            </Link>
+          )
         )}
         {perms.canDelete && (
           <Button
@@ -226,6 +239,8 @@ const RecordHeader = ({
             size="sm"
             icon={<Trash2 size={14} />}
             onClick={onDelete}
+            disabled={isApprovalLocked}
+            title={isApprovalLocked ? 'Cannot delete while an approval is pending' : undefined}
           >
             Delete
           </Button>

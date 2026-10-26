@@ -435,6 +435,90 @@ const DetailsTab = ({ objForm, onChange, isEdit, onIconChange, fields = [] }) =>
             Show in navigation sidebar
           </label>
         </div>
+
+        {/* ── Object-Level Settings (BRD §3.1.1) ── */}
+        <div className={`${styles.field} ${styles.fullWidth}`}>
+          <label className={styles.label} style={{ marginBottom: 10, display: 'block', fontSize: 13, fontWeight: 600 }}>
+            Object Settings
+          </label>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gap: 8,
+            padding: '14px 16px',
+            background: 'var(--color-gray-50)',
+            borderRadius: 'var(--border-radius)',
+            border: '1px solid var(--border-color)',
+          }}>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" name="isActive" checked={objForm.isActive !== false} onChange={onChange} />
+              <span>
+                <strong>Active</strong>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-gray-500)', marginTop: 1 }}>Inactive objects are hidden from nav and search</span>
+              </span>
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" name="enableHistory" checked={!!objForm.enableHistory} onChange={onChange} />
+              <span>
+                <strong>Track Field History</strong>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-gray-500)', marginTop: 1 }}>Audit trail of field-level changes (BRD §3.1.1)</span>
+              </span>
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" name="hasRecordTypes" checked={!!objForm.hasRecordTypes} onChange={onChange} />
+              <span>
+                <strong>Enable Type Field</strong>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-gray-500)', marginTop: 1 }}>Auto-provisions a protected "Type" picklist (BRD §3.3)</span>
+              </span>
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" name="enableActivities" checked={objForm.enableActivities !== false} onChange={onChange} />
+              <span>
+                <strong>Allow Activities</strong>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-gray-500)', marginTop: 1 }}>Permit Tasks &amp; Cases to relate to this object</span>
+              </span>
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" name="enableNotes" checked={objForm.enableNotes !== false} onChange={onChange} />
+              <span>
+                <strong>Allow Notes</strong>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-gray-500)', marginTop: 1 }}>Users can add notes to records</span>
+              </span>
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" name="searchable" checked={objForm.searchable !== false} onChange={onChange} />
+              <span>
+                <strong>Allow Search</strong>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-gray-500)', marginTop: 1 }}>Include in Global Search indexing</span>
+              </span>
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" name="isJunctionObject" checked={!!objForm.isJunctionObject} onChange={onChange} />
+              <span>
+                <strong>Junction Object</strong>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-gray-500)', marginTop: 1 }}>Allows two Master-Detail fields (many-to-many)</span>
+              </span>
+            </label>
+            {objForm.isJunctionObject && (() => {
+              const mdFields = fields.filter(f => f.type === 'master_detail');
+              if (mdFields.length === 2) return (
+                <div style={{ marginTop: 4, padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#15803d', display: 'flex', gap: 8, alignItems: 'center' }}>
+                  ✓ Linked to <strong>{mdFields[0].label}</strong> and <strong>{mdFields[1].label}</strong>
+                </div>
+              );
+              return (
+                <div style={{ marginTop: 4, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#b45309', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span>⚠️</span>
+                  <span>
+                    Junction objects need exactly <strong>2 Master-Detail fields</strong>.
+                    {mdFields.length === 0 && ' None added yet — go to the Fields tab and add two.'}
+                    {mdFields.length === 1 && ` You have 1 (${mdFields[0].label}) — add one more.`}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
         <div className={styles.field}>
           <label className={styles.label}>Nav Order</label>
           <input

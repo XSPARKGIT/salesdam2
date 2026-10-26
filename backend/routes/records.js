@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { listRecords, getRecord, createRecord, updateRecord, deleteRecord, bulkDelete, mergeRecords } from '../controllers/recordController.js';
+import { listRecords, getRecord, createRecord, updateRecord, deleteRecord, bulkDelete, mergeRecords, restoreRecord, listDeletedRecords } from '../controllers/recordController.js';
 import { exportRecords, importRecords } from '../controllers/importExportController.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
@@ -24,7 +24,7 @@ const upload = multer({
     cb(null, true);
   },
 });
-import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { asyncHandler, sendSuccess, AppError, paginate } from '../utils/errors.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import { validateRecord, evaluateFormulaRules, buildSampleContext as buildCtx, buildFieldKindMap } from '../services/validationEngine.js';
@@ -121,6 +121,23 @@ router.post('/validate-formula', asyncHandler(async (req, res) => {
 // treated as record IDs.
 router.get('/:objectApiName/export', checkObjectPermission('export'), exportRecords);
 router.post('/:objectApiName/import', checkObjectPermission('import'), upload.single('file'), importRecords);
+
+// ─── Field History (OBJ-013) ──────────────────────────────────────────────────
+router.get('/:objectApiName/:id/history', checkObjectPermission('read'), asyncHandler(async (req, res) => {
+  const { objectApiName, id } = req.params;
+  const FieldHistory = (await import('../models/FieldHistory.js')).default;
+  const { page, limit, skip } = paginate(req.query);
+  const filter = { tenantId: req.tenantId, objectApiName, recordId: id };
+  const [entries, total] = await Promise.all([
+    FieldHistory.find(filter).skip(skip).limit(limit).sort({ createdAt: -1 }).populate('changedBy', 'firstName lastName email'),
+    FieldHistory.countDocuments(filter),
+  ]);
+  sendSuccess(res, { data: entries, total, page, limit });
+}));
+
+// ─── Recycle Bin (LIFE-006) ───────────────────────────────────────────────────
+router.get('/:objectApiName/deleted', checkObjectPermission('read'), listDeletedRecords);
+router.post('/:objectApiName/:id/restore', checkObjectPermission('update'), restoreRecord);
 
 // ─── Standard record CRUD ─────────────────────────────────────────────────────
 router.get('/:objectApiName', checkObjectPermission('read'), listRecords);

@@ -134,6 +134,30 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
       }
     }
 
+    // ── Scope enforcement (SEC-003) ──────────────────────────────────────────
+    // If the key declares explicit scopes, the HTTP method must match one of them.
+    if (validKey.scopes && validKey.scopes.length > 0) {
+      const METHOD_SCOPE = {
+        GET:    'read',
+        HEAD:   'read',
+        POST:   'write',
+        PUT:    'write',
+        PATCH:  'write',
+        DELETE: 'delete',
+      };
+      const required = METHOD_SCOPE[req.method?.toUpperCase()];
+      if (
+        required &&
+        !validKey.scopes.includes(required) &&
+        !validKey.scopes.includes('admin')
+      ) {
+        throw new AppError(
+          `This API key does not have '${required}' scope for ${req.method} requests.`,
+          403,
+        );
+      }
+    }
+
     // Update usage counter (non-blocking)
     ApiKey.updateOne(
       { _id: validKey._id },

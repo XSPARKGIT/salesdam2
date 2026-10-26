@@ -144,6 +144,9 @@ export default function AutomationList() {
             </p>
           </div>
           <div className={styles.headerActions}>
+            <Link to="/automation/errors">
+              <Button variant="secondary" icon={<AlertCircle size={14} />}>Error Log</Button>
+            </Link>
             <Link to="/automation/new">
               <Button icon={<Plus size={14} />}>New Automation</Button>
             </Link>

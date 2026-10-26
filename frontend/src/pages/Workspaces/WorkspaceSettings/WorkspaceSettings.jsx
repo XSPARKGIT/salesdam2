@@ -1,8 +1,16 @@
 import styles from './WorkspaceSettings.module.css';
 import { Save } from 'lucide-react';
 import Button from '../../../components/common/Button/Button';
+import { useTenantContext } from '../../../context/TenantContext';
 
-const WorkspaceSettings = ({ form, setForm, saving, onSave }) => {
+const WorkspaceSettings = ({ form, setForm, saving, onSave, allowedObjects = [] }) => {
+  const { objects } = useTenantContext();
+
+  // Build options: all objects that are in the allowed list (or all if no restriction)
+  const landingOptions = objects
+    .filter((o) => allowedObjects.length === 0 || allowedObjects.includes(o.apiName))
+    .sort((a, b) => (a.label || a.apiName).localeCompare(b.label || b.apiName));
+
   return (
     <div className={styles.panel}>
       <div className={styles.sectionTitle}>Workspace Settings</div>
@@ -40,6 +48,29 @@ const WorkspaceSettings = ({ form, setForm, saving, onSave }) => {
             value={form.color || '#6366f1'}
             onChange={(e) => setForm((p) => ({ ...p, color: e.target.value }))}
           />
+        </div>
+
+        {/* Default landing object */}
+        <div className={styles.field}>
+          <label className={styles.label}>Default landing page</label>
+          <select
+            className={styles.input}
+            value={form.defaultObjectApiName || ''}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, defaultObjectApiName: e.target.value }))
+            }
+          >
+            <option value="">— None (stay on current page) —</option>
+            <option value="__home__">Home</option>
+            {landingOptions.map((o) => (
+              <option key={o.apiName} value={o.apiName}>
+                {o.label || o.apiName}
+              </option>
+            ))}
+          </select>
+          <span className={styles.hint}>
+            Where to go after switching to this workspace
+          </span>
         </div>
 
         {/* Default */}

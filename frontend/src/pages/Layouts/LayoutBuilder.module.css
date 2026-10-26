@@ -371,6 +371,64 @@
 .sectionBtn.danger:hover {
   background: var(--color-danger-light);
 }
+.sectionBtnActive {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-primary-light, #e8f0ff);
+}
+.sectionBtnActive:hover {
+  background: var(--color-primary-light, #e8f0ff);
+}
+
+/* ─── Condition editor ──────────────────────────────────────── */
+.conditionEditor {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+  padding: var(--spacing-2) var(--spacing-4);
+  background: var(--color-gray-50, #f9fafb);
+  border-top: 1px solid var(--border-color);
+  font-size: var(--font-size-xs);
+}
+.conditionLabel {
+  color: var(--color-gray-500);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.conditionSelect {
+  padding: 3px var(--spacing-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-white);
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-700);
+  cursor: pointer;
+}
+.conditionInput {
+  padding: 3px var(--spacing-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-white);
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-700);
+  width: 120px;
+}
+.conditionClose {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-gray-400);
+  border-radius: var(--border-radius-sm);
+}
+.conditionClose:hover {
+  color: var(--color-gray-700);
+  background: var(--color-gray-100);
+}
 
 /* ─────────────────────────────────────────────────────────────
    COLUMNS — the grid holding 1 or 2 drop zones.

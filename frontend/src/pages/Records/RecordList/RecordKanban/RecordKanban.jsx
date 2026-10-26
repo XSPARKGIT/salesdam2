@@ -1,10 +1,25 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { GripVertical } from 'lucide-react';
 import api from '../../../../services/api';
 import styles from './RecordKanban.module.css';
+
+const SYSTEM_KEYS = new Set(['id', 'objectApiName', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy', 'ownerId', '_id', '__v', 'tenantId', 'isDeleted']);
+
+function getRecordTitle(record, objectMeta, fields) {
+  const nameKey = objectMeta?.nameFieldApiName || 'name';
+  if (record[nameKey]) return String(record[nameKey]);
+  // Fall back to first non-empty string/number field that isn't a system key
+  for (const f of fields) {
+    if (SYSTEM_KEYS.has(f.apiName)) continue;
+    if (['text', 'email', 'phone', 'url', 'textarea', 'number', 'auto_number'].includes(f.type)) {
+      const v = record[f.apiName];
+      if (v !== undefined && v !== null && v !== '') return String(v);
+    }
+  }
+  return record.id || '—';
+}
 
 function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
   const [draggedRecord, setDraggedRecord] = useState(null);
@@ -33,7 +48,7 @@ function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
 
     (records || []).forEach((record) => {
       const value = record[kanbanField.apiName];
-      if (value && grouped.hasOwnProperty(value)) {
+      if (value && Object.hasOwn(grouped, value)) {
         grouped[value].push(record);
       }
     });
@@ -69,8 +84,9 @@ function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
 
     try {
       const recordId = draggedRecord._id || draggedRecord.id;
-      // Update the record
-      await api.put(`/records/${objectApiName}/${recordId}`, {
+      // Update the record. Kanban moves are partial field updates, so use PATCH;
+      // the backend only skips required-field validation for PATCH requests.
+      await api.patch(`/records/${objectApiName}/${recordId}`, {
         [kanbanField.apiName]: columnValue,
       });
 
@@ -126,33 +142,27 @@ function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
                 >
                   <div className={styles.cardContent}>
                     <div className={styles.cardTitle}>
-                      {record.subject || record.name || record.title}
-                    </div>
-                    <div className={styles.cardDescription}>
-                      {record.description && record.description.substring(0, 60)}
-                      {record.description && record.description.length > 60 ? '...' : ''}
+                      {getRecordTitle(record, objectMeta, fields)}
                     </div>
                     <div className={styles.cardMeta}>
-                      {record.assigned_to && (
-                        <span className={styles.assigned}>
-                          {typeof record.assigned_to === 'string'
-                            ? record.assigned_to
-                            : record.assigned_to.firstName}
-                        </span>
-                      )}
-                      {record.priority && (
-                        <span
-                          className={`${styles.priority} ${styles[`priority${record.priority}`]}`}
-                        >
-                          {record.priority}
-                        </span>
-                      )}
+                      {fields
+                        .filter((f) => {
+                          if (SYSTEM_KEYS.has(f.apiName)) return false;
+                          if (f.apiName === (objectMeta?.nameFieldApiName || 'name')) return false;
+                          if (f.apiName === kanbanField?.apiName) return false;
+                          const v = record[f.apiName];
+                          return v !== undefined && v !== null && v !== '' && v !== false;
+                        })
+                        .slice(0, 2)
+                        .map((f) => (
+                          <span key={f.apiName} className={styles.cardField}>
+                            <span className={styles.cardFieldLabel}>{f.label}:</span>{' '}
+                            {typeof record[f.apiName] === 'object'
+                              ? record[f.apiName]?.fullName || record[f.apiName]?.firstName || String(record[f.apiName])
+                              : String(record[f.apiName])}
+                          </span>
+                        ))}
                     </div>
-                    {record.due_date && (
-                      <div className={styles.dueDate}>
-                        {new Date(record.due_date).toLocaleDateString()}
-                      </div>
-                    )}
                   </div>
                 </div>
               ))}

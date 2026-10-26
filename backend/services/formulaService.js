@@ -1,5 +1,6 @@
 import { evaluateFormula, coerceToReturnType } from './formulaParser.js';
 import FieldMeta from '../models/FieldMeta.js';
+import DynamicRecord from '../models/DynamicRecord.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -22,6 +23,28 @@ export async function injectFormulaValues(record, fields) {
   const context = {};
   for (const [key, value] of record.data || []) {
     context[key] = value;
+  }
+
+  // FORM-002: Expand lookup/master_detail fields one hop into the context so
+  // formulas can reference parent-record fields as "lookupApiName.fieldName".
+  const lookupFields = fields.filter(
+    (f) => (f.type === 'lookup' || f.type === 'master_detail') && context[f.apiName],
+  );
+  if (lookupFields.length > 0) {
+    await Promise.all(
+      lookupFields.map(async (lf) => {
+        try {
+          const parent = await DynamicRecord.findById(context[lf.apiName]).lean();
+          if (parent?.data) {
+            for (const [k, v] of Object.entries(parent.data)) {
+              context[`${lf.apiName}.${k}`] = v;
+            }
+          }
+        } catch {
+          // Non-fatal — parent may have been deleted; formula resolves to null
+        }
+      }),
+    );
   }
 
   // Evaluate each formula field
@@ -99,6 +122,25 @@ export async function computeAndSetFormulaValues(record, fields) {
   const context = {};
   for (const [key, value] of record.data || []) {
     context[key] = value;
+  }
+
+  // FORM-002: Expand lookup fields into context (one-hop cross-object references)
+  const lookupFields = fields.filter(
+    (f) => (f.type === 'lookup' || f.type === 'master_detail') && context[f.apiName],
+  );
+  if (lookupFields.length > 0) {
+    await Promise.all(
+      lookupFields.map(async (lf) => {
+        try {
+          const parent = await DynamicRecord.findById(context[lf.apiName]).lean();
+          if (parent?.data) {
+            for (const [k, v] of Object.entries(parent.data)) {
+              context[`${lf.apiName}.${k}`] = v;
+            }
+          }
+        } catch { /* non-fatal */ }
+      }),
+    );
   }
 
   // Evaluate and set each formula field

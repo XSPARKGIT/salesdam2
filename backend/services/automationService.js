@@ -3,8 +3,12 @@ import Automation from '../models/Automation.js';
 import Notification from '../models/Notification.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
+import FieldMeta from '../models/FieldMeta.js';
 import ExternalObject from '../models/ExternalObject.js';
+import FlowError from '../models/FlowError.js';
 import logger from '../utils/logger.js';
+import { validateRecordData } from './validationService.js';
+import duplicateDetectionService from './duplicateDetectionService.js';
 
 // ─── Recursion / depth guard ──────────────────────────────────────────────────
 // Maps `tenantId:automationId` → current execution depth.
@@ -81,6 +85,8 @@ const fireAutomations = async (event, objectApiName, record, tenantId) => {
 
         const ctx = buildContext(record, {}, tenantId);
         ctx._automationDepth = depth;
+        ctx._automationId = String(automation._id);
+        ctx._automationName = automation.name;
         await executeFlow(automation, record, ctx, tenantId);
 
         await Automation.updateOne(
@@ -143,6 +149,8 @@ const runAutomation = async (automationId, record, tenantId, variables = {}) => 
     try {
       const ctx = buildContext(record, variables, tenantId);
       ctx._automationDepth = depth;
+      ctx._automationId = String(automation._id);
+      ctx._automationName = automation.name;
       await executeFlow(automation, record, ctx, tenantId);
       await Automation.updateOne(
         { _id: automation._id },
@@ -232,6 +240,7 @@ const executeSteps = async (steps, allNodes, record, ctx, tenantId) => {
 };
 
 const executeNode = async (node, allNodes, record, ctx, tenantId) => {
+  try {
   switch (node.type) {
     case 'trigger':
       break; // just start — fall through to nextNodes
@@ -317,6 +326,10 @@ const executeNode = async (node, allNodes, record, ctx, tenantId) => {
       await executeCreateRecord(node.config, record, ctx, tenantId);
       break;
 
+    case 'action_update_related_records':
+      await executeUpdateRelatedRecords(node.config, record, ctx, tenantId);
+      break;
+
     case 'action_wait':
       // In production this would use a job queue. Here we simply log and continue.
       logger.info(
@@ -396,6 +409,27 @@ const executeNode = async (node, allNodes, record, ctx, tenantId) => {
       continue;
     const nextNode = allNodes.find((n) => n.id === next.nodeId);
     if (nextNode) await executeNode(nextNode, allNodes, record, ctx, tenantId);
+  }
+  } catch (err) {
+    // Persist a FlowError so admins can see it in the UI, then re-throw so
+    // the automation-level stats are updated as failed.
+    try {
+      await FlowError.create({
+        tenantId,
+        automationId: ctx._automationId || null,
+        automationName: ctx._automationName || null,
+        objectApiName: record.objectApiName || null,
+        recordId: String(record._id || ''),
+        stepId: node.id || null,
+        stepLabel: node.label || null,
+        stepType: node.type || null,
+        errorMessage: err.message,
+        errorStack: err.stack,
+      });
+    } catch (saveErr) {
+      logger.warn('Failed to save FlowError:', saveErr.message);
+    }
+    throw err;
   }
 };
 
@@ -545,6 +579,7 @@ async function executeEmail(config, record, ctx, tenantId) {
     });
   } catch (err) {
     logger.warn('Automation email failed:', err.message);
+    throw err;
   }
 }
 
@@ -643,26 +678,69 @@ async function executeUpdateRecord(config, record, ctx, tenantId) {
   await DynamicRecord.updateOne({ _id: targetId, tenantId }, { $set: updates });
 }
 
+async function executeUpdateRelatedRecords(config, record, ctx, tenantId) {
+  const { objectApiName, lookupField, fields = {} } = config || {};
+  if (!objectApiName || !lookupField || Object.keys(fields).length === 0) return;
+
+  const parentId = String(record._id);
+  const updates = {};
+  Object.entries(fields).forEach(([field, value]) => {
+    updates[`data.${field}`] = interpolate(String(value ?? ''), record, ctx);
+  });
+
+  const result = await DynamicRecord.updateMany(
+    { tenantId, objectApiName, isDeleted: false, [`data.${lookupField}`]: parentId },
+    { $set: updates },
+  );
+  logger.info(
+    { objectApiName, lookupField, parentId, matched: result.matchedCount, modified: result.modifiedCount },
+    'action_update_related_records complete',
+  );
+}
+
 async function executeCreateRecord(config, record, ctx, tenantId) {
   const { objectApiName, fields = {} } = config;
   if (!objectApiName) return;
 
-  const obj = await ObjectMeta.findOne({ tenantId, apiName: objectApiName });
+  const [obj, fieldDefs] = await Promise.all([
+    ObjectMeta.findOne({ tenantId, apiName: objectApiName }),
+    FieldMeta.find({ tenantId, objectApiName }),
+  ]);
   if (!obj) return;
 
-  const data = new Map();
+  const rawData = {};
   Object.entries(fields).forEach(([k, v]) => {
-    data.set(k, interpolate(String(v ?? ''), record, ctx));
+    rawData[k] = interpolate(String(v ?? ''), record, ctx);
   });
 
-  await DynamicRecord.create({
+  // FLD-007: validate required fields and type coercions before inserting.
+  const { data: validatedData, errors } = await validateRecordData(
+    rawData,
+    fieldDefs,
+    tenantId,
+    null,
+  );
+  if (errors.length > 0) {
+    logger.warn({ objectApiName, errors }, 'Automation createRecord validation failed — record not created');
+    return;
+  }
+
+  // DUP-017: apply configured duplicate rules before inserting.
+  const dupCheck = await duplicateDetectionService.check(tenantId, objectApiName, validatedData);
+  if (dupCheck.action === 'block') {
+    logger.warn({ objectApiName }, 'Automation createRecord blocked by duplicate rule');
+    return;
+  }
+
+  const newRecord = new DynamicRecord({
     tenantId,
     objectId: obj._id,
     objectApiName,
-    data,
     createdBy: record.createdBy,
     ownerId: record.ownerId,
   });
+  Object.entries(validatedData).forEach(([k, v]) => newRecord.setField(k, v));
+  await newRecord.save();
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ const flowNodeSchema = new mongoose.Schema(
         'action_http_request', // call an ExternalObject or arbitrary endpoint
         'action_toast', // show a toast notification in the browser
         'action_generate_pdf', // render a PDF template and optionally
+        'action_update_related_records', // bulk-update child records via a lookup field
         'action_wait',
         'screen',
         'loop',

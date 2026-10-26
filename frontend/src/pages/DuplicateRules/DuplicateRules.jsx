@@ -14,6 +14,7 @@ import {
   updateDuplicateRule,
   deleteDuplicateRule,
 } from '../../services/api/duplicateRules';
+import { getAutomations } from '../../services/api/automations';
 import styles from '../Approvals/Approvals.module.css';
 
 const MATCH_TYPES = [
@@ -23,10 +24,12 @@ const MATCH_TYPES = [
 
 const ON_MATCH = [
   { value: 'warn', label: 'Warn — show the matches, allow saving anyway' },
-  { value: 'block', label: 'Block — show the matches, don’t allow saving' },
+  { value: 'block', label: "Block — show the matches, don't allow saving" },
+  { value: 'present_matches', label: 'Present matches — force the user to pick an existing record' },
+  { value: 'use_existing', label: 'Use existing — return the existing record' },
+  { value: 'trigger_flow', label: 'Trigger flow — fire an automation on match' },
 ];
-// Accepted by the API for BRD fidelity; today they all behave like 'warn'.
-const WARN_ALIASES = new Set(['present_matches', 'use_existing', 'trigger_flow']);
+const WARN_ALIASES = new Set([]);
 
 // Fields whose values make poor match keys (computed, long text, yes/no…).
 const UNMATCHABLE_TYPES = new Set([
@@ -46,6 +49,7 @@ const EMPTY = {
   active: true,
   logic: 'AND',
   onMatch: 'warn',
+  flowId: '',
   conditions: [{ field: '', matchType: 'normalized' }],
 };
 
@@ -55,6 +59,7 @@ const toForm = (rule) => ({
   active: rule.active !== false,
   logic: rule.logic || 'AND',
   onMatch: rule.onMatch || 'warn',
+  flowId: rule.flowId || '',
   conditions: (rule.conditions || []).map((c) => ({
     field: c.field,
     matchType: c.matchType || 'normalized',
@@ -63,6 +68,9 @@ const toForm = (rule) => ({
 
 const onMatchLabel = (value) => {
   if (value === 'block') return 'Block';
+  if (value === 'present_matches') return 'Present matches';
+  if (value === 'use_existing') return 'Use existing';
+  if (value === 'trigger_flow') return 'Trigger flow';
   if (value === 'allow') return 'Do nothing';
   return 'Warn';
 };
@@ -78,6 +86,11 @@ function RuleDialog({ rule, objects, onClose, onSaved }) {
     queryKey: ['fields', form.objectApiName],
     queryFn: () => getFields(form.objectApiName),
     enabled: !!form.objectApiName,
+  });
+
+  const { data: automations = [] } = useQuery({
+    queryKey: ['automations-list'],
+    queryFn: () => getAutomations({ limit: 200 }),
   });
   const matchableFields = useMemo(
     () =>
@@ -109,6 +122,11 @@ function RuleDialog({ rule, objects, onClose, onSaved }) {
 
     setSaving(true);
     try {
+      if (form.onMatch === 'trigger_flow' && !form.flowId) {
+        setErrors((e) => ({ ...e, flowId: 'Choose an automation to trigger.' }));
+        setSaving(false);
+        return;
+      }
       const payload = {
         name: form.name.trim(),
         objectApiName: form.objectApiName,
@@ -116,6 +134,7 @@ function RuleDialog({ rule, objects, onClose, onSaved }) {
         logic: form.logic,
         onMatch: form.onMatch,
         conditions,
+        ...(form.onMatch === 'trigger_flow' ? { flowId: form.flowId } : { flowId: null }),
       };
       if (isNew) await createDuplicateRule(payload);
       else await updateDuplicateRule(rule._id, payload);
@@ -270,7 +289,7 @@ function RuleDialog({ rule, objects, onClose, onSaved }) {
 
         <label className={styles.field}>
           <span className={styles.label}>When a duplicate is found</span>
-          <select className={styles.select} value={form.onMatch} onChange={(e) => set({ onMatch: e.target.value })}>
+          <select className={styles.select} value={form.onMatch} onChange={(e) => set({ onMatch: e.target.value, flowId: '' })}>
             {onMatchOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -281,6 +300,26 @@ function RuleDialog({ rule, objects, onClose, onSaved }) {
             Applies to records saved from forms, imports and the API.
           </span>
         </label>
+
+        {form.onMatch === 'trigger_flow' && (
+          <label className={styles.field}>
+            <span className={styles.label}>Automation to trigger</span>
+            <select
+              className={styles.select}
+              value={form.flowId}
+              onChange={(e) => { set({ flowId: e.target.value }); setErrors((x) => ({ ...x, flowId: undefined })); }}
+            >
+              <option value="">— Select an automation —</option>
+              {automations.map((a) => (
+                <option key={a._id} value={a._id}>{a.name}</option>
+              ))}
+            </select>
+            {errors.flowId && <span className={styles.error}>{errors.flowId}</span>}
+            <span className={styles.help}>
+              The automation will receive the incoming and matched record data as context.
+            </span>
+          </label>
+        )}
 
         <label className={styles.check}>
           <input type="checkbox" checked={form.active} onChange={(e) => set({ active: e.target.checked })} />
@@ -366,7 +405,7 @@ export default function DuplicateRules() {
           <div className={styles.empty}>
             <CopyCheck size={28} />
             <h3>No duplicate rules yet</h3>
-            <p>Create one — for example “same email address” on Contacts — to catch duplicates before they're saved.</p>
+            <p>Create one — for example "same email address" on Contacts — to catch duplicates before they're saved.</p>
             <Button icon={<Plus size={15} />} onClick={() => setEditing({})}>
               New rule
             </Button>
@@ -438,7 +477,7 @@ export default function DuplicateRules() {
                           type="button"
                           className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                           onClick={() => {
-                            if (window.confirm(`Delete “${r.name}”? Records will no longer be checked against it.`)) {
+                            if (window.confirm(`Delete "${r.name}"? Records will no longer be checked against it.`)) {
                               remove.mutate(r);
                             }
                           }}

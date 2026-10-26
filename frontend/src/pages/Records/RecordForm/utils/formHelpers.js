@@ -1,12 +1,43 @@
 /**
  * Initialize form data with defaults and record data
  */
+const toDateStr = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+
+const resolveDefault = (field) => {
+  const raw = field.defaultValue;
+  if (raw === undefined || raw === null) return undefined;
+  const token = String(raw).trim().toUpperCase();
+
+  if (field.type === 'date') {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (token === 'TODAY()' || token === 'TODAY')       return toDateStr(today);
+    if (token === 'TODAY(+1)' || token === 'TOMORROW()') return toDateStr(addDays(today, 1));
+    if (token === 'TODAY(+7)')                           return toDateStr(addDays(today, 7));
+    if (token === 'TODAY(+30)')                          return toDateStr(addDays(today, 30));
+    if (token === 'TODAY(-7)')                           return toDateStr(addDays(today, -7));
+    if (token === 'TODAY(-30)')                          return toDateStr(addDays(today, -30));
+    if (token === 'START_OF_MONTH()') { const d = new Date(today); d.setDate(1); return toDateStr(d); }
+    if (token === 'END_OF_MONTH()')   { const d = new Date(today); d.setMonth(d.getMonth() + 1, 0); return toDateStr(d); }
+  }
+
+  if (field.type === 'datetime' && (token === 'NOW()' || token === 'NOW')) {
+    const d = new Date();
+    return `${toDateStr(d)}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  return raw;
+};
+
 export const initializeFormData = (fields, record, user, isEdit) => {
   const defaults = {};
 
   fields.forEach((f) => {
-    if (f.defaultValue !== undefined && f.defaultValue !== null) {
-      defaults[f.apiName] = f.defaultValue;
+    const resolved = resolveDefault(f);
+    if (resolved !== undefined && resolved !== null) {
+      defaults[f.apiName] = resolved;
     } else if (f.type === 'picklist') {
       const pv = f.picklistValues?.find((p) => p.isDefault);
       if (pv) defaults[f.apiName] = pv.value;

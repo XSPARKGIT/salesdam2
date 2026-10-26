@@ -23,9 +23,13 @@ export const createRecord = async (objectApiName, data) => {
     const res = await api.post(`/records/${objectApiName}`, data);
     return res.data.data;
   } catch (err) {
-    const message = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to create record.';
+    // The axios interceptor (api.js) transforms 4xx errors into plain objects
+    // { message, status, data } — the full response body is at err.data.
+    const responseData = err.response?.data ?? err.data;
+    const message = responseData?.message || responseData?.error || err.message || 'Failed to create record.';
     const error = new Error(message);
     error.response = err.response;
+    error.data = responseData;
     throw error;
   }
 };
@@ -35,11 +39,11 @@ export const updateRecord = async (objectApiName, id, data) => {
     const res = await api.put(`/records/${objectApiName}/${id}`, data);
     return res.data.data;
   } catch (err) {
-    // Server message first: axios sets err.message to the generic
-    // "Request failed with status code 400", which hid every validation message.
-    const message = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to update record.';
+    const responseData = err.response?.data ?? err.data;
+    const message = responseData?.message || responseData?.error || err.message || 'Failed to update record.';
     const error = new Error(message);
     error.response = err.response;
+    error.data = responseData;
     throw error;
   }
 };

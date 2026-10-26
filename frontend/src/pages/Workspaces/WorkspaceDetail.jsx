@@ -56,6 +56,7 @@ const WorkspaceDetail = () => {
       color: workspace.color || '#6366f1',
       icon: workspace.icon || 'Briefcase',
       isDefault: workspace.isDefault,
+      defaultObjectApiName: workspace.defaultObjectApiName || '',
     });
   }, [workspace]);
 
@@ -141,6 +142,7 @@ const WorkspaceDetail = () => {
           setForm={setForm}
           saving={saving}
           onSave={handleSave}
+          allowedObjects={workspace?.allowedObjects || []}
         />
       )}
 

@@ -182,6 +182,37 @@ export function FieldInput({ field, value, onChange, error, disabled, disableCre
         />
       );
 
+    case 'time':
+      return (
+        <input
+          type="time"
+          className={cls('input')}
+          value={value ?? ''}
+          onChange={handleChange}
+          disabled={disabled}
+        />
+      );
+
+    case 'address': {
+      const addr = typeof value === 'object' && value !== null ? value : {};
+      const setAddr = (key, val) => {
+        onChange(field.apiName, { ...addr, [key]: val });
+      };
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input className={cls('input')} placeholder="Street" value={addr.street ?? ''} onChange={e => setAddr('street', e.target.value)} disabled={disabled} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <input className={cls('input')} placeholder="City" value={addr.city ?? ''} onChange={e => setAddr('city', e.target.value)} disabled={disabled} />
+            <input className={cls('input')} placeholder="State / Province" value={addr.state ?? ''} onChange={e => setAddr('state', e.target.value)} disabled={disabled} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <input className={cls('input')} placeholder="Postal Code" value={addr.postalCode ?? ''} onChange={e => setAddr('postalCode', e.target.value)} disabled={disabled} />
+            <input className={cls('input')} placeholder="Country" value={addr.country ?? ''} onChange={e => setAddr('country', e.target.value)} disabled={disabled} />
+          </div>
+        </div>
+      );
+    }
+
     case 'lookup':
     case 'master_detail':
       return (
@@ -364,6 +395,17 @@ function FieldValue({ field, value }) {
     case 'textarea':
     case 'richtext':
       return <span className={styles.multiline}>{value}</span>;
+
+    case 'time':
+      return <span>{value}</span>;
+
+    case 'address': {
+      if (typeof value === 'object' && value !== null) {
+        const parts = [value.street, value.city, value.state, value.postalCode, value.country].filter(Boolean);
+        return <span className={styles.multiline}>{parts.join(', ')}</span>;
+      }
+      return <span>{value}</span>;
+    }
 
     default:
       return <span>{String(value)}</span>;

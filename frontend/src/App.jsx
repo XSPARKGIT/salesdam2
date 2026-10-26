@@ -14,12 +14,14 @@ import RecordList from './pages/Records/RecordList/RecordList';
 import RecordDetail from './pages/Records/RecordDetail/RecordDetail';
 import RecordForm from './pages/Records/RecordForm/RecordForm';
 import RecordMerge from './pages/Records/RecordMerge/RecordMerge';
+import RecycleBin from './pages/Records/RecycleBin/RecycleBin';
 import ObjectsManager from './pages/Objects/ObjectsManager';
 import ObjectBuilder from './pages/Objects/ObjectBuilder';
 import SchemaBuilder from './pages/Objects/SchemaBuilder';
 import SearchPage from './pages/Search/SearchPage';
 import AutomationList from './pages/Automation/AutomationList';
 import FlowBuilder from './pages/Automation/FlowBuilder';
+import FlowErrors from './pages/Automation/FlowErrors';
 import Analytics from './pages/Analytics/Analytics';
 import UserManagement from './pages/Admin/UserManagement/UserManagement';
 import UserDetail from './pages/Admin/UserDetail';
@@ -55,6 +57,7 @@ import ApprovalProcessList from './pages/Approvals/ApprovalProcessList';
 import ApprovalProcessEditor from './pages/Approvals/ApprovalProcessEditor';
 import MyApprovals from './pages/Approvals/MyApprovals';
 import DuplicateRules from './pages/DuplicateRules/DuplicateRules';
+import GlobalValueSets from './pages/GlobalValueSets/GlobalValueSets';
 import NewBusinessWizard from './pages/Insurance/NewBusiness/NewBusinessWizard';
 import StorageUsage from './pages/Admin/settings/StorageUsage';
 import Tenders from './pages/Tenders/Tenders';
@@ -197,6 +200,14 @@ export default function App() {
         }
       />
       <Route
+        path="/o/:objectApiName/deleted"
+        element={
+          <Guard>
+            <RecycleBin />
+          </Guard>
+        }
+      />
+      <Route
         path="/o/:objectApiName/:id"
         element={
           <Guard>
@@ -311,6 +322,17 @@ export default function App() {
           element={
             <Guard requirePermission="canManageAutomations">
               <AutomationList />
+            </Guard>
+          }
+        />
+      )}
+
+      {FEATURES.automation && (
+        <Route
+          path="/automation/errors"
+          element={
+            <Guard requirePermission="canManageAutomations">
+              <FlowErrors />
             </Guard>
           }
         />
@@ -505,6 +527,14 @@ export default function App() {
         element={
           <Guard requireAdmin>
             <DuplicateRules />
+          </Guard>
+        }
+      />
+      <Route
+        path="/setup/global-value-sets"
+        element={
+          <Guard requireAdmin>
+            <GlobalValueSets />
           </Guard>
         }
       />

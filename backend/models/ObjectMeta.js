@@ -66,6 +66,9 @@ const objectMetaSchema = new mongoose.Schema({
   // Record type support
   hasRecordTypes: { type: Boolean, default: false },
 
+  // REL-006: Junction objects are allowed two master-detail fields (exempted from REL-005).
+  isJunctionObject: { type: Boolean, default: false },
+
   // Object-level validation rules (cross-field / formula-based)
   validationRules: [{
     id:           { type: String, maxlength: 64 },
@@ -74,6 +77,8 @@ const objectMetaSchema = new mongoose.Schema({
     // JS-style expression evaluated against record data
     expression:   { type: String, required: true, trim: true, maxlength: VALIDATION_RULE_LIMITS.expression },
     errorMessage: { type: String, required: true, trim: true, maxlength: VALIDATION_RULE_LIMITS.errorMessage },
+    // Which field to pin the inline error to; empty = banner at top of record
+    errorField:   { type: String, trim: true, default: '' },
     isActive:     { type: Boolean, default: true },
   }],
 

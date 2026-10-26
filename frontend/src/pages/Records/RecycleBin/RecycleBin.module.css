@@ -1,0 +1,173 @@
+.page {
+  padding: 28px 32px;
+  max-width: 900px;
+}
+
+.header {
+  margin-bottom: 24px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-gray-500);
+  text-decoration: none;
+  margin-bottom: 16px;
+}
+
+.back:hover {
+  color: var(--color-gray-900);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.icon {
+  color: var(--color-gray-400);
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-gray-900);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--color-gray-500);
+  margin: 0;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 0;
+  color: var(--color-gray-400);
+  font-size: 14px;
+}
+
+.emptyIcon {
+  color: var(--color-gray-300);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-gray-500);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.table td {
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.expired td {
+  opacity: 0.5;
+}
+
+.nameCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recordName {
+  font-weight: 500;
+  color: var(--color-gray-900);
+}
+
+.recordId {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--color-gray-400);
+}
+
+.dateCell {
+  color: var(--color-gray-600);
+  white-space: nowrap;
+}
+
+.expiryCell {
+  white-space: nowrap;
+}
+
+.daysBadge,
+.urgentBadge,
+.expiredBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.daysBadge {
+  background: var(--color-gray-100);
+  color: var(--color-gray-600);
+}
+
+.urgentBadge {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.expiredBadge {
+  background: var(--color-gray-100);
+  color: var(--color-gray-400);
+}
+
+.actionCell {
+  text-align: right;
+}
+
+.restoreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: var(--color-white);
+  color: var(--color-gray-700);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.restoreBtn:hover:not(:disabled) {
+  background: var(--color-gray-50);
+  border-color: var(--color-gray-400);
+}
+
+.restoreBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

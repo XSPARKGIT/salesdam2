@@ -58,6 +58,9 @@ const duplicateRuleSchema = new mongoose.Schema(
       default: 'warn',
     },
 
+    // Only used when onMatch === 'trigger_flow'
+    flowId: { type: mongoose.Schema.Types.ObjectId, ref: 'Automation', default: null },
+
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true },

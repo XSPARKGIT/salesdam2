@@ -80,7 +80,14 @@ const fieldMetaSchema = new mongoose.Schema(
     // Default value
     defaultValue: { type: mongoose.Schema.Types.Mixed },
 
-    // Picklist options
+    // Picklist options — either inline values or linked to a GlobalValueSet.
+    // When globalValueSetId is set the picklistValues are a synced copy of the
+    // set's values; they are overwritten on every GlobalValueSet update.
+    globalValueSetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'GlobalValueSet',
+      default: null,
+    },
     picklistValues: [
       {
         label: { type: String, required: true },
@@ -96,6 +103,14 @@ const fieldMetaSchema = new mongoose.Schema(
     lookupDisplayField: { type: String, default: 'name' }, // field to display
     relationshipName: { type: String },
     cascadeDelete: { type: Boolean, default: false },
+    // REL-003: deletion behaviour when the parent record is deleted.
+    // 'cascade' deletes child records; 'block' prevents parent deletion when children exist;
+    // 'nullify' sets the lookup field to null; 'none' takes no action.
+    deleteBehavior: {
+      type: String,
+      enum: ['cascade', 'block', 'nullify', 'none'],
+      default: 'none',
+    },
 
     // Formula field
     formula: { type: String },

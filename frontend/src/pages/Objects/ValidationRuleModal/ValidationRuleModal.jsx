@@ -10,6 +10,7 @@ const DEFAULT_VR = {
   description: '',
   expression: '',
   errorMessage: 'Validation failed.',
+  errorField: '',
   isActive: true,
 };
 
@@ -43,6 +44,7 @@ export default function ValidationRuleModal({
               description: initialData.description || '',
               expression: initialData.expression,
               errorMessage: initialData.errorMessage,
+              errorField: initialData.errorField || '',
               isActive: initialData.isActive !== false,
             }
           : { ...DEFAULT_VR },
@@ -164,6 +166,51 @@ export default function ValidationRuleModal({
             onExpressionChange={(expr) => setVrForm((p) => ({ ...p, expression: expr }))}
             onErrorMessageChange={(msg) => setVrForm((p) => ({ ...p, errorMessage: msg }))}
           />
+        </div>
+
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>Error Location</label>
+          <p className={styles.hint}>
+            Where to show the error message when this rule fails.
+          </p>
+          <div className={styles.locationRow}>
+            <label className={styles.locationOption}>
+              <input
+                type="radio"
+                name="errorLocation"
+                checked={!vrForm.errorField}
+                onChange={() => setVrForm((p) => ({ ...p, errorField: '' }))}
+              />
+              <span>Top of record</span>
+            </label>
+            <label className={styles.locationOption}>
+              <input
+                type="radio"
+                name="errorLocation"
+                checked={!!vrForm.errorField}
+                onChange={() => {
+                  const first = (fields || []).find((f) => !['id', 'createdAt', 'updatedAt'].includes(f.apiName));
+                  setVrForm((p) => ({ ...p, errorField: first?.apiName || '' }));
+                }}
+              />
+              <span>Specific field</span>
+            </label>
+          </div>
+          {vrForm.errorField !== '' && (
+            <select
+              className={styles.input}
+              value={vrForm.errorField}
+              onChange={(e) => setVrForm((p) => ({ ...p, errorField: e.target.value }))}
+            >
+              {(fields || [])
+                .filter((f) => !['id', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy'].includes(f.apiName))
+                .map((f) => (
+                  <option key={f.apiName} value={f.apiName}>
+                    {f.label || f.apiName}
+                  </option>
+                ))}
+            </select>
+          )}
         </div>
       </div>
     </Modal>

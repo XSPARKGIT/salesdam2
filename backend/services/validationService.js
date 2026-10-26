@@ -1,6 +1,33 @@
 import DynamicRecord from '../models/DynamicRecord.js';
 import { validateRecord } from './validationEngine.js';
 import { evaluateFormula } from './formulaParser.js';
+// TYPE-003: sanitize-html strips XSS payloads from rich-text values.
+import sanitizeHtml from 'sanitize-html';
+
+// Allowed HTML tags and attributes for rich-text fields (TYPE-003 XSS prevention).
+const RICHTEXT_SANITIZE_OPTIONS = {
+  allowedTags: [
+    'b', 'i', 'em', 'strong', 'u', 's', 'strike', 'del',
+    'p', 'br', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+    'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  ],
+  allowedAttributes: {
+    'a': ['href', 'title', 'target'],
+    'img': ['src', 'alt', 'width', 'height'],
+    '*': ['style'],
+  },
+  allowedStyles: {
+    '*': {
+      'color': [/.*/],
+      'background-color': [/.*/],
+      'font-weight': [/.*/],
+      'font-style': [/.*/],
+      'text-decoration': [/.*/],
+      'text-align': [/.*/],
+    },
+  },
+};
 
 // Values of these types are compared case-insensitively when checking
 // uniqueness. "Acme" and "acme" are the same value to a human, so treating them
@@ -40,6 +67,30 @@ const findDuplicateRecord = async ({ tenantId, field, value, excludeRecordId = n
   if (excludeRecordId) query._id = { $ne: excludeRecordId };
 
   return DynamicRecord.findOne(query).select('_id').lean();
+};
+
+// FLD-009: per-(tenantId, objectApiName, field, normalisedValue) advisory lock.
+// Reduces the TOCTOU race window for unique fields under concurrent writes in a
+// single Node.js process. Does not protect against multi-process or multi-node
+// deployments — those require a distributed lock (Redis) or a MongoDB unique index.
+const _uniqueLocks = new Map();
+
+const acquireUniqueLock = (key) => {
+  if (_uniqueLocks.has(key)) return false;
+  _uniqueLocks.set(key, true);
+  return true;
+};
+
+const releaseUniqueLock = (key) => _uniqueLocks.delete(key);
+
+/**
+ * Acquire an advisory unique-field lock and return a release function.
+ * Returns null when another write is already holding the lock for the same key.
+ */
+const lockUniqueField = (tenantId, field, normalisedValue) => {
+  const key = `${tenantId}|${field.objectApiName}|${field.apiName}|${String(normalisedValue).toLowerCase()}`;
+  if (!acquireUniqueLock(key)) return null;
+  return () => releaseUniqueLock(key);
 };
 
 /**
@@ -93,9 +144,34 @@ const validateRecordData = async (inputData, fields, tenantId, recordId = null, 
     }
 
     if (isEmpty) {
-      // Apply default value if defined
+      // Apply default value if defined, evaluating date expression tokens at
+      // record-create time so the stored value is the actual current date rather
+      // than the literal string "TODAY()".
       if (field.defaultValue !== undefined && field.defaultValue !== null) {
-        cleanedData[field.apiName] = field.defaultValue;
+        const dv = String(field.defaultValue).trim().toUpperCase();
+        const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+        const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+        if (dv === 'TODAY()' || dv === 'TODAY') {
+          cleanedData[field.apiName] = today();
+        } else if (dv === 'TODAY(+1)' || dv === 'TOMORROW()') {
+          cleanedData[field.apiName] = addDays(today(), 1);
+        } else if (dv === 'TODAY(+7)') {
+          cleanedData[field.apiName] = addDays(today(), 7);
+        } else if (dv === 'TODAY(+30)') {
+          cleanedData[field.apiName] = addDays(today(), 30);
+        } else if (dv === 'TODAY(-7)') {
+          cleanedData[field.apiName] = addDays(today(), -7);
+        } else if (dv === 'TODAY(-30)') {
+          cleanedData[field.apiName] = addDays(today(), -30);
+        } else if (dv === 'START_OF_MONTH()') {
+          const d = today(); d.setDate(1); cleanedData[field.apiName] = d;
+        } else if (dv === 'END_OF_MONTH()') {
+          const d = today(); d.setMonth(d.getMonth() + 1, 0); cleanedData[field.apiName] = d;
+        } else if (dv === 'NOW()' || dv === 'NOW') {
+          cleanedData[field.apiName] = new Date();
+        } else {
+          cleanedData[field.apiName] = field.defaultValue;
+        }
       }
       continue;
     }
@@ -106,7 +182,6 @@ const validateRecordData = async (inputData, fields, tenantId, recordId = null, 
     switch (field.type) {
       case 'text':
       case 'textarea':
-      case 'richtext':
         cleanedValue = String(value).trim();
         if (field.maxLength && cleanedValue.length > field.maxLength) {
           fail(field, `"${field.label}" exceeds max length of ${field.maxLength}.`);
@@ -114,6 +189,15 @@ const validateRecordData = async (inputData, fields, tenantId, recordId = null, 
         }
         if (field.minLength && cleanedValue.length < field.minLength) {
           fail(field, `"${field.label}" must be at least ${field.minLength} characters.`);
+          continue;
+        }
+        break;
+
+      case 'richtext':
+        // TYPE-003: sanitise HTML to strip XSS payloads before storage.
+        cleanedValue = sanitizeHtml(String(value).trim(), RICHTEXT_SANITIZE_OPTIONS);
+        if (field.maxLength && cleanedValue.length > field.maxLength) {
+          fail(field, `"${field.label}" exceeds max length of ${field.maxLength}.`);
           continue;
         }
         break;
@@ -166,6 +250,16 @@ const validateRecordData = async (inputData, fields, tenantId, recordId = null, 
 
       case 'phone':
         cleanedValue = String(value).trim();
+        // TYPE-017: validate phone format when a pattern is configured or default E.164.
+        if (cleanedValue) {
+          const pattern = field.validations?.phoneFormat
+            ? new RegExp(field.validations.phoneFormat)
+            : /^\+?[0-9\s\-().]{5,20}$/;
+          if (!pattern.test(cleanedValue)) {
+            fail(field, `"${field.label}" must be a valid phone number.`);
+            continue;
+          }
+        }
         break;
 
       case 'url':
@@ -209,6 +303,30 @@ const validateRecordData = async (inputData, fields, tenantId, recordId = null, 
         cleanedValue = value;
         break;
 
+      case 'time':
+        // TYPE-021: validate HH:MM or HH:MM:SS format.
+        cleanedValue = String(value).trim();
+        if (cleanedValue && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(cleanedValue)) {
+          fail(field, `"${field.label}" must be a valid time in HH:MM or HH:MM:SS format.`);
+          continue;
+        }
+        break;
+
+      case 'address':
+        // TYPE-020: accept either a structured object or a plain string.
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          cleanedValue = {
+            street:  String(value.street  || '').trim(),
+            city:    String(value.city    || '').trim(),
+            state:   String(value.state   || '').trim(),
+            postalCode: String(value.postalCode || value.postal_code || '').trim(),
+            country: String(value.country || '').trim(),
+          };
+        } else {
+          cleanedValue = String(value).trim();
+        }
+        break;
+
       default:
         cleanedValue = value;
     }
@@ -224,17 +342,27 @@ const validateRecordData = async (inputData, fields, tenantId, recordId = null, 
       } catch (e) { /* ignore bad regex */ }
     }
 
-    // Uniqueness check
+    // Uniqueness check — with advisory lock to reduce TOCTOU race window (FLD-009).
     if (isUniqueField(field)) {
-      const duplicate = await findDuplicateRecord({
-        tenantId,
-        field,
-        value: cleanedValue,
-        excludeRecordId: recordId,
-      });
-      if (duplicate) {
-        fail(field, `"${field.label}" must be unique. This value already exists.`);
+      const releaseLock = lockUniqueField(tenantId, field, cleanedValue);
+      if (releaseLock === null) {
+        // Another concurrent request is already writing this value; treat as conflict.
+        fail(field, `"${field.label}" must be unique. A concurrent write is already using this value.`);
         continue;
+      }
+      try {
+        const duplicate = await findDuplicateRecord({
+          tenantId,
+          field,
+          value: cleanedValue,
+          excludeRecordId: recordId,
+        });
+        if (duplicate) {
+          fail(field, `"${field.label}" must be unique. This value already exists.`);
+          continue;
+        }
+      } finally {
+        releaseLock();
       }
     }
 
@@ -295,10 +423,16 @@ const runObjectValidationRules = (validationRules = [], recordData = {}) => {
     try {
       const triggered = evaluateFormula(rule.expression, recordData);
       if (triggered) {
-        errors.push(rule.errorMessage || `Validation rule "${rule.name}" failed.`);
+        errors.push({
+          message: rule.errorMessage || `Validation rule "${rule.name}" failed.`,
+          errorField: rule.errorField || '',
+        });
       }
     } catch (err) {
-      errors.push(`Validation rule "${rule.name}" has an invalid expression: ${err.message}`);
+      errors.push({
+        message: `Validation rule "${rule.name}" has an invalid expression: ${err.message}`,
+        errorField: '',
+      });
     }
   }
   return errors;
@@ -309,4 +443,5 @@ export {
   runObjectValidationRules,
   isUniqueField,
   findDuplicateRecord,
+  lockUniqueField,
 };

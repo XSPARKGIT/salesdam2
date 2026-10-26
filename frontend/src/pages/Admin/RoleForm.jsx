@@ -173,6 +173,7 @@ const RoleForm = () => {
   const [loadingRoleUsers, setLoadingRoleUsers] = useState(false);
   const [objects, setObjects] = useState([]);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [existingRoleNames, setExistingRoleNames] = useState([]);
 
   const [form, setForm] = useState({
     name: '',
@@ -222,6 +223,27 @@ const RoleForm = () => {
     } catch (err) {
       toast.error('Failed to load objects.');
     }
+  };
+
+  const fetchExistingRoleNames = async () => {
+    try {
+      const res = await api.get('/roles');
+      const names = (res.data.data || []).map((r) => r.name);
+      setExistingRoleNames(names);
+    } catch {
+      // non-fatal — uniqueness check degrades gracefully
+    }
+  };
+
+  useEffect(() => { fetchExistingRoleNames(); }, []);
+
+  const toUniqueApiName = (base, currentName) => {
+    // Strip the current role's own name from the taken list when editing
+    const taken = existingRoleNames.filter((n) => n !== currentName);
+    if (!taken.includes(base)) return base;
+    let i = 1;
+    while (taken.includes(`${base}${i}`)) i++;
+    return `${base}${i}`;
   };
 
   const loadRoleUsers = async () => {
@@ -362,7 +384,15 @@ const RoleForm = () => {
                   <input
                     className={styles.input}
                     value={form.label}
-                    onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))}
+                    onChange={(e) => {
+                      const label = e.target.value;
+                      const base = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/_+/g, '_').replace(/^_|_$/g, '');
+                      setForm((p) => ({
+                        ...p,
+                        label,
+                        name: toUniqueApiName(base, p.name),
+                      }));
+                    }}
                     placeholder="e.g. Sales Manager"
                     disabled={isReadOnly}
                   />
@@ -372,14 +402,9 @@ const RoleForm = () => {
                   <input
                     className={styles.input}
                     value={form.name}
-                    onChange={(e) =>
-                      setForm((p) => ({
-                        ...p,
-                        name: e.target.value.toLowerCase().replace(/[^a-z_]/g, ''),
-                      }))
-                    }
-                    disabled={isEdit || isReadOnly}
-                    placeholder="sales_manager"
+                    readOnly
+                    style={{ background: 'var(--color-gray-50, #f8fafc)', cursor: 'default', color: 'var(--color-gray-500, #64748b)' }}
+                    placeholder="auto-generated"
                   />
                 </div>
                 <div className={`${styles.field} ${styles.fullWidth}`}>

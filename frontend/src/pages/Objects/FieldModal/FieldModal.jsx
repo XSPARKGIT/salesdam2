@@ -1,8 +1,9 @@
 import styles from './FieldModal.module.css';
 import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createField, updateField, getAllFields } from '../../../services/api/objects';
+import { listGlobalValueSets } from '../../../services/api/globalValueSets';
 
 import Modal from '../../../components/common/Modal/Modal';
 import Button from '../../../components/common/Button/Button';
@@ -21,11 +22,15 @@ const FIELD_TYPES = [
   { value: 'boolean', label: 'Checkbox' },
   { value: 'picklist', label: 'Picklist' },
   { value: 'multipicklist', label: 'Multi-select' },
+  { value: 'richtext', label: 'Rich Text' },
+  { value: 'time', label: 'Time' },
+  { value: 'address', label: 'Address' },
   { value: 'email', label: 'Email' },
   { value: 'phone', label: 'Phone' },
   { value: 'url', label: 'URL' },
   { value: 'auto_number', label: 'Auto Number' },
   { value: 'lookup', label: 'Lookup' },
+  { value: 'master_detail', label: 'Master Detail' },
   { value: 'formula', label: 'Formula' },
   { value: 'rollup_summary', label: 'Rollup Summary' },
 ];
@@ -51,6 +56,7 @@ const BLANK = {
   picklistValues: [],
   lookupObjectApiName: '',
   lookupDisplayField: 'name',
+  deleteBehavior: 'none',
   // Matches the FieldMeta model path. It was previously `formulaExpression`,
   // which the backend silently discarded, so formula fields always opened blank.
   formula: '',
@@ -68,6 +74,7 @@ const BLANK = {
   autoNumberPadding: 4,
   autoNumberStartAt: 1,
   validations: {},
+  globalValueSetId: undefined,
 };
 
 const ROLLUP_TYPES = [
@@ -83,7 +90,7 @@ const ROLLUP_AGGREGATABLE_TYPES = ['number', 'currency', 'percent', 'formula'];
 
 // System fields are managed by the platform — the backend rejects any other key
 // with a 403, so the payload must be narrowed to exactly these.
-const SYSTEM_FIELD_EDITABLE_KEYS = ['label', 'helpText'];
+const SYSTEM_FIELD_EDITABLE_KEYS = ['label', 'helpText', 'picklistValues'];
 
 const FieldModal = ({
   isOpen,
@@ -96,6 +103,9 @@ const FieldModal = ({
 }) => {
   const [fieldForm, setFieldForm] = useState(BLANK);
   const [picklistInput, setPicklistInput] = useState('');
+  const [isCustomDate, setIsCustomDate] = useState(false);
+  const [useGvs, setUseGvs] = useState(false);
+  const [globalValueSets, setGlobalValueSets] = useState([]);
   // Every field in the tenant. A rollup needs to reason across objects — which
   // ones are detail children of this one, and through which relationship — so
   // this is fetched once rather than per candidate object.
@@ -127,6 +137,10 @@ const FieldModal = ({
     );
 
     setPicklistInput('');
+    setIsCustomDate(false);
+    const hasGvs = !!(editingField?.globalValueSetId);
+    setUseGvs(hasGvs);
+    listGlobalValueSets().then(setGlobalValueSets).catch(() => {});
   }, [isOpen, editingField]);
 
   // A formula can't reference itself, so the field being edited is kept out of
@@ -271,6 +285,7 @@ const FieldModal = ({
     'lookup',
     'formula',
     'rollup_summary',
+    'address',
   ];
 
   return (
@@ -379,54 +394,185 @@ const FieldModal = ({
                 />
                 Default checked
               </label>
+            ) : ['date', 'datetime'].includes(fieldForm.type) ? (
+              (() => {
+                const DATE_OPTIONS = fieldForm.type === 'date' ? [
+                  { label: 'No default',        value: '' },
+                  { label: 'Today',             value: 'TODAY()' },
+                  { label: 'Tomorrow',          value: 'TODAY(+1)' },
+                  { label: '7 days from now',   value: 'TODAY(+7)' },
+                  { label: '30 days from now',  value: 'TODAY(+30)' },
+                  { label: '7 days ago',        value: 'TODAY(-7)' },
+                  { label: '30 days ago',       value: 'TODAY(-30)' },
+                  { label: 'Start of month',    value: 'START_OF_MONTH()' },
+                  { label: 'End of month',      value: 'END_OF_MONTH()' },
+                  { label: 'Custom date…',      value: '__custom__' },
+                ] : [
+                  { label: 'No default',        value: '' },
+                  { label: 'Now',               value: 'NOW()' },
+                  { label: 'Custom date/time…', value: '__custom__' },
+                ];
+                const knownTokens = DATE_OPTIONS.map(o => o.value).filter(v => v && v !== '__custom__');
+                const hasNonTokenValue = fieldForm.defaultValue && !knownTokens.includes(fieldForm.defaultValue.toUpperCase?.() ?? fieldForm.defaultValue);
+                const showCustomInput = isCustomDate || hasNonTokenValue;
+                const selectValue = showCustomInput ? '__custom__' : (fieldForm.defaultValue || '');
+                return (
+                  <>
+                    <select
+                      className={styles.select}
+                      value={selectValue}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '__custom__') {
+                          setIsCustomDate(true);
+                          setFieldForm((p) => ({ ...p, defaultValue: '' }));
+                        } else {
+                          setIsCustomDate(false);
+                          setFieldForm((p) => ({ ...p, defaultValue: v }));
+                        }
+                      }}
+                    >
+                      {DATE_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    {showCustomInput && (
+                      <input
+                        className={styles.input}
+                        style={{ marginTop: 8 }}
+                        type={fieldForm.type === 'datetime' ? 'datetime-local' : 'date'}
+                        value={fieldForm.defaultValue || ''}
+                        onChange={(e) => setFieldForm((p) => ({ ...p, defaultValue: e.target.value }))}
+                      />
+                    )}
+                    <p className={styles.hint}>
+                      The selected value is evaluated fresh each time a record is created.
+                    </p>
+                  </>
+                );
+              })()
             ) : (
-              <input
-                className={styles.input}
-                value={fieldForm.defaultValue || ''}
-                onChange={(e) =>
-                  setFieldForm((p) => ({
-                    ...p,
-                    defaultValue: e.target.value,
-                  }))
-                }
-              />
+              <>
+                <input
+                  className={styles.input}
+                  value={fieldForm.defaultValue || ''}
+                  placeholder={
+                    fieldForm.type === 'number' || fieldForm.type === 'currency' || fieldForm.type === 'percent' ? 'e.g. 0' :
+                    fieldForm.type === 'email' ? 'e.g. info@example.com' :
+                    fieldForm.type === 'url' ? 'e.g. https://example.com' :
+                    'e.g. Default text'
+                  }
+                  onChange={(e) =>
+                    setFieldForm((p) => ({
+                      ...p,
+                      defaultValue: e.target.value,
+                    }))
+                  }
+                />
+                <p className={styles.hint}>
+                  {(fieldForm.type === 'number' || fieldForm.type === 'currency' || fieldForm.type === 'percent') &&
+                    'Enter a numeric value. Leave blank for no default.'}
+                  {(fieldForm.type === 'text' || fieldForm.type === 'textarea') &&
+                    'Text pre-filled into the field when creating a new record. Leave blank for no default.'}
+                  {fieldForm.type === 'email' && 'Email address pre-filled on new records. Leave blank for no default.'}
+                  {fieldForm.type === 'url' && 'URL pre-filled on new records. Must start with https://. Leave blank for no default.'}
+                  {fieldForm.type === 'phone' && 'Phone number pre-filled on new records. Leave blank for no default.'}
+                </p>
+              </>
             )}
           </div>
         )}
 
+        </fieldset>
+
         {/* ── PICKLIST ───────────────────────────── */}
+        {/* Rendered outside the lock fieldset: system picklist fields (e.g. Type)
+            must be editable here even though all other properties are locked. */}
         {['picklist', 'multipicklist'].includes(fieldForm.type) && (
           <div className={`${styles.field} ${styles.full}`}>
-            <label className={styles.label}>Picklist Values</label>
-
-            <div className={styles.picklistInput}>
-              <input
-                value={picklistInput}
-                onChange={(e) => setPicklistInput(e.target.value)}
-                className={styles.input}
-              />
-              <Button size="sm" onClick={addPicklistValue}>
-                Add
-              </Button>
+            {/* Global Value Set toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={useGvs}
+                  onChange={(e) => {
+                    setUseGvs(e.target.checked);
+                    if (!e.target.checked) {
+                      setFieldForm((p) => ({ ...p, globalValueSetId: undefined }));
+                    }
+                  }}
+                />
+                Link to a Global Value Set
+              </label>
             </div>
 
-            <div className={styles.picklistValues}>
-              {(fieldForm.picklistValues || []).map((pv, i) => (
-                <div key={i} className={styles.picklistItem}>
-                  {pv.label}
-                  <button onClick={() => removePicklistValue(i)}>
-                    <Trash2 size={12} />
-                  </button>
+            {useGvs ? (
+              <div>
+                <label className={styles.label}>Global Value Set</label>
+                <select
+                  className={styles.select}
+                  value={fieldForm.globalValueSetId || ''}
+                  onChange={(e) =>
+                    setFieldForm((p) => ({ ...p, globalValueSetId: e.target.value || undefined }))
+                  }
+                >
+                  <option value="">-- Select a value set --</option>
+                  {globalValueSets.map((gvs) => (
+                    <option key={gvs._id} value={gvs._id}>
+                      {gvs.label} ({(gvs.values || []).length} values)
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 12, color: 'var(--color-gray-500)', marginTop: 4 }}>
+                  Values are managed centrally. Updating the set applies to all linked fields.
+                </p>
+              </div>
+            ) : (
+              <>
+                <label className={styles.label}>Picklist Values</label>
+                <div className={styles.picklistInput}>
+                  <input
+                    value={picklistInput}
+                    onChange={(e) => setPicklistInput(e.target.value)}
+                    className={styles.input}
+                  />
+                  <Button size="sm" onClick={addPicklistValue}>
+                    Add
+                  </Button>
                 </div>
-              ))}
-            </div>
+                <div className={styles.picklistValues}>
+                  {(fieldForm.picklistValues || []).length === 0 ? (
+                    <span className={styles.picklistValuesEmpty}>No values added yet — type above and click Add</span>
+                  ) : (
+                    (fieldForm.picklistValues || []).map((pv, i) => (
+                      <div key={i} className={styles.picklistItem}>
+                        <CheckCircle2 size={12} className={styles.picklistItemCheck} />
+                        {pv.label}
+                        <button type="button" onClick={() => removePicklistValue(i)} title={`Remove "${pv.label}"`}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {/* ── LOOKUP ───────────────────────────── */}
-        {fieldForm.type === 'lookup' && (
+        <fieldset
+          className={styles.lockGroup}
+          disabled={isSystemField}
+          aria-disabled={isSystemField}
+        >
+
+        {/* ── LOOKUP / MASTER DETAIL ───────────── */}
+        {(fieldForm.type === 'lookup' || fieldForm.type === 'master_detail') && (
           <div className={`${styles.field} ${styles.full}`}>
-            <label className={styles.label}>Lookup To</label>
+            <label className={styles.label}>
+              {fieldForm.type === 'master_detail' ? 'Parent Object' : 'Lookup To'}
+            </label>
 
             <ObjectPickerInput
               value={fieldForm.lookupObjectApiName || ''}
@@ -435,6 +581,28 @@ const FieldModal = ({
               }
               objects={safeObjects}
             />
+            {fieldForm.type === 'master_detail' && (
+              <span style={{ fontSize: 11, color: 'var(--color-gray-500)', marginTop: 4, display: 'block' }}>
+                Records of this object are owned by the parent — deleting the parent deletes these records too.
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── LOOKUP DELETION BEHAVIOUR (BRD-3.1.2-02) ───────── */}
+        {fieldForm.type === 'lookup' && (
+          <div className={styles.field}>
+            <label className={styles.label}>When Parent is Deleted</label>
+            <select
+              value={fieldForm.deleteBehavior || 'none'}
+              onChange={(e) => setFieldForm((p) => ({ ...p, deleteBehavior: e.target.value }))}
+              className={styles.select}
+            >
+              <option value="none">Allow — keep reference (may become stale)</option>
+              <option value="nullify">Clear — set this field to blank</option>
+              <option value="block">Block — prevent parent deletion while children exist</option>
+              <option value="cascade">Cascade — delete child records too</option>
+            </select>
           </div>
         )}
 

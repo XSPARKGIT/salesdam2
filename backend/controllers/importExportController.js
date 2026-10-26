@@ -4,6 +4,7 @@ import FieldMeta from '../models/FieldMeta.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import AutoNumberCounter from '../models/AutoNumberCounter.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import duplicateDetectionService from '../services/duplicateDetectionService.js';
 import {
   getVisibleFields,
   buildDataAccessFilter,
@@ -476,6 +477,21 @@ export const importRecords = asyncHandler(async (req, res) => {
         results.errors.push({
           row: rowNum,
           errors: [...valErrors, ...ruleErrors],
+        });
+        continue;
+      }
+
+      // DUP-014: run configured duplicate rules before inserting each row.
+      const dupCheck = await duplicateDetectionService.check(
+        req.tenantId,
+        objectApiName,
+        validatedData,
+      );
+      if (dupCheck.action === 'block') {
+        results.failed++;
+        results.errors.push({
+          row: rowNum,
+          errors: ['Duplicate record detected — import row blocked by a duplicate rule.'],
         });
         continue;
       }

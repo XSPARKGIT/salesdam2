@@ -1,5 +1,6 @@
 import styles from './RecordDetail.module.css';
 import { useEffect, useState } from 'react';
+import { evaluateVisibilityRule } from '../../../utils/evaluateVisibilityRule';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -15,6 +16,7 @@ import {
   getRelatedObjects,
 } from '../../../services/api/objects';
 import { getRecords } from '../../../services/api/records';
+import { getApprovalState } from '../../../services/api/approvals';
 import RecordHeader from './RecordHeader/RecordHeader';
 import RecordTabs from './RecordTabs/RecordTabs';
 import ApprovalPanel from '../../../components/records/ApprovalPanel/ApprovalPanel';
@@ -24,6 +26,7 @@ import RecordSystemInfo from './RecordSystemInfo/RecordSystemInfo';
 import RecordModals from './RecordModals/RecordModals';
 import RecordDetailSkeleton from './RecordDetailSkeleton';
 import RelatedList from '../../../components/records/RelatedList/RelatedList';
+import FieldHistoryTab from './FieldHistoryTab/FieldHistoryTab';
 import resolveLookupLabel from '../utils/resolveLookupLabel';
 import { withoutHelperFields } from '../../../utils/fieldVisibility';
 
@@ -32,7 +35,19 @@ const RecordDetail = () => {
   const { objectApiName, id } = useParams();
   const navigate = useNavigate();
   const { getObject } = useTenantContext();
-  const objMeta = getObject(objectApiName);
+  // Use context for nav/label convenience, but fetch fresh for flag checks
+  // (enableHistory etc.) so stale context doesn't hide newly-enabled features.
+  const objMetaCtx = getObject(objectApiName);
+  const { data: objMetaFresh } = useQuery({
+    queryKey: ['object', objectApiName],
+    queryFn: async () => {
+      const res = await api.get(`/objects/${objectApiName}`);
+      return res.data.data;
+    },
+    enabled: !!objectApiName,
+    staleTime: 30_000,
+  });
+  const objMeta = objMetaFresh || objMetaCtx;
   const perms = useObjectPermissions(objectApiName);
 
   const [lookupLabels, setLookupLabels] = useState({});
@@ -57,6 +72,14 @@ const RecordDetail = () => {
     queryFn: () => getRecordDetailBundle(objectApiName, id),
     enabled: !!objectApiName && !!id,
   });
+
+  const { data: approvalState } = useQuery({
+    queryKey: ['approval-state', objectApiName, id],
+    queryFn: () => getApprovalState(objectApiName, id),
+    enabled: !!objectApiName && !!id,
+    staleTime: 0,
+  });
+  const isApprovalLocked = approvalState?.request?.status === 'pending' && approvalState?.request?.locked === true;
 
   const { data: approvalInfo } = useQuery({
     queryKey: ['lead-approval-info', objectApiName, id],
@@ -295,12 +318,43 @@ const RecordDetail = () => {
 
   const buildSections = () => {
     if (layout?.sections?.length > 0) {
-      return layout.sections.map((sec) => ({
-        id: sec.id,
-        label: sec.label,
-        columns: sec.columns || 2,
-        columnData: sec.columnData || [],
-      }));
+      const visibleFieldApiNames = new Set(withoutHelperFields(fields).map((f) => f.apiName));
+      const layoutSections = layout.sections
+        .filter((sec) => evaluateVisibilityRule(sec.visibilityRule, record))
+        .map((sec) => ({
+          id: sec.id,
+          label: sec.label,
+          columns: sec.columns || 2,
+          columnData: (sec.columnData || []).map((col) => ({
+            fields: (col.fields || []).filter((fi) =>
+              evaluateVisibilityRule(fi.visibilityRule, record)
+            ),
+          })),
+        }));
+
+      // Find fields that exist on the object but aren't placed in any layout section.
+      const inLayout = new Set(
+        layout.sections.flatMap((sec) =>
+          (sec.columnData || []).flatMap((col) => (col.fields || []).map((f) => f.fieldApiName))
+        )
+      );
+      const missing = withoutHelperFields(fields).filter(
+        (f) => !inLayout.has(f.apiName) && visibleFieldApiNames.has(f.apiName)
+      );
+
+      if (missing.length > 0 && layoutSections.length > 0) {
+        const first = layoutSections[0];
+        const col0 = [...(first.columnData?.[0]?.fields || [])];
+        const col1 = [...(first.columnData?.[1]?.fields || [])];
+        missing.forEach((f, idx) => {
+          const entry = { fieldApiName: f.apiName, label: f.label };
+          if (idx % 2 === 0) col0.push(entry);
+          else col1.push(entry);
+        });
+        layoutSections[0] = { ...first, columnData: [{ fields: col0 }, { fields: col1 }] };
+      }
+
+      return layoutSections;
     }
 
     // Helper fields only exist to feed formulas / rollups — keep them off the
@@ -360,6 +414,7 @@ const RecordDetail = () => {
           generatingInvoice={generatingInvoice}
           approvalInfo={approvalInfo}
           leadApprovalSettings={leadApprovalSettings}
+          isApprovalLocked={isApprovalLocked}
           perms={perms}
           onGenerateQuote={objectApiName === 'quote' ? handleViewQuotePDF : objectApiName === 'invoice' ? handleViewInvoicePDF : (objectApiName === 'deal' ? handleGenerateQuote : handleGenerateInvoice)}
           onGenerateInvoice={objectApiName === 'invoice' ? handleViewInvoicePDF : handleGenerateInvoice}
@@ -396,6 +451,7 @@ const RecordDetail = () => {
           setActiveTab={setActiveTab}
           customScreens={customScreens}
           embeddedFlows={embeddedFlows}
+          showHistory={!!objMeta?.enableHistory}
         />
 
         <RecordContent
@@ -410,6 +466,14 @@ const RecordDetail = () => {
           objectApiName={objectApiName}
         />
 
+        {activeTab === 'field_history' && objMeta?.enableHistory && (
+          <FieldHistoryTab
+            objectApiName={objectApiName}
+            recordId={id}
+            fields={fields}
+          />
+        )}
+
         <RecordSystemInfo record={record} />
 
         {relatedObjects?.length > 0 && (
@@ -417,14 +481,17 @@ const RecordDetail = () => {
             <h3 className={styles.relatedSectionTitle}>Related</h3>
             <div className={styles.relatedLists}>
               {relatedObjects?.map(
-                ({ objectMeta, relatedField, fields: relFields }) => (
+                ({ objectMeta, relatedField, fields: relFields, isThrough, junctionObjectMeta, junctionRelatedField }) => (
                   <RelatedList
-                    key={`${objectMeta.apiName}-${relatedField.apiName}`}
+                    key={`${objectMeta.apiName}-${relatedField.apiName}${isThrough ? '-through' : ''}`}
                     parentObjectApiName={objectApiName}
                     parentId={id}
                     relatedField={relatedField}
                     relatedObjectMeta={objectMeta}
                     allRelatedFields={relFields}
+                    isThrough={isThrough}
+                    junctionObjectMeta={junctionObjectMeta}
+                    junctionRelatedField={junctionRelatedField}
                   />
                 ),
               )}

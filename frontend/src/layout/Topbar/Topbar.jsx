@@ -1,5 +1,5 @@
 import styles from './Topbar.module.css';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -13,10 +13,12 @@ import {
   Minimize2,
   ChevronDown,
   Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppContext } from '../../context/AppContext';
 import { useOnboarding } from '../../components/onboarding/OnboardingProvider';
+import { globalSearch } from '../../services/api/search';
 
 const Topbar = () => {
   const { user, logout } = useAuth();
@@ -31,13 +33,21 @@ const Topbar = () => {
     markNotificationRead,
     markAllRead,
   } = useAppContext();
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [dropdownResults, setDropdownResults] = useState(null);
+  const [dropdownLoading, setDropdownLoading] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
   const navigate = useNavigate();
   const notifRef = useRef(null);
   const profileRef = useRef(null);
+  const searchRef = useRef(null);
+  const debounceRef = useRef(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -46,12 +56,13 @@ const Topbar = () => {
         setNotifOpen(false);
       if (profileRef.current && !profileRef.current.contains(e.target))
         setProfileOpen(false);
+      if (searchRef.current && !searchRef.current.contains(e.target))
+        setDropdownOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Track browser fullscreen state
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFsChange);
@@ -66,35 +77,109 @@ const Topbar = () => {
     }
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
+  // Debounced live search
+  const runSearch = useCallback((q) => {
+    clearTimeout(debounceRef.current);
+    if (q.trim().length < 2) {
+      setDropdownResults(null);
+      setDropdownOpen(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setDropdownLoading(true);
+      setDropdownOpen(true);
+      try {
+        const res = await globalSearch(q.trim(), { limit: 8 });
+        setDropdownResults(res.data.data);
+      } catch {
+        setDropdownResults(null);
+      } finally {
+        setDropdownLoading(false);
+      }
+    }, 250);
+  }, []);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    setActiveIdx(-1);
+    runSearch(val);
+  };
+
+  // Flat list of all items for keyboard nav
+  const allItems = [
+    ...(dropdownResults?.users || []).map((u) => ({ type: 'user', data: u })),
+    ...(dropdownResults?.records || []).map((r) => ({ type: 'record', data: r })),
+  ];
+
+  const closeDropdown = () => {
+    setDropdownOpen(false);
+    setActiveIdx(-1);
+  };
+
+  const navigateToItem = (item) => {
+    if (item.type === 'user') {
+      navigate(`/admin/users/${item.data._id}`);
+    } else {
+      navigate(`/o/${item.data.objectApiName}/${item.data.id}`);
+    }
+    setSearchQuery('');
+    closeDropdown();
+  };
+
+  const goToFullSearch = () => {
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
       setSearchQuery('');
+      closeDropdown();
     }
   };
 
+  const handleSearch = (e) => {
+    e.preventDefault();
+    goToFullSearch();
+  };
+
   const handleSearchKeyDown = (e) => {
-    if (e.key === 'Escape') setSearchQuery('');
+    if (e.key === 'Escape') {
+      setSearchQuery('');
+      closeDropdown();
+      return;
+    }
+    if (!dropdownOpen || allItems.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx((i) => Math.min(i + 1, allItems.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx((i) => Math.max(i - 1, -1));
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      navigateToItem(allItems[activeIdx]);
+    }
   };
 
   const handleLogout = async () => {
     setProfileOpen(false);
     await logout();
-    // Use setTimeout to ensure state updates are processed before navigation
-    setTimeout(() => {
-      navigate('/login', { replace: true });
-    }, 0);
+    setTimeout(() => navigate('/login', { replace: true }), 0);
   };
 
-  const isAdmin = user?.role?.name?.toLowerCase() === 'admin' || user?.role?.name?.toLowerCase() === 'superuser';
+  const isAdmin =
+    user?.role?.name?.toLowerCase() === 'admin' ||
+    user?.role?.name?.toLowerCase() === 'superuser';
+
+  const initials = (u) =>
+    `${u.firstName?.[0] || ''}${u.lastName?.[0] || ''}`.toUpperCase() || '?';
+
+  const hasResults =
+    dropdownResults &&
+    (dropdownResults.users?.length > 0 || dropdownResults.records?.length > 0);
 
   return (
-    <header
-      className={`${styles.topbar} ${sidebarCollapsed ? styles.collapsed : ''}`}
-    >
+    <header className={`${styles.topbar} ${sidebarCollapsed ? styles.collapsed : ''}`}>
       <div className={styles.left}>
-        {/* Mobile menu button */}
         <button
           className={styles.mobileMenuBtn}
           onClick={toggleSidebar}
@@ -109,6 +194,8 @@ const Topbar = () => {
           className={styles.searchForm}
           onSubmit={handleSearch}
           data-tour="search"
+          ref={searchRef}
+          style={{ position: 'relative' }}
         >
           <Search size={16} className={styles.searchIcon} />
           <input
@@ -116,15 +203,98 @@ const Topbar = () => {
             className={styles.searchInput}
             placeholder="Search records, users..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={handleSearchChange}
             onKeyDown={handleSearchKeyDown}
+            onFocus={() => searchQuery.trim().length >= 2 && setDropdownOpen(true)}
+            autoComplete="off"
           />
-          <kbd className={styles.searchShortcut}>⌘K</kbd>
+          {!searchQuery && <kbd className={styles.searchShortcut}>⌘K</kbd>}
+
+          {/* Live dropdown */}
+          {dropdownOpen && (
+            <div className={styles.searchDropdown}>
+              {dropdownLoading ? (
+                <div className={styles.searchDropdownLoading}>Searching…</div>
+              ) : !hasResults ? (
+                <div className={styles.searchDropdownEmpty}>
+                  No results for "{searchQuery}"
+                </div>
+              ) : (
+                <>
+                  {dropdownResults.users?.length > 0 && (
+                    <div className={styles.searchDropdownSection}>
+                      <div className={styles.searchDropdownLabel}>Users</div>
+                      {dropdownResults.users.map((u, i) => {
+                        const idx = i;
+                        return (
+                          <button
+                            key={u._id}
+                            type="button"
+                            className={`${styles.searchDropdownItem} ${activeIdx === idx ? styles.active : ''}`}
+                            onMouseEnter={() => setActiveIdx(idx)}
+                            onClick={() => navigateToItem({ type: 'user', data: u })}
+                          >
+                            <div className={styles.searchDropdownItemIcon} style={{ background: '#e0e7ff', color: '#6366f1' }}>
+                              {initials(u)}
+                            </div>
+                            <div className={styles.searchDropdownItemBody}>
+                              <div className={styles.searchDropdownItemName}>
+                                {u.firstName} {u.lastName}
+                              </div>
+                              <div className={styles.searchDropdownItemMeta}>{u.email}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {dropdownResults.users?.length > 0 && dropdownResults.records?.length > 0 && (
+                    <div className={styles.searchDropdownDivider} />
+                  )}
+
+                  {dropdownResults.records?.length > 0 && (
+                    <div className={styles.searchDropdownSection}>
+                      <div className={styles.searchDropdownLabel}>Records</div>
+                      {dropdownResults.records.map((r, i) => {
+                        const idx = (dropdownResults.users?.length || 0) + i;
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            className={`${styles.searchDropdownItem} ${activeIdx === idx ? styles.active : ''}`}
+                            onMouseEnter={() => setActiveIdx(idx)}
+                            onClick={() => navigateToItem({ type: 'record', data: r })}
+                          >
+                            <div className={styles.searchDropdownItemIcon}>
+                              {r.objectLabel?.[0]?.toUpperCase() || '#'}
+                            </div>
+                            <div className={styles.searchDropdownItemBody}>
+                              <div className={styles.searchDropdownItemName}>{r.recordName}</div>
+                              <div className={styles.searchDropdownItemMeta}>{r.objectLabel}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className={styles.searchDropdownFooter}
+                    onClick={goToFullSearch}
+                  >
+                    <ArrowRight size={13} />
+                    See all results for "{searchQuery}"
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </form>
       </div>
 
       <div className={styles.right}>
-        {/* Theme toggle */}
         <button
           className={styles.iconBtn}
           onClick={toggleTheme}
@@ -133,7 +303,6 @@ const Topbar = () => {
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
         </button>
 
-        {/* Fullscreen toggle */}
         <button
           className={styles.iconBtn}
           onClick={toggleFullscreen}
@@ -185,9 +354,7 @@ const Topbar = () => {
                       }}
                     >
                       <strong className={styles.notifTitle}>{n.title}</strong>
-                      {n.body && (
-                        <span className={styles.notifBody}>{n.body}</span>
-                      )}
+                      {n.body && <span className={styles.notifBody}>{n.body}</span>}
                     </button>
                   ))
                 )}
@@ -233,30 +400,21 @@ const Topbar = () => {
               <hr className={styles.divider} />
               <button
                 className={styles.dropdownItem}
-                onClick={() => {
-                  navigate('/profile');
-                  setProfileOpen(false);
-                }}
+                onClick={() => { navigate('/profile'); setProfileOpen(false); }}
               >
                 <User size={14} /> Profile
               </button>
               {isAdmin && (
                 <button
                   className={styles.dropdownItem}
-                  onClick={() => {
-                    navigate('/admin/settings');
-                    setProfileOpen(false);
-                  }}
+                  onClick={() => { navigate('/admin/settings'); setProfileOpen(false); }}
                 >
                   <Settings size={14} /> Settings
                 </button>
               )}
               <button
                 className={styles.dropdownItem}
-                onClick={() => {
-                  setProfileOpen(false);
-                  openWelcome();
-                }}
+                onClick={() => { setProfileOpen(false); openWelcome(); }}
               >
                 <Sparkles size={14} /> Welcome guide
               </button>

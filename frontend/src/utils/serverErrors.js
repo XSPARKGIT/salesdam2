@@ -11,7 +11,10 @@
  * @returns {{ fieldErrors: object, message: string }}
  */
 export const extractServerErrors = (err, fields = []) => {
-  const data = err?.response?.data;
+  // The axios response interceptor (api.js) transforms errors into plain objects
+  // { message, status, data } — so err.response is absent and the response body
+  // lives at err.data instead. Support both shapes.
+  const data = err?.response?.data ?? err?.data;
   const fieldErrors = { ...(data?.fieldErrors || {}) };
 
   // Only keep keys that correspond to a field actually on this form, so an

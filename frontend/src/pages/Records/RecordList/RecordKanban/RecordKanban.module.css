@@ -252,3 +252,23 @@
     padding: var(--spacing-2);
   }
 }
+
+.cardMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--spacing-1);
+}
+
+.cardField {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardFieldLabel {
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+}

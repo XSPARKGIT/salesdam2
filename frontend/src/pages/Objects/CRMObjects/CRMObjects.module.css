@@ -22,6 +22,7 @@
 .top {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
 }
 
 .icon {
@@ -36,24 +37,30 @@
 .system,
 .standard,
 .custom {
-  font-size: 11px;
-  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
   border-radius: 999px;
+  letter-spacing: 0.03em;
+  border: 1px solid;
 }
 
 .system {
-  background: #fef3c7;
-  color: #92400e;
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
 }
 
 .standard {
   background: var(--color-gray-100);
-  color: var(--color-gray-600);
+  color: var(--color-gray-500);
+  border-color: var(--border-color);
 }
 
 .custom {
   background: var(--color-primary-light);
   color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 .name {

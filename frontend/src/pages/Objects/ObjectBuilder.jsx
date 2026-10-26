@@ -70,6 +70,14 @@ const ObjectBuilder = () => {
       enabled: false,
       fieldApiName: '',
     },
+    // Object-level settings (BRD §3.1.1)
+    isActive: true,
+    enableHistory: false,
+    enableActivities: true,
+    enableNotes: true,
+    searchable: true,
+    hasRecordTypes: false,
+    isJunctionObject: false,
   });
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -132,6 +140,14 @@ const ObjectBuilder = () => {
         enabled: false,
         fieldApiName: '',
       },
+      // Object-level settings
+      isActive: objectData.isActive !== false,
+      enableHistory: objectData.enableHistory || false,
+      enableActivities: objectData.enableActivities !== false,
+      enableNotes: objectData.enableNotes !== false,
+      searchable: objectData.searchable !== false,
+      hasRecordTypes: objectData.hasRecordTypes || false,
+      isJunctionObject: objectData.isJunctionObject || false,
     });
     setValidationRules(objectData.validationRules || []);
   }
@@ -180,9 +196,12 @@ const ObjectBuilder = () => {
           ...objForm,
           validationRules,
         });
-        // Invalidate object cache so it reloads with new kanban config
-        queryClient.invalidateQueries({ queryKey: ['record-list-bundle'] });
+        // Invalidate all object caches so the list and detail both reflect the update
+        queryClient.invalidateQueries({ queryKey: ['objects'] });
         queryClient.invalidateQueries({ queryKey: ['object', apiName] });
+        queryClient.invalidateQueries({ queryKey: ['record-list-bundle'] });
+        queryClient.invalidateQueries({ queryKey: ['objects', 'includeInactive'] });
+        refreshObjects();
         toast.success('Object updated.');
       } else {
         const {
@@ -240,6 +259,7 @@ const ObjectBuilder = () => {
       // otherwise the deleted object lingers in the nav.
       queryClient.removeQueries({ queryKey: ['object', apiName] });
       queryClient.invalidateQueries({ queryKey: ['objects'] });
+      queryClient.invalidateQueries({ queryKey: ['objects', 'includeInactive'] });
       refreshObjects();
       navigate('/setup/objects');
     } catch (err) {
@@ -403,6 +423,14 @@ const ObjectBuilder = () => {
               onClick={() => setActiveTab('validations')}
             >
               Validations ({validationRules?.length})
+            </button>
+          )}
+          {isEdit && (
+            <button
+              className={styles.tab}
+              onClick={() => navigate(`/setup/objects/${apiName}/layout`)}
+            >
+              Layout
             </button>
           )}
         </div>

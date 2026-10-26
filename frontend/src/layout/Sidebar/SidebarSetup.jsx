@@ -11,6 +11,8 @@ import {
   FileText,
   ClipboardCheck,
   CopyCheck,
+  List,
+  Users2,
 } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import SidebarNavGroup from './SidebarNavGroup';
@@ -101,6 +103,16 @@ const SidebarSetup = ({
         />
       )}
 
+      {isAdmin && (
+        <SidebarNavItem
+          to="/setup/global-value-sets"
+          icon={<List size={15} />}
+          label="Global Value Sets"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
       {(isAdmin || hasPermission('canManageObjects')) && (
         <SidebarNavItem
           to="/setup/objects"
@@ -139,6 +151,16 @@ const SidebarSetup = ({
           to="/setup/pdf-templates"
           icon={<FileText size={16} />}
           label="PDF Templates"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {(isAdmin || hasPermission('canManageRoles')) && (
+        <SidebarNavItem
+          to="/admin/roles"
+          icon={<Users2 size={16} />}
+          label="Roles"
           collapsed={sidebarCollapsed}
           onNavigate={onNavigate}
         />

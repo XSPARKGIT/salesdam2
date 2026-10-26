@@ -85,6 +85,13 @@ const RecordList = () => {
   const isKanbanUrl = window.location.pathname.includes('/kanban');
   const [viewMode, setViewMode] = useState(isKanbanUrl ? 'kanban' : 'list');
 
+  // A board is only usable when it is enabled *and* configured with a group-by
+  // field. If the config is cleared or disabled, fall back to the list view so a
+  // stale kanban URL cannot render an unusable board.
+  const kanbanConfig = objMeta?.kanbanConfig || {};
+  const isKanbanEnabled = Boolean(kanbanConfig.enabled && kanbanConfig.fieldApiName);
+  const effectiveViewMode = viewMode === 'kanban' && !isKanbanEnabled ? 'list' : viewMode;
+
   // Cell text: 'clip' truncates with an ellipsis, 'wrap' flows onto more lines.
   // Lives in the URL (?wrap=), so it survives a reload and can be shared.
   const [textWrap, setTextWrap] = useTextWrap();
@@ -288,7 +295,8 @@ const RecordList = () => {
   // back to the field definitions' displayOrder.
   const displayFields = selectedCols
     .map((apiName) => catalogByApiName.get(apiName))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((f) => perms.canViewField(f.apiName));
 
   const filterableFields = useMemo(
     () => columnCatalog.filter(isFilterableField),
@@ -335,6 +343,7 @@ const RecordList = () => {
   // so the list never blanks out mid-use. `!viewsSettled` counts as loading too,
   // otherwise the empty state flashes while the records query is still disabled.
   const loading =
+    perms.loading ||
     fieldsQuery.isLoading ||
     (!recordsQuery.data && (recordsQuery.isFetching || !viewsSettled));
   const refreshing = !loading && recordsQuery.isFetching;
@@ -377,14 +386,14 @@ const RecordList = () => {
           onViewSaved={(key) => key && selectViewKey(key)}
           onViewDeleted={handleViewDeleted}
           currentSort={effectiveSort}
-          viewMode={viewMode}
+          viewMode={effectiveViewMode}
           setViewMode={setViewMode}
           textWrap={textWrap}
           onTextWrapChange={setTextWrap}
           objMeta={objMeta}
         />
 
-        {viewMode === 'list' ? (
+        {effectiveViewMode === 'list' ? (
           <>
             {displayFields.length > 0 && (
               <div className={styles.editHint}>
@@ -426,7 +435,7 @@ const RecordList = () => {
               objectMeta={objMeta}
               objectApiName={objectApiName}
               onRecordUpdate={refetch}
-              fields={displayFields}
+              fields={fields}
             />
           </div>
         )}

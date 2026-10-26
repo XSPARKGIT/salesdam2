@@ -4,6 +4,15 @@ import mongoose from 'mongoose';
  * Layout - Page layout definitions for record views.
  * Supports sections, columns, tabs, and role-based assignment.
  */
+
+// A single condition that controls whether a section or field is visible.
+// The section/field is shown when the condition evaluates to true.
+const visibilityRuleSchema = new mongoose.Schema({
+  field:    { type: String, required: true },
+  operator: { type: String, enum: ['eq', 'neq', 'is_set', 'is_blank'], default: 'eq' },
+  value:    { type: String },
+}, { _id: false });
+
 const fieldItemSchema = new mongoose.Schema({
   fieldApiName: { type: String, required: true },
   label: { type: String },
@@ -11,6 +20,7 @@ const fieldItemSchema = new mongoose.Schema({
   required: { type: Boolean },   // override field required
   readonly: { type: Boolean },   // override field readonly
   hidden: { type: Boolean, default: false },
+  visibilityRule: { type: visibilityRuleSchema, default: null },
 }, { _id: false });
 
 const columnSchema = new mongoose.Schema({
@@ -24,6 +34,7 @@ const sectionSchema = new mongoose.Schema({
   collapsible: { type: Boolean, default: false },
   collapsed: { type: Boolean, default: false },
   columnData: [columnSchema],
+  visibilityRule: { type: visibilityRuleSchema, default: null },
 }, { _id: false });
 
 const tabSchema = new mongoose.Schema({

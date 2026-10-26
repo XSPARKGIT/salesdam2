@@ -111,7 +111,9 @@ const getVisibleFields = async (user, objectApiName, fieldApiNames) => {
   if (!roleDoc) return fieldApiNames;
 
   const objPerm = roleDoc.getObjectPermission(objectApiName);
-  if (!objPerm) return fieldApiNames;
+  // SEC-002/FLD-013: fail closed — if the role has no entry for this object,
+  // expose only the name field rather than every field.
+  if (!objPerm) return fieldApiNames.filter((f) => f === nameFieldApiName);
 
   const hiddenFields = new Set(
     (objPerm.fieldPermissions || [])
@@ -152,7 +154,8 @@ const getEditableFields = async (user, objectApiName, fieldApiNames) => {
   if (!roleDoc) return fieldApiNames.filter((f) => f !== nameFieldApiName);
 
   const objPerm = roleDoc.getObjectPermission(objectApiName);
-  if (!objPerm) return fieldApiNames.filter((f) => f !== nameFieldApiName);
+  // SEC-002: fail closed — no role entry means no editable fields.
+  if (!objPerm) return [];
 
   const readOnlyFields = new Set(
     (objPerm.fieldPermissions || [])

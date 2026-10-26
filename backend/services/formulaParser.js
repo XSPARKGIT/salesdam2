@@ -371,6 +371,26 @@ const BUILTINS = {
     if (target === null) return null;
     return Math.round((target - utcMidnight(new Date())) / 86400000);
   },
+
+  // FORM-007: Convert any value to its string representation.
+  TEXT([a], ctx)   { const v = run(a, ctx); return v == null ? '' : String(v); },
+
+  // FORM-008: Concatenate any number of arguments into a single string.
+  CONCATENATE(args, ctx) {
+    return args.map((a) => { const v = run(a, ctx); return v == null ? '' : String(v); }).join('');
+  },
+
+  // FORM-006: ISCHANGED(fieldName) — true when the field's current value differs
+  // from its previous value. Previous state is injected into ctx as __prev.
+  // Returns false when no previous state is available (create operations).
+  ISCHANGED([a], ctx) {
+    if (!a || a.k !== 'ref') return false;
+    if (!ctx?.__prev) return false;
+    const fieldName = a.name;
+    const prev = ctx.__prev[fieldName];
+    const curr = ctx[fieldName];
+    return prev !== curr;
+  },
 };
 
 // Whitelist of allowed string methods
@@ -454,10 +474,14 @@ function run(node, ctx, calls = { n: 0 }) {
     }
 
     case 'member': {
+      // FORM-002: support lookup.fieldName by checking for a pre-flattened key
+      // in the context (formulaService injects these as "lookupApiName.fieldName").
+      const flatKey = `${node.obj}.${node.prop}`;
+      if (flatKey in ctx) return ctx[flatKey] ?? null;
       const base = ctx[node.obj];
       if (base == null) return null;
       if (node.prop === 'length') return String(base).length;
-      throw new Error(`Property access not allowed: ${node.prop}`);
+      return null;
     }
 
     default:

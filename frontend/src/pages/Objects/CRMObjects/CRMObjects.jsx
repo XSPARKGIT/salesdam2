@@ -12,18 +12,23 @@ import toast from 'react-hot-toast';
 const CRMObjects = () => {
   const { refreshObjects } = useTenantContext();
   const [objectToDelete, setObjectToDelete] = useState(null);
+  const [activeFilter, setActiveFilter] = useState('active'); // 'active' | 'inactive'
 
   const {
-    data: objects,
+    data: allObjects,
     refetch,
     isLoading,
   } = useQuery({
-    queryKey: ['objects'],
-    queryFn: () => getObjects(),
+    queryKey: ['objects', 'includeInactive'],
+    queryFn: () => getObjects({ includeInactive: true }),
     onError: () => {
       toast.error('Failed to load objects.');
     },
   });
+
+  const objects = (allObjects || []).filter((o) =>
+    activeFilter === 'active' ? o.isActive !== false : o.isActive === false,
+  );
 
   if (isLoading) {
     return (
@@ -34,6 +39,9 @@ const CRMObjects = () => {
       </div>
     );
   }
+
+  const activeCount = (allObjects || []).filter((o) => o.isActive !== false).length;
+  const inactiveCount = (allObjects || []).filter((o) => o.isActive === false).length;
 
   const handleDeleteClick = (obj) => {
     if (!obj.isCustom || obj.isSystem) {
@@ -61,6 +69,40 @@ const CRMObjects = () => {
   };
 
   return (
+    <>
+      {/* Active / Inactive filter tabs */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border-color)', marginBottom: 20 }}>
+        {[
+          ['active', `Active (${activeCount})`],
+          ['inactive', `Inactive (${inactiveCount})`],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setActiveFilter(id)}
+            style={{
+              padding: '6px 16px',
+              fontSize: 13,
+              fontWeight: 500,
+              border: 'none',
+              borderBottom: `2px solid ${activeFilter === id ? 'var(--color-primary)' : 'transparent'}`,
+              marginBottom: -1,
+              background: 'none',
+              cursor: 'pointer',
+              color: activeFilter === id ? 'var(--color-primary)' : 'var(--color-gray-500)',
+              transition: 'all var(--transition-fast)',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {objects.length === 0 && (
+        <p style={{ color: 'var(--color-gray-400)', fontSize: 14, padding: '24px 0' }}>
+          {activeFilter === 'inactive' ? 'No inactive objects.' : 'No active objects.'}
+        </p>
+      )}
+
     <div className={styles.grid}>
       {objects?.map((obj) => {
         const Icon = LucideIcons[obj.icon] || LucideIcons.Box;
@@ -75,13 +117,18 @@ const CRMObjects = () => {
                 <Icon size={22} />
               </div>
 
-              <div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
                 {obj.isSystem ? (
                   <span className={styles.system}>System</span>
                 ) : !obj.isCustom ? (
                   <span className={styles.standard}>Standard</span>
                 ) : (
                   <span className={styles.custom}>Custom</span>
+                )}
+                {obj.isJunctionObject && (
+                  <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999, background: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74', letterSpacing: '0.03em' }}>
+                    Junction
+                  </span>
                 )}
               </div>
             </div>
@@ -127,6 +174,7 @@ const CRMObjects = () => {
         onConfirm={handleConfirmDelete}
       />
     </div>
+    </>
   );
 };
 

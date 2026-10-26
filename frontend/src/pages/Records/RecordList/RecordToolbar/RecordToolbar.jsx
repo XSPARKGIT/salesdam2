@@ -153,7 +153,7 @@ const RecordToolbar = ({
           )}
         </div>
 
-        {objMeta?.kanbanConfig?.enabled && (
+        {objMeta?.kanbanConfig?.enabled && objMeta?.kanbanConfig?.fieldApiName && (
           <div className={styles.viewModeToggle}>
             <button
               className={`${styles.viewBtn} ${viewMode === 'list' ? styles.active : ''}`}

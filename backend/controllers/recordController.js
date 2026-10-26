@@ -21,7 +21,7 @@ import {
   buildDataAccessFilter,
 } from '../middleware/permissions.js';
 import { buildSearchText } from '../services/searchService.js';
-import { fireAutomations } from '../services/automationService.js';
+import { fireAutomations, runAutomation } from '../services/automationService.js';
 import {
   setRollupValuesOnRecord,
   refreshRollupOnParent,
@@ -31,6 +31,7 @@ import { convertDealToOrder } from '../services/dealConversionService.js';
 import { applyAutoNumbers } from '../services/autoNumberService.js';
 import ListView from '../models/ListView.js';
 import RecentlyViewed from '../models/RecentlyViewed.js';
+import FieldHistory from '../models/FieldHistory.js';
 import { buildFilterQuery, buildSort } from '../services/listViewService.js';
 import { defaultViewsFor } from '../config/listViews.js';
 import approvalProcessService from '../services/approvalProcessService.js';
@@ -304,6 +305,16 @@ const getRecord = asyncHandler(async (req, res) => {
   // Inject formula field values
   const dataObj = await injectFormulaValues(record, allFields);
 
+  // BRD §9.1 field-level security — strip fields the user cannot view
+  const ALWAYS_RETURNED = ['id', 'objectApiName', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy', 'ownerId'];
+  const allFieldApiNames = [...allFields.map((f) => f.apiName), ...ALWAYS_RETURNED];
+  const visibleFields = await getVisibleFields(req.user, objectApiName, allFieldApiNames);
+  const visibleSet = new Set(visibleFields);
+  const filteredData = {};
+  Object.keys(dataObj).forEach((k) => {
+    if (visibleSet.has(k) || ALWAYS_RETURNED.includes(k)) filteredData[k] = dataObj[k];
+  });
+
   // Feed the per-user "Recently Viewed" list. Fire-and-forget — it must never
   // delay or fail the read.
   RecentlyViewed.track({
@@ -313,7 +324,7 @@ const getRecord = asyncHandler(async (req, res) => {
     recordId: record._id,
   }).catch(() => {});
 
-  sendSuccess(res, { data: dataObj });
+  sendSuccess(res, { data: filteredData });
 });
 
 /**
@@ -335,7 +346,26 @@ const createRecord = asyncHandler(async (req, res) => {
       success: false,
       message: 'A potential duplicate record was found.',
       duplicates: duplicateCheck.matches,
+      duplicateCheck: { action: duplicateCheck.action },
     });
+  }
+  // DUP-011: return the existing record rather than creating a duplicate.
+  if (duplicateCheck.action === 'use_existing' && duplicateCheck.matches.length > 0) {
+    const existing = duplicateCheck.matches[0].record;
+    return res.status(200).json({
+      success: true,
+      message: 'An existing matching record was returned instead of creating a duplicate.',
+      data: existing,
+      duplicateCheck: { action: 'use_existing', existingRecordId: String(existing._id) },
+    });
+  }
+  // DUP-012: trigger a configured automation flow on match.
+  let flowTriggered = false;
+  if (duplicateCheck.action === 'trigger_flow' && duplicateCheck.flowId) {
+    runAutomation(duplicateCheck.flowId, req.body, req.tenantId, {
+      duplicateMatches: duplicateCheck.matches,
+    }).catch(() => {});
+    flowTriggered = true;
   }
 
   const session = await mongoose.startSession();
@@ -403,16 +433,26 @@ const createRecord = asyncHandler(async (req, res) => {
     // are computed into the context first — they don't exist on the record yet
     // (that happens further down), so without this a rule referencing a formula
     // field would silently compare against null and never fire.
+    // FORM-006: On create every field is "changed" from nothing, so pass an empty
+    // __prev so ISCHANGED() returns true for fields that have a value and false
+    // for fields that are blank — matching Salesforce's create-path semantics.
     const ruleErrors = runObjectValidationRules(obj.validationRules || [], {
       ...validatedData,
       ...computeFormulaValues(validatedData, fields),
+      __prev: {},
     });
-    errors.push(...ruleErrors);
+    // Split: rules with an errorField go into fieldErrors (inline); others go
+    // into the banner errors array.
+    for (const re of ruleErrors) {
+      if (re.errorField) fieldErrors[re.errorField] = re.message;
+      else errors.push(re.message);
+    }
 
-    if (errors.length > 0) {
+    if (errors.length > 0 || Object.keys(fieldErrors).length > 0) {
       throw new ValidationError(errors, 400, {
         fieldErrors,
-        message: errors.join('; '),
+        validationErrors: ruleErrors,
+        message: errors.join('; ') || 'Validation failed.',
       });
     }
 
@@ -460,6 +500,30 @@ const createRecord = asyncHandler(async (req, res) => {
       session,
     });
 
+    // Write a creation snapshot to FieldHistory when enableHistory is on.
+    // Every field present at creation is written as oldValue: null → newValue: <value>.
+    if (obj.enableHistory) {
+      const snapshot = record.toDataObject();
+      const creationDocs = fields
+        .filter((f) => {
+          const v = snapshot[f.apiName];
+          return v !== null && v !== undefined && v !== '';
+        })
+        .map((f) => ({
+          tenantId: req.tenantId,
+          objectApiName,
+          recordId: record._id,
+          fieldApiName: f.apiName,
+          oldValue: null,
+          newValue: snapshot[f.apiName],
+          changedBy: req.user._id,
+          isCreation: true,
+        }));
+      if (creationDocs.length > 0) {
+        FieldHistory.insertMany(creationDocs, { session }).catch(() => {});
+      }
+    }
+
     // Commit transaction
     await session.commitTransaction();
 
@@ -482,6 +546,9 @@ const createRecord = asyncHandler(async (req, res) => {
         data: record.toDataObject(),
         ...(duplicateCheck.action === 'warn' && duplicateCheck.matches.length
           ? { duplicateMatches: duplicateCheck.matches }
+          : {}),
+        ...(flowTriggered
+          ? { flowTriggered: true, flowId: String(duplicateCheck.flowId) }
           : {}),
       },
       'Record created successfully',
@@ -576,17 +643,24 @@ const updateRecord = asyncHandler(async (req, res) => {
       // Recompute formula values from the merged data. `toDataObject()` carries
       // the values stored before this edit, so a rule referencing a formula
       // field would otherwise be checked against a stale figure.
+      // FORM-006: Pass __prev so ISCHANGED() can compare old vs new values.
+      const prevData = record.toDataObject();
       const ruleErrors = runObjectValidationRules(objMeta?.validationRules || [], {
         ...mergedData,
         ...computeFormulaValues(mergedData, fields),
+        __prev: prevData,
       });
-      errors.push(...ruleErrors);
+      for (const re of ruleErrors) {
+        if (re.errorField) fieldErrors[re.errorField] = re.message;
+        else errors.push(re.message);
+      }
     }
 
-    if (errors.length > 0) {
+    if (errors.length > 0 || Object.keys(fieldErrors).length > 0) {
       throw new ValidationError(errors, 400, {
         fieldErrors,
-        message: errors.join('; '),
+        validationErrors: [...(errors.map((m) => ({ message: m, errorField: '' }))), ...Object.entries(fieldErrors).map(([f, m]) => ({ message: m, errorField: f }))],
+        message: errors.join('; ') || 'Validation failed.',
       });
     }
 
@@ -594,6 +668,9 @@ const updateRecord = asyncHandler(async (req, res) => {
     // (a line item moved to a different deal) the rollups on the record it left
     // have to be refreshed too, not just the one it joined.
     const parentLinksBefore = _parentLinks(record.toDataObject(), fields);
+
+    // OBJ-013: snapshot old values for field history (non-blocking).
+    const prevSnapshot = record.toDataObject();
 
     // Only update provided fields
     Object.entries(validatedData).forEach(([key, value]) => {
@@ -609,6 +686,30 @@ const updateRecord = asyncHandler(async (req, res) => {
     record.lastModifiedBy = req.user._id;
     record._searchText = await buildSearchText(record, fields);
     await record.save({ session });
+
+    // OBJ-013: record field-level history when the object has enableHistory=true.
+    {
+      const objMeta = await ObjectMeta.findOne({
+        tenantId: req.tenantId,
+        apiName: objectApiName,
+      }).select('enableHistory').session(session);
+      if (objMeta?.enableHistory) {
+        const historyDocs = Object.keys(validatedData)
+          .filter((k) => prevSnapshot[k] !== validatedData[k])
+          .map((k) => ({
+            tenantId: req.tenantId,
+            objectApiName,
+            recordId: record._id,
+            fieldApiName: k,
+            oldValue: prevSnapshot[k] ?? null,
+            newValue: validatedData[k] ?? null,
+            changedBy: req.user._id,
+          }));
+        if (historyDocs.length > 0) {
+          FieldHistory.insertMany(historyDocs, { session }).catch(() => {});
+        }
+      }
+    }
 
     // ── Deal to Order conversion: trigger when deal stage changes to 'closed_won' ──
     let convertedOrder = null;
@@ -703,6 +804,45 @@ const deleteRecord = asyncHandler(async (req, res) => {
         'This record is locked while an approval is pending.',
         423,
       );
+    }
+
+    // REL-003: enforce block/nullify deletion behaviours on child objects.
+    {
+      const childLookupFields = await FieldMeta.find({
+        tenantId: req.tenantId,
+        lookupObjectApiName: objectApiName,
+        deleteBehavior: { $in: ['block', 'nullify'] },
+      }).select('objectApiName apiName deleteBehavior').session(session);
+
+      for (const lf of childLookupFields) {
+        const childCount = await DynamicRecord.countDocuments({
+          tenantId: req.tenantId,
+          objectApiName: lf.objectApiName,
+          isDeleted: false,
+          [`data.${lf.apiName}`]: id,
+        }).session(session);
+
+        if (childCount === 0) continue;
+
+        if (lf.deleteBehavior === 'block') {
+          throw new AppError(
+            `Cannot delete this record: ${childCount} child record(s) in "${lf.objectApiName}" are linked via "${lf.apiName}". Reassign or delete them first.`,
+            409,
+          );
+        }
+        if (lf.deleteBehavior === 'nullify') {
+          await DynamicRecord.updateMany(
+            {
+              tenantId: req.tenantId,
+              objectApiName: lf.objectApiName,
+              isDeleted: false,
+              [`data.${lf.apiName}`]: id,
+            },
+            { $unset: { [`data.${lf.apiName}`]: '' } },
+            { session },
+          );
+        }
+      }
     }
 
     record.isDeleted = true;
@@ -979,8 +1119,8 @@ async function _cascadeDelete(
   const fieldQuery = FieldMeta.find({
     tenantId,
     lookupObjectApiName: parentObjectApiName,
-    cascadeDelete: true,
     type: { $in: ['lookup', 'master_detail'] },
+    $or: [{ cascadeDelete: true }, { deleteBehavior: 'cascade' }],
   });
   if (session) fieldQuery.session(session);
   const cascadeFields = await fieldQuery;
@@ -1036,6 +1176,72 @@ async function _cascadeDelete(
   return deletedCount;
 }
 
+// LIFE-006: Restore a soft-deleted record from the Recycle Bin.
+// Records soft-deleted more than 30 days ago cannot be restored.
+const restoreRecord = asyncHandler(async (req, res) => {
+  const { objectApiName, id } = req.params;
+
+  const obj = await ObjectMeta.findOne({
+    tenantId: req.tenantId,
+    apiName: objectApiName,
+  });
+  if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
+
+  const record = await DynamicRecord.findOne({
+    _id: id,
+    tenantId: req.tenantId,
+    objectApiName,
+    isDeleted: true,
+  });
+  if (!record) throw new AppError('Deleted record not found.', 404);
+
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  if (record.deletedAt && Date.now() - record.deletedAt.getTime() > THIRTY_DAYS_MS) {
+    throw new AppError(
+      'This record was deleted more than 30 days ago and can no longer be restored.',
+      410,
+    );
+  }
+
+  record.isDeleted = false;
+  record.deletedAt = undefined;
+  record.deletedBy = undefined;
+  await record.save();
+
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'restore',
+    resource: 'DynamicRecord',
+    resourceId: record._id,
+    details: { objectApiName },
+    req,
+  });
+
+  sendSuccess(res, { data: record }, 'Record restored successfully');
+});
+
+// LIFE-006: List deleted records in the Recycle Bin (within 30-day window).
+const listDeletedRecords = asyncHandler(async (req, res) => {
+  const { objectApiName } = req.params;
+  const THIRTY_DAYS_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const { page, limit, skip } = paginate(req.query);
+  const filter = {
+    tenantId: req.tenantId,
+    objectApiName,
+    isDeleted: true,
+    deletedAt: { $gte: THIRTY_DAYS_AGO },
+  };
+
+  const [records, total] = await Promise.all([
+    DynamicRecord.find(filter).skip(skip).limit(limit).sort({ deletedAt: -1 }),
+    DynamicRecord.countDocuments(filter),
+  ]);
+
+  sendSuccess(res, { data: records, total, page, limit }, 'Deleted records retrieved');
+});
+
 export {
   listRecords,
   getRecord,
@@ -1044,6 +1250,8 @@ export {
   deleteRecord,
   bulkDelete,
   mergeRecords,
+  restoreRecord,
+  listDeletedRecords,
   // Exported so the cascade rules can be exercised directly in tests.
   _cascadeDelete,
 };

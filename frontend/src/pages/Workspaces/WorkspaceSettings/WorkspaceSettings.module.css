@@ -83,6 +83,12 @@
   margin-top: var(--spacing-4);
 }
 
+/* Hint text below a field */
+.hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-400);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .formGrid {

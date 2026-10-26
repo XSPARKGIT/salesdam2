@@ -1,7 +1,8 @@
 import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import User from '../models/User.js';
-import { asyncHandler, sendSuccess } from '../utils/errors.js';
+import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { reindexObject } from '../services/searchService.js';
 
 /**
  * GET /api/search?q=term&objects=contact,account&limit=20
@@ -207,4 +208,19 @@ const suggest = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: suggestions });
 });
 
-export { globalSearch, suggest };
+/**
+ * POST /api/search/reindex/:objectApiName
+ * Admin-only: rebuild _searchText for all existing records on an object.
+ */
+const reindexObjectRoute = asyncHandler(async (req, res) => {
+  const { objectApiName } = req.params;
+  const obj = await ObjectMeta.findOne({ tenantId: req.tenantId, apiName: objectApiName });
+  if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
+
+  // Fire-and-forget — returns immediately; reindex runs in background
+  reindexObject(req.tenantId, objectApiName).catch(() => {});
+
+  sendSuccess(res, { data: { objectApiName } }, 'Reindex started — records will appear in search within seconds.');
+});
+
+export { globalSearch, suggest, reindexObjectRoute };

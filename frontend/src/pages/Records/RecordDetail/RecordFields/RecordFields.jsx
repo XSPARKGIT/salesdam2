@@ -85,6 +85,15 @@ const RecordFieldValue = ({ field, value, lookupLabels }) => {
     case 'textarea':
     case 'richtext':
       return <span className={styles.multiline}>{value}</span>;
+    case 'time':
+      return <span>{value}</span>;
+    case 'address': {
+      if (typeof value === 'object' && value !== null) {
+        const parts = [value.street, value.city, value.state, value.postalCode, value.country].filter(Boolean);
+        return <span className={styles.multiline}>{parts.join(', ')}</span>;
+      }
+      return <span>{String(value)}</span>;
+    }
     default:
       return String(value);
   }

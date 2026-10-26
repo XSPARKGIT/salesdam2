@@ -118,6 +118,7 @@ const updateWorkspace = asyncHandler(async (req, res) => {
     icon,
     settings,
     allowedObjects,
+    defaultObjectApiName,
     isDefault,
   } = req.body;
 
@@ -127,6 +128,7 @@ const updateWorkspace = asyncHandler(async (req, res) => {
   if (icon !== undefined) ws.icon = icon;
   if (settings !== undefined) ws.settings = { ...ws.settings, ...settings };
   if (allowedObjects !== undefined) ws.allowedObjects = allowedObjects;
+  if (defaultObjectApiName !== undefined) ws.defaultObjectApiName = defaultObjectApiName?.trim() || '';
 
   // Only one default — clear others first
   if (isDefault && !ws.isDefault) {

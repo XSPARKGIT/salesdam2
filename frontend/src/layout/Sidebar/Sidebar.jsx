@@ -72,6 +72,16 @@ const Sidebar = () => {
     try {
       const ws = await switchWorkspace(workspaceId);
       setWsDropOpen(false);
+      const defaultObj = ws?.defaultObjectApiName;
+      if (defaultObj === '__home__') {
+        navigate('/');
+        return;
+      }
+      if (defaultObj) {
+        navigate(`/o/${defaultObj}`);
+        return;
+      }
+      // No default set — stay put unless we're on an object not in this workspace
       const objectApiName = location.pathname.match(/^\/o\/([^/]+)/)?.[1];
       const allowed = ws?.allowedObjects || [];
       if (objectApiName && allowed.length > 0 && !allowed.includes(objectApiName)) {

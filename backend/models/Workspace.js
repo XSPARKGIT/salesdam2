@@ -54,6 +54,9 @@ const workspaceSchema = new mongoose.Schema(
     // Restrict which CRM objects are visible in this workspace (empty = all)
     allowedObjects: [{ type: String, trim: true }],
 
+    // Default object to land on when switching to this workspace (e.g. 'policy')
+    defaultObjectApiName: { type: String, trim: true, default: '' },
+
     settings: {
       timezone: { type: String, default: 'UTC' },
       currency: { type: String, default: 'USD' },

@@ -108,3 +108,18 @@
   color: var(--color-gray-500);
   margin: 0 0 4px;
 }
+
+.locationRow {
+  display: flex;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-2);
+}
+
+.locationOption {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-700);
+  cursor: pointer;
+}

@@ -72,6 +72,7 @@ import PauseElement from './Elements/PauseElement.jsx';
 import ScreenElement from './Elements/ScreenElement.jsx';
 import NavigateElement from './Elements/NavigateElement.jsx';
 import GeneratePdfElement from './Elements/GeneratePdfElement.jsx';
+import UpdateRelatedRecordsElement from './Elements/UpdateRelatedRecordsElement.jsx';
 
 // ─── Variables panel ──────────────────────────────────────────────────────────
 import VariablesPanel from './Variables/VariablesPanel.jsx';
@@ -161,6 +162,12 @@ const STEP_TYPES = {
   action_update_record: {
     label: 'Update Record',
     icon: <Edit3 size={16} />,
+    color: '#10b981',
+    group: 'Record',
+  },
+  action_update_related_records: {
+    label: 'Update Related Records',
+    icon: <Share2 size={16} />,
     color: '#10b981',
     group: 'Record',
   },
@@ -1039,6 +1046,10 @@ function StepCard({
         return Object.keys(c.fields || {}).length
           ? `Set: ${Object.keys(c.fields).join(', ')}`
           : 'Not configured';
+      case 'action_update_related_records':
+        return c.objectApiName && c.lookupField
+          ? `${c.objectApiName} via ${c.lookupField}`
+          : 'Not configured';
       case 'action_create_record':
         return c.objectApiName ? `Create ${c.objectApiName}` : 'Not configured';
       case 'delete_records':
@@ -1175,6 +1186,18 @@ function StepCard({
           <UpdateRecordConfig
             config={c}
             onChange={setConfig}
+            fields={fields}
+            variables={variables}
+            outputVariables={outputVariables}
+            recordPageFields={recordPageFields}
+          />
+        );
+      case 'action_update_related_records':
+        return (
+          <UpdateRelatedRecordsElement
+            config={c}
+            onChange={setConfig}
+            objects={objects}
             fields={fields}
             variables={variables}
             outputVariables={outputVariables}

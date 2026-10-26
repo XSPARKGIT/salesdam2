@@ -5,6 +5,7 @@ import {
   createObject,
   updateObject,
   deleteObject,
+  renameObject,
 } from '../controllers/objectController.js';
 import {
   listFields,
@@ -13,6 +14,7 @@ import {
   deleteField,
   reorderFields,
   updateRelatedListColumns,
+  renameField,
 } from '../controllers/fieldController.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
@@ -37,6 +39,11 @@ router.delete(
   '/:apiName',
   checkAppPermission('canManageObjects'),
   deleteObject,
+);
+router.post(
+  '/:apiName/rename',
+  checkAppPermission('canManageObjects'),
+  renameObject,
 );
 
 // Fields (nested under objects)
@@ -66,6 +73,11 @@ router.put(
   '/:objectApiName/fields/:lookupFieldApiName/related-list-config',
   checkAppPermission('canManageObjects'),
   updateRelatedListColumns,
+);
+router.post(
+  '/:objectApiName/fields/:fieldApiName/rename',
+  checkAppPermission('canManageObjects'),
+  renameField,
 );
 
 export default router;

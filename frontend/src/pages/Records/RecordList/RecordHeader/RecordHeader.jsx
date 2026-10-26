@@ -1,14 +1,15 @@
 import styles from './RecordHeader.module.css';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
-import { Plus, Trash2, RefreshCw, Calendar, LayoutGrid, GitMerge } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Calendar, LayoutGrid, GitMerge, Download, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../../services/api';
 import Button from '../../../../components/common/Button/Button';
 import ActionFlowRunner from '../../../../components/records/ActionFlowRunner';
 import RecurringTaskModal from '../../../../components/tasks/RecurringTaskModal';
 import DeleteConfirmationModal from '../../../../components/records/DeleteConfirmationModal/DeleteConfirmationModal';
+import ImportResultsModal from './ImportResultsModal';
 import { MAX_MERGE_RECORDS } from '../../RecordMerge/mergeConstants';
 
 const RecordHeader = ({
@@ -26,6 +27,9 @@ const RecordHeader = ({
   const [deleting, setDeleting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [recurringModalOpen, setRecurringModalOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResults, setImportResults] = useState(null);
+  const importInputRef = useRef(null);
 
   const objectLabel = objMeta?.pluralLabel || objectApiName;
   const objectColor = objMeta?.color || 'var(--color-primary)';
@@ -73,6 +77,41 @@ const RecordHeader = ({
     }
   };
 
+
+  const handleExport = async () => {
+    try {
+      const res = await api.get(`/records/${objectApiName}/export`, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${objectApiName}_export.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Export failed.');
+    }
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImporting(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await api.post(`/records/${objectApiName}/import`, form, {
+        headers: { 'Content-Type': undefined },
+      });
+      const data = res.data?.data || res.data;
+      setImportResults(data);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Import failed.');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className={styles.header}>
@@ -159,6 +198,38 @@ const RecordHeader = ({
         <Button
           variant="secondary"
           size="sm"
+          icon={<Download size={14} />}
+          onClick={handleExport}
+          title="Export all records as CSV"
+        >
+          Export
+        </Button>
+
+        {perms.canCreate && (
+          <>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv"
+              style={{ display: 'none' }}
+              onChange={handleImportFile}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Upload size={14} />}
+              loading={importing}
+              onClick={() => importInputRef.current?.click()}
+              title="Import records from CSV"
+            >
+              Import
+            </Button>
+          </>
+        )}
+
+        <Button
+          variant="secondary"
+          size="sm"
           icon={<RefreshCw size={14} />}
           onClick={refetch}
         >
@@ -185,6 +256,12 @@ const RecordHeader = ({
             Calendar
           </Button>
         )}
+
+        <Link to={`/o/${objectApiName}/deleted`}>
+          <Button size="sm" variant="secondary" icon={<Trash2 size={14} />}>
+            Recycle Bin
+          </Button>
+        </Link>
 
         {perms.canCreate && !['quote', 'invoice'].includes(objectApiName) && (
           <Link
@@ -217,6 +294,13 @@ const RecordHeader = ({
             refetch();
             setRecurringModalOpen(false);
           }}
+        />
+      )}
+
+      {importResults && (
+        <ImportResultsModal
+          results={importResults}
+          onClose={() => setImportResults(null)}
         />
       )}
     </div>

@@ -129,6 +129,9 @@ const RelatedList = ({
   relatedField,
   relatedObjectMeta,
   allRelatedFields,
+  isThrough = false,
+  junctionObjectMeta = null,
+  junctionRelatedField = null,
 }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -185,6 +188,7 @@ const RelatedList = ({
     parentObjectApiName,
     parentId,
     relatedField?.apiName,
+    isThrough ? 'through' : 'direct',
     page,
   ];
 
@@ -195,6 +199,45 @@ const RelatedList = ({
       if (!relatedField?.apiName || !parentId) {
         return { data: [], pagination: { total: 0 } };
       }
+
+      // Through-object query: A → Junction → B
+      // junctionRelatedField points from junction to US (parent A)
+      // relatedField points from junction to the other side (B)
+      if (isThrough && junctionObjectMeta && junctionRelatedField) {
+        const junctionFilter = { [junctionRelatedField.apiName]: parentId };
+        const jRes = await api.get(`/records/${junctionObjectMeta.apiName}`, {
+          params: {
+            page: 1,
+            limit: 200,
+            filter: JSON.stringify(junctionFilter),
+            sort: '-createdAt',
+          },
+        });
+        const junctionRecords = jRes.data.data || [];
+
+        // Extract IDs of the other-side (B) records
+        const otherIds = junctionRecords
+          .map((jr) => jr[relatedField.apiName])
+          .filter(Boolean);
+
+        if (otherIds.length === 0) return { data: [], pagination: { total: 0 } };
+
+        // Fetch B records by their IDs
+        const bRes = await api.get(`/records/${relatedObjectMeta.apiName}`, {
+          params: {
+            page,
+            limit: PAGE_SIZE,
+            filter: JSON.stringify({ _id: { $in: otherIds } }),
+            sort: '-createdAt',
+          },
+        });
+        return {
+          data: bRes.data.data || [],
+          pagination: bRes.data.pagination || { total: otherIds.length },
+        };
+      }
+
+      // Direct relationship query
       const filter = { [relatedField.apiName]: parentId };
       const res = await api.get(`/records/${relatedObjectMeta.apiName}`, {
         params: {
@@ -526,7 +569,14 @@ const RelatedList = ({
             return <IconComp size={14} />;
           })()}
         </div>
-        <span className={styles.title}>{objLabel}</span>
+        <span className={styles.title}>
+          {objLabel}
+          {isThrough && junctionObjectMeta && (
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-gray-400)', marginLeft: 6 }}>
+              via {junctionObjectMeta.label}
+            </span>
+          )}
+        </span>
         <span className={styles.count}>{total}</span>
         <div
           className={styles.headerActions}
@@ -539,7 +589,7 @@ const RelatedList = ({
           >
             <Columns size={13} />
           </button>
-          {!['quote', 'invoice'].includes(relatedObjectMeta?.apiName) && (
+          {!isThrough && !['quote', 'invoice'].includes(relatedObjectMeta?.apiName) && (
             <button
               className={styles.addBtn}
               onClick={openCreateModal}
@@ -616,7 +666,7 @@ const RelatedList = ({
               {records.length === 0 ? (
                 <div className={styles.empty}>
                   No {objLabel.toLowerCase()} found.
-                  {!['quote', 'invoice'].includes(relatedObjectMeta?.apiName) && (
+                  {!isThrough && !['quote', 'invoice'].includes(relatedObjectMeta?.apiName) && (
                     <>
                       {' '}
                       <button

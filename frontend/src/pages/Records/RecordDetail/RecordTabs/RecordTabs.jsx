@@ -1,7 +1,7 @@
 import { Zap, History } from 'lucide-react';
 import styles from '../RecordDetail.module.css';
 
-const RecordTabs = ({ activeTab, setActiveTab, customScreens, embeddedFlows }) => {
+const RecordTabs = ({ activeTab, setActiveTab, customScreens, embeddedFlows, showHistory }) => {
   return (
     <div className={styles.screenTabs}>
       <button
@@ -17,6 +17,15 @@ const RecordTabs = ({ activeTab, setActiveTab, customScreens, embeddedFlows }) =
         <History size={12} style={{ marginRight: 4 }} />
         Activity
       </button>
+      {showHistory && (
+        <button
+          className={`${styles.screenTab} ${activeTab === 'field_history' ? styles.screenTabActive : ''}`}
+          onClick={() => setActiveTab('field_history')}
+        >
+          <History size={12} style={{ marginRight: 4 }} />
+          Field History
+        </button>
+      )}
       {customScreens?.map((screen) => (
         <button
           key={screen?._id}

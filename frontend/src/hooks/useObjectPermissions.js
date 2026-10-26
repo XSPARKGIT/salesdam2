@@ -12,8 +12,26 @@ import { useAuth } from './useAuth';
  *   canEditField(fieldApiName)   {(string) => boolean}
  *   fieldPermissions             {Array}
  */
+const CLOSED = {
+  canCreate:  false,
+  canRead:    false,
+  canUpdate:  false,
+  canDelete:  false,
+  canExport:  false,
+  canImport:  false,
+  canViewField:  () => false,
+  canEditField:  () => false,
+  fieldPermissions: [],
+  loading: false,
+};
+
 export function useObjectPermissions(objectApiName) {
-  const { user, isAdmin, isSuperuser } = useAuth();
+  const { user, isAdmin, isSuperuser, loading: authLoading } = useAuth();
+
+  // While auth is still resolving, return fail-closed so no fields flash visible
+  if (authLoading) {
+    return { ...CLOSED, loading: true };
+  }
 
   // Superuser / admin — unrestricted
   if (isSuperuser || isAdmin) {
@@ -27,23 +45,14 @@ export function useObjectPermissions(objectApiName) {
       canViewField:  () => true,
       canEditField:  () => true,
       fieldPermissions: [],
+      loading: false,
     };
   }
 
-  // No role assigned — no access
+  // No role entry for this object — fail closed (no fields, no access)
   const perm = user?.role?.objectPermissions?.find(p => p.objectApiName === objectApiName);
   if (!perm) {
-    return {
-      canCreate:  false,
-      canRead:    false,
-      canUpdate:  false,
-      canDelete:  false,
-      canExport:  false,
-      canImport:  false,
-      canViewField:  () => true,  // don't hide fields for no-role users (they can't access the page anyway)
-      canEditField:  () => true,
-      fieldPermissions: [],
-    };
+    return { ...CLOSED };
   }
 
   const fps = perm.fieldPermissions || [];
@@ -67,5 +76,6 @@ export function useObjectPermissions(objectApiName) {
     },
 
     fieldPermissions: fps,
+    loading: false,
   };
 }

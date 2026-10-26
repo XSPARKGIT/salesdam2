@@ -29,9 +29,10 @@ const FieldsTab = ({ objectApiName, allObjects = [] }) => {
   // key, so both have to be dropped or new columns won't be selectable there.
   const invalidateFields = () => {
     queryClient.invalidateQueries({ queryKey: ['fields', objectApiName] });
-    queryClient.invalidateQueries({
-      queryKey: ['object-fields', objectApiName],
-    });
+    queryClient.invalidateQueries({ queryKey: ['object-fields', objectApiName] });
+    // Invalidate the object itself so ObjectBuilder's fields list (used by the
+    // junction warning in DetailsTab) reflects the new field immediately.
+    queryClient.invalidateQueries({ queryKey: ['object', objectApiName] });
   };
 
   const handleFieldSaved = () => {

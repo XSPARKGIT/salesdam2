@@ -49,8 +49,10 @@ const check = async (tenantId, objectApiName, data, { excludeRecordId } = {}) =>
   const nameField = objMeta?.nameFieldApiName || 'name';
 
   const matchesById = new Map();
+  // action priority: block > trigger_flow > use_existing > present_matches > warn > allow
+  const ACTION_PRIORITY = { block: 5, trigger_flow: 4, use_existing: 3, present_matches: 2, warn: 1, allow: 0 };
   let action = 'allow';
-  let anyMatch = false;
+  let matchedFlowId = null;
 
   for (const rule of rules) {
     const conditions = [];
@@ -86,14 +88,18 @@ const check = async (tenantId, objectApiName, data, { excludeRecordId } = {}) =>
     const found = await DynamicRecord.find(query).limit(MAX_MATCHES);
     if (found.length === 0) continue;
 
-    anyMatch = true;
-    if (rule.onMatch === 'block') action = 'block';
+    const ruleAction = rule.onMatch || 'warn';
+    if ((ACTION_PRIORITY[ruleAction] ?? 0) > (ACTION_PRIORITY[action] ?? 0)) {
+      action = ruleAction;
+      if (ruleAction === 'trigger_flow') matchedFlowId = rule.flowId ?? null;
+    }
 
     const fields = (rule.conditions || []).map((c) => c.field);
     for (const rec of found) {
       const key = String(rec._id);
       if (!matchesById.has(key)) {
         matchesById.set(key, {
+          record: rec,
           recordId: key,
           name: rec.getField(nameField) ?? '',
           matchedFields: [],
@@ -106,8 +112,8 @@ const check = async (tenantId, objectApiName, data, { excludeRecordId } = {}) =>
     }
   }
 
-  if (action !== 'block' && anyMatch) action = 'warn';
-  return { matches: [...matchesById.values()], action };
+  const matches = [...matchesById.values()];
+  return { matches, action, flowId: matchedFlowId };
 };
 
 export default { check, NON_BLOCKING_ACTIONS };

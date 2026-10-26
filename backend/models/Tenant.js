@@ -51,7 +51,7 @@ const tenantSchema = new mongoose.Schema(
     limits: {
       maxUsers: { type: Number, default: 10 },
       maxRecords: { type: Number, default: 10000 },
-      maxObjects: { type: Number, default: 25 },
+      maxObjects: { type: Number, default: 500 },
       maxAutomations: { type: Number, default: 10 },
       storageGB: { type: Number, default: 1 },
     },

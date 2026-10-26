@@ -1,5 +1,9 @@
 import FieldMeta from '../models/FieldMeta.js';
 import ObjectMeta from '../models/ObjectMeta.js';
+import GlobalValueSet from '../models/GlobalValueSet.js';
+import Role from '../models/Role.js';
+import logger from '../utils/logger.js';
+import { reindexObject } from '../services/searchService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
 import { validateFormula } from '../services/formulaParser.js';
@@ -220,6 +224,28 @@ const createField = asyncHandler(async (req, res) => {
       );
   }
 
+  // REL-005: Only one master-detail relationship allowed per object,
+  // UNLESS it is a junction object (REL-006 exemption — two master-detail fields allowed).
+  if (req.body.type === 'master_detail') {
+    // Master-detail always cascade-deletes children when the parent is removed.
+    req.body.cascadeDelete = true;
+
+    const limit = obj.isJunctionObject ? 2 : 1;
+    const existingMasterDetail = await FieldMeta.countDocuments({
+      tenantId: req.tenantId,
+      objectId: obj._id,
+      type: 'master_detail',
+    });
+    if (existingMasterDetail >= limit) {
+      throw new AppError(
+        obj.isJunctionObject
+          ? `Junction object "${objectApiName}" already has ${existingMasterDetail} master-detail relationship(s). Junction objects support at most 2.`
+          : `Object "${objectApiName}" already has a master-detail relationship. Only one master-detail field is allowed per object.`,
+        400,
+      );
+    }
+  }
+
   // The model stores the expression on `formula`; accept the older
   // `formulaExpression` alias so existing clients keep working. Without this
   // the value was silently dropped by Mongoose strict mode and formula fields
@@ -263,6 +289,48 @@ const createField = asyncHandler(async (req, res) => {
     await assertValidRollup(req.body, req.tenantId, objectApiName);
   }
 
+  // PICK-005: at most one isDefault=true value per picklist.
+  if (['picklist', 'multipicklist'].includes(req.body.type) && Array.isArray(req.body.picklistValues)) {
+    const defaultCount = req.body.picklistValues.filter((v) => v.isDefault).length;
+    if (defaultCount > 1) {
+      throw new AppError(
+        `Only one picklist value may be marked as the default. ${defaultCount} default values were supplied.`,
+        400,
+      );
+    }
+  }
+
+  // PICK-002: when a GlobalValueSet is linked, copy its values into the field
+  // and ignore any inline picklistValues the caller passed.
+  if (req.body.globalValueSetId) {
+    if (!['picklist', 'multipicklist'].includes(req.body.type)) {
+      throw new AppError('Only picklist and multipicklist fields can be linked to a global value set.', 400);
+    }
+    const gvs = await GlobalValueSet.findOne({
+      _id: req.body.globalValueSetId,
+      tenantId: req.tenantId,
+    });
+    if (!gvs) {
+      throw new AppError('Global value set not found.', 404);
+    }
+    req.body.picklistValues = gvs.values;
+  }
+
+  // When no section is provided, inherit the most common section already used
+  // by this object's fields so the new field lands alongside existing ones
+  // instead of being placed in a generic "Information" bucket.
+  if (!req.body.section) {
+    const sectionCounts = await FieldMeta.aggregate([
+      { $match: { tenantId: req.tenantId, objectId: obj._id, section: { $exists: true, $ne: null } } },
+      { $group: { _id: '$section', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 1 },
+    ]);
+    if (sectionCounts.length > 0) {
+      req.body.section = sectionCounts[0]._id;
+    }
+  }
+
   const field = await FieldMeta.create({
     tenantId: req.tenantId,
     objectId: obj._id,
@@ -281,6 +349,26 @@ const createField = asyncHandler(async (req, res) => {
     req,
   });
 
+  // BRD §9.1 secure-by-default: add a hidden field permission to every role
+  // that already has an object permission for this object.
+  try {
+    await Role.updateMany(
+      { tenantId: req.tenantId, 'objectPermissions.objectApiName': objectApiName },
+      {
+        $push: {
+          'objectPermissions.$[perm].fieldPermissions': {
+            fieldApiName: field.apiName,
+            canView: false,
+            canEdit: false,
+          },
+        },
+      },
+      { arrayFilters: [{ 'perm.objectApiName': objectApiName }] },
+    );
+  } catch (err) {
+    logger.warn(`Failed to provision field permissions for new field "${field.apiName}": ${err.message}`);
+  }
+
   sendSuccess(res, { data: field }, 'Field created successfully', 201);
 });
 
@@ -296,13 +384,18 @@ const updateField = asyncHandler(async (req, res) => {
   });
   if (!field) throw new AppError(`Field "${fieldApiName}" not found.`, 404);
 
-  // System fields can only have their label updated
+  // System fields have limited editability. Picklist system fields (e.g. the
+  // auto-provisioned Record Type field) also allow picklistValues so record
+  // types can be configured after the field is provisioned (RTYPE-003).
   if (field.isSystem) {
     const systemFieldAllowedUpdates = ['label', 'helpText'];
-    for (const [key, value] of Object.entries(req.body)) {
+    if (field.type === 'picklist' || field.type === 'multipicklist') {
+      systemFieldAllowedUpdates.push('picklistValues');
+    }
+    for (const [key] of Object.entries(req.body)) {
       if (!systemFieldAllowedUpdates.includes(key)) {
         throw new AppError(
-          `Cannot modify "${key}" on system field. Only label and helpText can be edited for system fields.`,
+          `Cannot modify "${key}" on system field "${field.apiName}". Allowed: ${systemFieldAllowedUpdates.join(', ')}.`,
           403,
         );
       }
@@ -337,6 +430,7 @@ const updateField = asyncHandler(async (req, res) => {
     'lookupObjectApiName',
     'lookupDisplayField',
     'cascadeDelete',
+    'deleteBehavior',
     // auto-number
     'autoNumberPrefix',
     'autoNumberPadding',
@@ -353,6 +447,8 @@ const updateField = asyncHandler(async (req, res) => {
     // structured validation rules
     'validations',
     'formulaValidation',
+    // shared picklist catalogue
+    'globalValueSetId',
   ];
 
   // Accept the older `formulaExpression` alias (see createField). Done after
@@ -408,11 +504,45 @@ const updateField = asyncHandler(async (req, res) => {
     await assertValidRollup(merged, req.tenantId, field.objectApiName);
   }
 
+  // PICK-002 (update): sync GVS values when a global value set is being linked or is already linked.
+  const incomingGvsId = req.body.globalValueSetId ?? field.globalValueSetId;
+  if (incomingGvsId && ['picklist', 'multipicklist'].includes(field.type)) {
+    const gvs = await GlobalValueSet.findOne({ _id: incomingGvsId, tenantId: req.tenantId });
+    if (!gvs) throw new AppError('Global value set not found.', 404);
+    req.body.picklistValues = gvs.values;
+  }
+
+  // PICK-005: at most one isDefault=true value per picklist on update.
+  if (
+    ['picklist', 'multipicklist'].includes(field.type) &&
+    Array.isArray(req.body.picklistValues)
+  ) {
+    const defaultCount = req.body.picklistValues.filter((v) => v.isDefault).length;
+    if (defaultCount > 1) {
+      throw new AppError(
+        `Only one picklist value may be marked as the default. ${defaultCount} default values were supplied.`,
+        400,
+      );
+    }
+  }
+
+  const wasSearchable = field.isSearchable;
+
   allowedUpdates.forEach((key) => {
-    if (req.body[key] !== undefined) field[key] = req.body[key];
+    if (req.body[key] !== undefined) {
+      // Don't overwrite formulaReturnType with an empty string on non-formula
+      // fields — the enum rejects '' and the value is irrelevant outside formulas.
+      if (key === 'formulaReturnType' && req.body[key] === '' && field.type !== 'formula') return;
+      field[key] = req.body[key];
+    }
   });
   field.lastModifiedBy = req.user._id;
   await field.save();
+
+  // If isSearchable was just turned on, rebuild _searchText for all existing records
+  if (!wasSearchable && field.isSearchable) {
+    reindexObject(req.tenantId, field.objectApiName).catch(() => {});
+  }
 
   sendSuccess(res, { data: field }, 'Field updated successfully');
 });
@@ -472,6 +602,7 @@ const updateRelatedListColumns = asyncHandler(async (req, res) => {
   const { childObjectApiName, lookupFieldApiName, columns } = req.body;
 
   const field = await FieldMeta.findOne({
+    tenantId: req.tenantId,
     objectApiName: childObjectApiName,
     apiName: lookupFieldApiName,
     type: { $in: ['lookup', 'master_detail'] },
@@ -497,6 +628,60 @@ const updateRelatedListColumns = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * POST /api/objects/:objectApiName/fields/:fieldApiName/rename
+ * Renames a custom field's apiName and migrates all DynamicRecord data keys.
+ * Body: { newApiName: string }
+ */
+const renameField = asyncHandler(async (req, res) => {
+  const { objectApiName, fieldApiName } = req.params;
+  const { newApiName } = req.body;
+  const tenantId = req.tenantId;
+
+  if (!newApiName) throw new AppError('"newApiName" is required.', 400);
+  if (!/^[a-z][a-z0-9_]*$/.test(newApiName) || /__|_$/.test(newApiName)) {
+    throw new AppError(
+      'New API name must start with a lowercase letter and contain only lowercase letters, digits, and single underscores.',
+      400,
+    );
+  }
+  if (newApiName === fieldApiName) throw new AppError('New API name is the same as the current name.', 400);
+
+  const field = await FieldMeta.findOne({ tenantId, objectApiName, apiName: fieldApiName });
+  if (!field) throw new AppError(`Field "${fieldApiName}" not found on object "${objectApiName}".`, 404);
+  if (field.isSystem) throw new AppError('System fields cannot be renamed.', 403);
+
+  const conflict = await FieldMeta.findOne({ tenantId, objectApiName, apiName: newApiName });
+  if (conflict) throw new AppError(`A field with API name "${newApiName}" already exists on "${objectApiName}".`, 409);
+
+  // Update the FieldMeta document
+  await FieldMeta.updateOne({ tenantId, _id: field._id }, { $set: { apiName: newApiName } });
+
+  // Rename the data key across all DynamicRecord documents that carry this field.
+  // $rename works for document paths including nested Map keys.
+  const { modifiedCount: recordCount } = await DynamicRecord.updateMany(
+    { tenantId, objectApiName, [`data.${fieldApiName}`]: { $exists: true } },
+    { $rename: { [`data.${fieldApiName}`]: `data.${newApiName}` } },
+  );
+
+  await audit({
+    tenantId,
+    userId: req.user._id,
+    action: 'rename',
+    resource: 'FieldMeta',
+    resourceId: field._id,
+    details: { objectApiName, from: fieldApiName, to: newApiName, recordCount },
+    req,
+  });
+
+  const updated = await FieldMeta.findOne({ tenantId, objectApiName, apiName: newApiName });
+  sendSuccess(
+    res,
+    { data: updated, migration: { recordCount } },
+    `Field renamed from "${fieldApiName}" to "${newApiName}". ${recordCount} record(s) data key migrated.`,
+  );
+});
+
 export {
   listFields,
   createField,
@@ -504,6 +689,6 @@ export {
   deleteField,
   reorderFields,
   updateRelatedListColumns,
-  // Exported so the rollup configuration rules can be exercised directly.
+  renameField,
   assertValidRollup,
 };
