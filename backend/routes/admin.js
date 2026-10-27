@@ -79,7 +79,7 @@ router.get('/settings/lead-approval-settings', getLeadApprovalSettings);
 
 // Stats and logs — admin+
 router.get('/stats', requireAdmin, getSystemStats);
-router.get('/logs', requireAdmin, getAuditLogs);
+router.get('/logs', getAuditLogs);
 
 // Admin settings (company profile, targets, invoice/quote) — admin only
 router.get('/settings', requireAdmin, getAdminSettings);

@@ -41,7 +41,13 @@ const getAuditLogs = asyncHandler(async (req, res) => {
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const query = { tenantId: req.tenantId };
-  if (userId) query.userId = userId;
+  // Non-admins may only see their own audit events.
+  const isAdmin = req.user?.role?.name === 'admin' || req.user?.role?.name === 'superuser';
+  if (!isAdmin) {
+    query.userId = req.user._id;
+  } else if (userId) {
+    query.userId = userId;
+  }
   if (action) query.action = action;
 
   const [logs, total] = await Promise.all([

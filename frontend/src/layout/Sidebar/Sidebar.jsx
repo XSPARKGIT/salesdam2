@@ -224,6 +224,14 @@ const Sidebar = () => {
             onNavigate={handleMobileNav}
           />
 
+          <SidebarNavItem
+            to="/admin/audit-logs"
+            icon={<ScrollText size={17} />}
+            label="Audit Logs"
+            collapsed={sidebarCollapsed}
+            onNavigate={handleMobileNav}
+          />
+
           <SidebarSetup
             isAdmin={isAdmin}
             hasPermission={hasPermission}

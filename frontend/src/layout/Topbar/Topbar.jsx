@@ -414,6 +414,12 @@ const Topbar = () => {
               )}
               <button
                 className={styles.dropdownItem}
+                onClick={() => { navigate('/admin/audit-logs'); setProfileOpen(false); }}
+              >
+                Audit Logs
+              </button>
+              <button
+                className={styles.dropdownItem}
                 onClick={() => { setProfileOpen(false); openWelcome(); }}
               >
                 <Sparkles size={14} /> Welcome guide

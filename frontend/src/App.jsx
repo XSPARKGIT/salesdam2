@@ -729,7 +729,7 @@ export default function App() {
       <Route
         path="/admin/audit-logs"
         element={
-          <Guard requireAdmin>
+          <Guard>
             <AuditLogs />
           </Guard>
         }
