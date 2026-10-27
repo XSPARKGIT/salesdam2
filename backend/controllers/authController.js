@@ -237,16 +237,21 @@ const register = asyncHandler(async (req, res) => {
  * POST /api/auth/login
  */
 const login = asyncHandler(async (req, res) => {
-  const { username, password, tenantId, isAdminLogin } = req.body;
+  const { email, username, password, tenantId, isAdminLogin } = req.body;
 
-  // Find user by username + tenant (or just username for cross-tenant lookup)
+  // Email is the sole login identifier. `username` is accepted only as a
+  // legacy alias for the email field and is never matched against the stored
+  // username/display handle.
+  const identifier = String(email || username || '').trim().toLowerCase();
+
+  // Find user by email + tenant (or by email for cross-tenant lookup)
   let user;
   if (tenantId) {
-    user = await User.findOne({ username: username?.toLowerCase(), tenantId })
+    user = await User.findOne({ email: identifier, tenantId })
       .select('+password')
       .populate('role');
   } else {
-    user = await User.findOne({ username: username?.toLowerCase(), status: 'active' })
+    user = await User.findOne({ email: identifier, status: 'active' })
       .select('+password')
       .populate('role');
   }
@@ -262,7 +267,7 @@ const login = asyncHandler(async (req, res) => {
       .map(u => u.trim().toLowerCase())
       .filter(u => u);
 
-    if (!allowedSuperusers.includes(username.toLowerCase())) {
+    if (!allowedSuperusers.includes(identifier)) {
       throw new AppError('You do not have access to the admin dashboard.', 403);
     }
   }

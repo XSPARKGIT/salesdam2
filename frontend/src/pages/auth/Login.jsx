@@ -15,7 +15,7 @@ const Login = () => {
 
   // Get username from the URL
   const searchParams = new URLSearchParams(location.search);
-  const prefilledUsername = searchParams.get('username') || '';
+  const prefilledUsername = searchParams.get('email') || searchParams.get('username') || '';
 
   const [formSubmitErrors, setFormSubmitErrors] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,13 +36,13 @@ const Login = () => {
 
     if (credentials.password === '') {
       setTriedEmptyPassword(true);
-      setFormSubmitErrors('Please enter username and password');
+      setFormSubmitErrors('Please enter email and password');
       credentialsEmpty = true;
     }
 
     if (credentials.username === '') {
       setTriedEmptyUsername(true);
-      setFormSubmitErrors('Please enter username and password');
+      setFormSubmitErrors('Please enter email and password');
       credentialsEmpty = true;
     }
 
@@ -64,7 +64,7 @@ const Login = () => {
       setFormSubmitErrors(
         error?.response?.data?.message ||
           error?.message ||
-          'Please check your username and password.',
+          'Please check your email and password.',
       );
     }
   };
@@ -127,7 +127,7 @@ const Login = () => {
             <form onSubmit={handleSubmit} noValidate className={styles.form}>
               <FormInput
                 id="username"
-                label="Username"
+                label="Email"
                 name="username"
                 type="text"
                 value={credentials.username}
