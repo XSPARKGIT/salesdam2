@@ -364,10 +364,11 @@ const resetUserPassword = asyncHandler(async (req, res) => {
   const user = await User.findOne({
     _id: req.params.id,
     tenantId: req.tenantId,
-  });
+  }).select('+password');
   if (!user) throw new AppError('User not found.', 404);
 
   user.password = newPassword; // pre-save hook will hash it
+  user.markModified('password');
   user.failedLoginAttempts = 0;
   user.lockedUntil = undefined;
   await user.save();
