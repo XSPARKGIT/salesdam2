@@ -7,7 +7,7 @@ import {
   verifyPayment,
 } from '../controllers/registrationController.js';
 import { validate, schemas } from '../utils/validators.js';
-import { authLimiter } from '../middleware/rateLimiter.js';
+import { authLimiter, authIpLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -17,6 +17,7 @@ const router = express.Router();
  */
 router.post(
   '/free',
+  authIpLimiter,
   authLimiter,
   validate(schemas.freeRegistration),
   registerWithFreePlan,
@@ -28,6 +29,7 @@ router.post(
  */
 router.post(
   '/paystack',
+  authIpLimiter,
   authLimiter,
   validate(schemas.paystackRegistration),
   registerWithPaystack,
