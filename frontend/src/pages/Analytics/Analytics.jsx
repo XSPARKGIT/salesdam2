@@ -36,6 +36,10 @@ export default function Analytics() {
   const [selectedObject, setSelectedObject] = useState('');
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Cross-object reporting inputs
+  const [relatedLookupField, setRelatedLookupField] = useState('');
+  const [relatedObject, setRelatedObject] = useState('');
+  const [relatedGroupBy, setRelatedGroupBy] = useState('');
 
   const fetchData = async () => {
     setLoading(true);
@@ -59,18 +63,24 @@ export default function Analytics() {
   const runObjectReport = async (objectApiName) => {
     if (!objectApiName) return;
     try {
-      const res = await api.post('/analytics/report', {
+      const payload = {
         objectApiName,
-        groupBy: 'status',
         aggregations: [{ field: 'id', func: 'count', alias: 'count' }],
-      });
+      };
+      if (relatedLookupField && relatedObject && relatedGroupBy) {
+        payload.relatedLookup = { field: relatedLookupField, object: relatedObject };
+        payload.relatedGroupBy = relatedGroupBy;
+      } else {
+        payload.groupBy = 'status';
+      }
+      const res = await api.post('/analytics/report', payload);
       setReportData(res.data.data.results || []);
     } catch (err) {}
   };
 
   useEffect(() => {
     if (selectedObject) runObjectReport(selectedObject);
-  }, [selectedObject]);
+  }, [selectedObject, relatedLookupField, relatedObject, relatedGroupBy]);
 
   if (loading)
     return (
@@ -219,6 +229,33 @@ export default function Analytics() {
                 </option>
               ))}
             </select>
+            {/* Cross-object reporting inputs */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <input
+                className={styles.select}
+                placeholder="Lookup field (e.g. deal)"
+                value={relatedLookupField}
+                onChange={(e) => setRelatedLookupField(e.target.value)}
+              />
+              <select
+                className={styles.select}
+                value={relatedObject}
+                onChange={(e) => setRelatedObject(e.target.value)}
+              >
+                <option value="">Related object...</option>
+                {objects.map((o) => (
+                  <option key={o.apiName} value={o.apiName}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                className={styles.select}
+                placeholder="Group by related field (e.g. stage)"
+                value={relatedGroupBy}
+                onChange={(e) => setRelatedGroupBy(e.target.value)}
+              />
+            </div>
           </div>
           {reportData.length > 0 && (
             <ResponsiveContainer width="100%" height={220}>

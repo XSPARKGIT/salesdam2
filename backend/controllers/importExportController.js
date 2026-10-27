@@ -185,6 +185,7 @@ function buildFilterQuery(filters, fieldMap) {
  */
 export const exportRecords = asyncHandler(async (req, res) => {
   const { objectApiName } = req.params;
+  const { fields: fieldsParam } = req.query;
 
   const [obj, fields] = await Promise.all([
     ObjectMeta.findOne({ tenantId: req.tenantId, apiName: objectApiName }),
@@ -194,16 +195,26 @@ export const exportRecords = asyncHandler(async (req, res) => {
   ]);
   if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
 
-  // Determine which fields the user may see
+  // Determine which fields the user may see (FLS enforcement)
   const allFieldNames = fields.map((f) => f.apiName);
   const visibleNames = await getVisibleFields(
     req.user,
     objectApiName,
     allFieldNames,
   );
-  const visibleFields = fields.filter(
+  let visibleFields = fields.filter(
     (f) => visibleNames.includes(f.apiName) && !f.isSystem,
   );
+
+  // Field-selectable export: honor requested subset, but never beyond FLS
+  if (fieldsParam) {
+    const requested = new Set(
+      fieldsParam.split(',').map((s) => s.trim()).filter(Boolean),
+    );
+    visibleFields = visibleFields.filter((f) => requested.has(f.apiName));
+  }
+  if (visibleFields.length === 0)
+    throw new AppError('No exportable fields selected.', 400);
 
   // Data access filter — export only records the user is allowed to see
   const dataFilter = await buildDataAccessFilter(req.user);

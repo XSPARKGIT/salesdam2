@@ -35,7 +35,7 @@ async function main() {
       dbPath: DB_PATH,
       ip: '127.0.0.1',
       port: Number(process.env.MONGO_PORT || 27017),
-      storageEngine: 'wiredTiger',
+      storageEngine: 'ephemeralForTest',
     },
   });
 

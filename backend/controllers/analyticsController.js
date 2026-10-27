@@ -50,6 +50,9 @@ const runReport = asyncHandler(async (req, res) => {
     filters = {},
     dateRange,
     limit = 100,
+    // Cross-object reporting: join to a related object via a lookup/master-detail field
+    relatedLookup, // { field: 'deal', object: 'deal' }
+    relatedGroupBy, // field on the related object to group by, e.g. 'stage'
   } = req.body;
 
   if (!objectApiName) throw new AppError('objectApiName is required.', 400);
@@ -87,9 +90,40 @@ const runReport = asyncHandler(async (req, res) => {
 
   const pipeline = [{ $match: match }];
 
+  // Cross-object join: attach the related record (one lookup/master-detail hop)
+  if (relatedLookup?.field && relatedLookup?.object) {
+    pipeline.push({
+      $lookup: {
+        from: 'dynamicrecords',
+        let: { relatedId: { $toObjectId: `$data.${relatedLookup.field}` } },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$_id', '$$relatedId'] },
+              tenantId: tenantObjId,
+              objectApiName: relatedLookup.object,
+              isDeleted: false,
+            },
+          },
+          { $project: { data: 1 } },
+        ],
+        as: '_related',
+      },
+    });
+    pipeline.push({ $unwind: { path: '$_related', preserveNullAndEmptyArrays: true } });
+  }
+
+  // Determine the effective group-by path
+  const groupPath =
+    relatedLookup?.field && relatedGroupBy
+      ? `$_related.data.${relatedGroupBy}`
+      : groupBy
+        ? `$data.${groupBy}`
+        : null;
+
   // Group stage
-  if (groupBy) {
-    const groupStage = { _id: `$data.${groupBy}` };
+  if (groupPath) {
+    const groupStage = { _id: groupPath };
 
     aggregations.forEach(({ field, func, alias }) => {
       const key = alias || `${func}_${field}`;

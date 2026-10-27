@@ -42,6 +42,8 @@ import DashboardBuilder from './pages/Dashboards/DashboardBuilder';
 import PdfTemplateList from './pages/PdfTemplates/PdfTemplateList';
 import PdfTemplateEditor from './pages/PdfTemplates/PdfTemplateEditor';
 import AdminSettings from './pages/Admin/AdminSettings';
+import Deployments from './pages/Admin/Deployments';
+import CustomCodePage from './pages/Admin/CustomCode';
 import CompanyInfo from './pages/Admin/settings/CompanyInfo';
 import SalesTargets from './pages/Admin/settings/SalesTargets';
 import InvoiceQuote from './pages/Admin/settings/InvoiceQuote';
@@ -716,6 +718,18 @@ export default function App() {
         />
       )}
 
+      <Route
+        path="/admin/deployments"
+        element={
+          <Deployments />
+        }
+      />
+      <Route
+        path="/admin/custom-code"
+        element={
+          <CustomCodePage />
+        }
+      />
       <Route
         path="/admin/incidents"
         element={

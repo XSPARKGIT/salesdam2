@@ -326,6 +326,20 @@ const executeNode = async (node, allNodes, record, ctx, tenantId) => {
       await executeCreateRecord(node.config, record, ctx, tenantId);
       break;
 
+    case 'custom_code': {
+      const { name: ccName, inputs: ccInputs = {}, outputVariable } = node.config || {};
+      if (ccName) {
+        try {
+          const { executeCustomCode } = await import('./customCodeService.js');
+          const res = await executeCustomCode(tenantId, ccName, ccInputs, { record, ctx });
+          if (outputVariable) ctx.variables[outputVariable] = res.output;
+        } catch (err) {
+          logger.error(`Custom code node failed: ${err.message}`);
+        }
+      }
+      break;
+    }
+
     case 'action_update_related_records':
       await executeUpdateRelatedRecords(node.config, record, ctx, tenantId);
       break;
