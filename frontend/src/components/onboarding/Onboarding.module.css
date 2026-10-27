@@ -314,3 +314,12 @@
     width: 100%;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight,
+  .tooltip,
+  .overlay {
+    transition: none !important;
+    animation: none !important;
+  }
+}

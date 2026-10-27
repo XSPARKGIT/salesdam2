@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, ArrowLeft, X } from 'lucide-react';
 import { TOUR_STEPS } from './tourSteps';
 import { useOnboarding } from './OnboardingProvider';
+import { useAuth } from '../../hooks/useAuth';
 import styles from './Onboarding.module.css';
 
 const TOOLTIP_WIDTH = 340;
@@ -69,6 +70,8 @@ const positionFor = (rect, placement) => {
  */
 const Tour = () => {
   const { finishTour } = useOnboarding();
+  const { isAdmin } = useAuth();
+  const steps = TOUR_STEPS.filter((step) => !step.adminOnly || isAdmin);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [index, setIndex] = useState(0);
@@ -80,7 +83,7 @@ const Tour = () => {
     pathRef.current = pathname;
   }, [pathname]);
 
-  const step = TOUR_STEPS[index];
+  const step = steps[index];
 
   // Find the target and let the browser settle before measuring. Targets can
   // change the layout as we go (a collapsed accordion opens), so this is a
@@ -134,7 +137,7 @@ const Tour = () => {
         // rather than waiting out the budget.
         if (step.path && pathRef.current !== step.path) {
           setRect(null);
-          if (index < TOUR_STEPS.length - 1) setIndex(index + 1);
+          if (index < steps.length - 1) setIndex(index + 1);
           else finishTour('completed');
           return;
         }
@@ -144,7 +147,7 @@ const Tour = () => {
       }
 
       setRect(null);
-      if (index < TOUR_STEPS.length - 1) setIndex(index + 1);
+      if (index < steps.length - 1) setIndex(index + 1);
       else finishTour('completed');
     };
 
@@ -182,7 +185,7 @@ const Tour = () => {
 
   if (!step) return null;
 
-  const isLast = index === TOUR_STEPS.length - 1;
+  const isLast = index === steps.length - 1;
   const pos = positionFor(rect, step.placement);
 
   return (
@@ -207,6 +210,7 @@ const Tour = () => {
       <div
         className={styles.tooltip}
         style={{ top: pos.top, left: pos.left, width: TOOLTIP_WIDTH }}
+        aria-live="polite"
       >
         <button
           type="button"
@@ -218,7 +222,7 @@ const Tour = () => {
         </button>
 
         <span className={styles.tourCount}>
-          Step {index + 1} of {TOUR_STEPS.length}
+          Step {index + 1} of {steps.length}
         </span>
         <h3 className={styles.tourTitle}>{step.title}</h3>
         <p className={styles.tourBody}>{step.body}</p>

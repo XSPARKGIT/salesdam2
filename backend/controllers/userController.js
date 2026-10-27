@@ -277,6 +277,10 @@ const deactivateUser = asyncHandler(async (req, res) => {
   await user.save();
   await req.tenant.updateOne({ $inc: { 'usage.users': -1 } });
 
+  // Invalidate all sessions for the deactivated user.
+  const Session = (await import('../models/Session.js')).default;
+  await Session.deleteMany({ userId: user._id });
+
   await audit({
     tenantId: req.tenantId,
     userId: req.user._id,

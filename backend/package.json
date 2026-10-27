@@ -1,6 +1,6 @@
 {
   "name": "salesforce-mini-backend",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "type": "module",
   "description": "Multi-tenant CRM backend - MERN stack",
   "main": "server.js",

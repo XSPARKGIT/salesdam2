@@ -26,6 +26,8 @@ import RecordSystemInfo from './RecordSystemInfo/RecordSystemInfo';
 import RecordModals from './RecordModals/RecordModals';
 import RecordDetailSkeleton from './RecordDetailSkeleton';
 import RelatedList from '../../../components/records/RelatedList/RelatedList';
+import AttachmentsPanel from '../../../components/records/AttachmentsPanel';
+import CommunicationPanel from '../../../components/records/CommunicationPanel';
 import FieldHistoryTab from './FieldHistoryTab/FieldHistoryTab';
 import resolveLookupLabel from '../utils/resolveLookupLabel';
 import { withoutHelperFields } from '../../../utils/fieldVisibility';
@@ -475,6 +477,10 @@ const RecordDetail = () => {
         )}
 
         <RecordSystemInfo record={record} />
+
+        <AttachmentsPanel objectApiName={objectApiName} recordId={id} />
+
+        <CommunicationPanel objectApiName={objectApiName} recordId={id} />
 
         {relatedObjects?.length > 0 && (
           <div className={styles.relatedSection}>
