@@ -74,6 +74,7 @@ import IncidentDetail from './pages/Incidents/IncidentDetail';
 import CreateIncident from './pages/Incidents/CreateIncident';
 import IncidentManagement from './pages/Admin/IncidentManagement';
 import AuditLogs from './pages/Admin/AuditLogs';
+import BackupRecovery from './pages/Admin/BackupRecovery';
 import IncidentMonitoring from './pages/InternalAdmin/IncidentMonitoring';
 import TaskCalendarView from './pages/Tasks/TaskCalendarView';
 
@@ -731,6 +732,15 @@ export default function App() {
         element={
           <Guard>
             <AuditLogs />
+          </Guard>
+        }
+      />
+
+      <Route
+        path="/admin/backup-recovery"
+        element={
+          <Guard requireAdmin>
+            <BackupRecovery />
           </Guard>
         }
       />

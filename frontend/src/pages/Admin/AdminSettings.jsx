@@ -181,6 +181,13 @@ const getSettingsGroups = (onDeleteClick, features = {}) => [
           href="/admin/settings/lead-approvals"
         />
         <SettingsCard
+          title="Backup & Recovery"
+          description="Create and verify tenant backups"
+          icon={HardDrive}
+          color="#0ea5e9"
+          href="/admin/backup-recovery"
+        />
+        <SettingsCard
           title="Other Settings"
           description="Salesdam feature flags and miscellaneous platform settings"
           icon={Settings}
