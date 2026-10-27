@@ -48,6 +48,19 @@ const BackupRecovery = () => {
     } catch (e) { setError(e.message); }
   };
 
+  const restore = async (id) => {
+    if (!window.confirm('Restore this backup? This will replace current tenant data.')) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`${base()}/api/v1/admin/backups/${id}/restore`, { method: 'POST', credentials: 'include' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || 'Restore failed');
+      setMessage(`Restored: ${JSON.stringify(json?.data?.restored || {})}`);
+      await load();
+    } catch (e) { setError(e.message); }
+  };
+
   return (
     <AdminSettingsPage title="Backup & Recovery" description="Create and verify tenant backups" icon={null}>
       <div style={{ padding: '1rem' }}>
@@ -62,6 +75,7 @@ const BackupRecovery = () => {
               <span>{b.id}</span>
               <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{b.createdAt}</span>
               <button onClick={() => verify(b.id)}>Verify</button>
+              <button onClick={() => restore(b.id)}>Restore</button>
             </li>
           ))}
         </ul>
