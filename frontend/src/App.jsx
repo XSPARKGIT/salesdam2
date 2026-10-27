@@ -73,6 +73,7 @@ import IncidentList from './pages/Incidents/IncidentList';
 import IncidentDetail from './pages/Incidents/IncidentDetail';
 import CreateIncident from './pages/Incidents/CreateIncident';
 import IncidentManagement from './pages/Admin/IncidentManagement';
+import AuditLogs from './pages/Admin/AuditLogs';
 import IncidentMonitoring from './pages/InternalAdmin/IncidentMonitoring';
 import TaskCalendarView from './pages/Tasks/TaskCalendarView';
 
@@ -721,6 +722,15 @@ export default function App() {
         element={
           <Guard requireAdmin>
             <IncidentManagement />
+          </Guard>
+        }
+      />
+
+      <Route
+        path="/admin/audit-logs"
+        element={
+          <Guard requireAdmin>
+            <AuditLogs />
           </Guard>
         }
       />
