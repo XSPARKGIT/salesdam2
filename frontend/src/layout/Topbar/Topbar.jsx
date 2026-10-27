@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Sparkles,
   ArrowRight,
+  ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppContext } from '../../context/AppContext';
@@ -416,7 +417,7 @@ const Topbar = () => {
                 className={styles.dropdownItem}
                 onClick={() => { navigate('/admin/audit-logs'); setProfileOpen(false); }}
               >
-                Audit Logs
+                <ScrollText size={14} /> Audit Logs
               </button>
               <button
                 className={styles.dropdownItem}
