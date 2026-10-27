@@ -8,7 +8,6 @@ const AuditLogs = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
 
   const load = async () => {
     setLoading(true);
@@ -17,9 +16,8 @@ const AuditLogs = () => {
       const res = await fetch(`${base()}/api/v1/admin/logs?page=${page}&limit=20`, { credentials: 'include' });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || 'Failed to load');
-      const items = json?.data?.items || json?.data || [];
+      const items = Array.isArray(json?.data) ? json.data : (json?.data?.items || []);
       setLogs(items);
-      setTotal(json?.data?.pagination?.total || json?.pagination?.total || items.length);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -29,14 +27,13 @@ const AuditLogs = () => {
   return (
     <Layout title="Audit Logs" description="Administrator audit trail">
       <div style={{ padding: '1rem' }}>
+        <h1>Audit Logs</h1>
         {loading && <p>Loading...</p>}
         {error && <p style={{ color: '#dc2626' }}>{error}</p>}
         {!loading && logs.length === 0 && <p>No audit logs.</p>}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr>
-              <th>Timestamp</th><th>Action</th><th>Resource</th><th>User</th><th>IP</th><th>Status</th>
-            </tr>
+            <tr><th>Timestamp</th><th>Action</th><th>Resource</th><th>User</th><th>IP</th><th>Status</th></tr>
           </thead>
           <tbody>
             {logs.map((l) => (
@@ -44,7 +41,7 @@ const AuditLogs = () => {
                 <td>{new Date(l.createdAt).toLocaleString()}</td>
                 <td>{l.action}</td>
                 <td>{l.resource} {l.resourceId ? `#${l.resourceId}` : ''}</td>
-                <td>{l.userEmail || l.userId}</td>
+                <td>{l.userEmail || l.userId?.email || l.userId?._id || ''}</td>
                 <td>{l.ipAddress}</td>
                 <td>{l.status}</td>
               </tr>
