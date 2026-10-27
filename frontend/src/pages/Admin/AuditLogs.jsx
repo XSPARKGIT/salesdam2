@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '../../hooks/useAuth';
 import Layout from '../../layout/Layout';
 
 const base = () => import.meta.env.VITE_API_URL || 'http://localhost:5002';
 
 const AuditLogs = () => {
+  const { user } = useAuth();
+  const [mineOnly, setMineOnly] = useState(false);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -13,7 +16,8 @@ const AuditLogs = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${base()}/api/v1/admin/logs?page=${page}&limit=20`, { credentials: 'include' });
+      const uid = mineOnly && user?._id ? `&userId=${user._id}` : '';
+      const res = await fetch(`${base()}/api/v1/admin/logs?page=${page}&limit=20${uid}`, { credentials: 'include' });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || 'Failed to load');
       const items = Array.isArray(json?.data) ? json.data : (json?.data?.items || []);
@@ -22,7 +26,7 @@ const AuditLogs = () => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [page]);
+  useEffect(() => { load(); }, [page, mineOnly]);
 
   return (
     <Layout title="Audit Logs" description="Administrator audit trail">
@@ -30,6 +34,7 @@ const AuditLogs = () => {
         <h1>Audit Logs</h1>
         {loading && <p>Loading...</p>}
         {error && <p style={{ color: '#dc2626' }}>{error}</p>}
+        <label style={{ display: 'block', marginBottom: '0.5rem' }}><input type="checkbox" checked={mineOnly} onChange={e => setMineOnly(e.target.checked)} /> Only my actions</label>
         {!loading && logs.length === 0 && <p>No audit logs.</p>}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
