@@ -48,6 +48,19 @@ const BackupRecovery = () => {
     } catch (e) { setError(e.message); }
   };
 
+  const remove = async (id) => {
+    if (!window.confirm('Delete this backup?')) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`${base()}/api/v1/admin/backups/${id}`, { method: 'DELETE', credentials: 'include' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || 'Delete failed');
+      setMessage(`Deleted ${id}`);
+      await load();
+    } catch (e) { setError(e.message); }
+  };
+
   const restore = async (id) => {
     if (!window.confirm('Restore this backup? This will replace current tenant data.')) return;
     setError(null);
@@ -76,6 +89,7 @@ const BackupRecovery = () => {
               <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{b.createdAt}</span>
               <button onClick={() => verify(b.id)}>Verify</button>
               <button onClick={() => restore(b.id)}>Restore</button>
+              <button onClick={() => remove(b.id)} style={{ color: '#dc2626' }}>Delete</button>
             </li>
           ))}
         </ul>
