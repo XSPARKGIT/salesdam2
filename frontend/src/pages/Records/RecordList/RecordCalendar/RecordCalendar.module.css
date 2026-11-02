@@ -1,0 +1,239 @@
+.calendarContainer {
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--card-bg, #fff);
+}
+
+.calendarHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.navBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary, #6b7280);
+}
+.navBtn:hover {
+  background: var(--hover-bg, #f3f4f6);
+}
+
+.dateDisplay {
+  flex: 1;
+}
+.dateDisplay h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.controls {
+  display: flex;
+  gap: 6px;
+}
+
+.viewBtn {
+  padding: 4px 10px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+}
+.viewBtnActive {
+  background: var(--primary, #6366f1);
+  color: #fff;
+  border-color: var(--primary, #6366f1);
+}
+
+.weekdayRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+.weekdayHeader {
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+  text-transform: uppercase;
+}
+
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.day {
+  min-height: 100px;
+  border-right: 1px solid var(--border-color, #e5e7eb);
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  padding: 4px;
+  cursor: pointer;
+}
+.day:nth-child(7n) {
+  border-right: none;
+}
+.day:hover {
+  background: var(--hover-bg, #f9fafb);
+}
+
+.dayOtherMonth {
+  opacity: 0.4;
+}
+.dayToday {
+  background: var(--today-bg, #eff6ff);
+}
+
+.dayNumber {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 4px;
+  color: var(--text-primary, #111827);
+}
+
+.dayEvents {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.eventBadge {
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 3px;
+  border-left: 3px solid var(--primary, #6366f1);
+  background: var(--event-bg, #f0f0ff);
+  color: var(--text-primary, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.eventBadge:hover {
+  opacity: 0.8;
+}
+
+.moreCount {
+  font-size: 10px;
+  color: var(--text-secondary, #6b7280);
+  padding: 0 4px;
+}
+
+/* Week view */
+.weekViewContainer {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.weekDay {
+  border-right: 1px solid var(--border-color, #e5e7eb);
+  min-height: 200px;
+}
+.weekDay:last-child {
+  border-right: none;
+}
+.weekDayHeader {
+  padding: 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  background: var(--hover-bg, #f9fafb);
+}
+.weekDayName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+  text-transform: uppercase;
+}
+.weekDayDate {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+.weekDayEvents {
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.weekEventItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 4px;
+  border-left: 3px solid var(--primary, #6366f1);
+  background: var(--event-bg, #f0f0ff);
+  cursor: pointer;
+  font-size: 12px;
+}
+.weekEventItem:hover {
+  opacity: 0.8;
+}
+.weekEventTitle {
+  font-weight: 500;
+  color: var(--text-primary, #111827);
+}
+
+.noEvents {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #9ca3af);
+  text-align: center;
+}
+
+/* Day view */
+.dayViewContainer {
+  padding: 16px;
+}
+.dayEventList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dayEventItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  border-left: 4px solid var(--primary, #6366f1);
+  cursor: pointer;
+}
+.dayEventItem:hover {
+  background: var(--hover-bg, #f9fafb);
+}
+.dayEventTitle {
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+.dayEventMeta {
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  margin-top: 4px;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  color: var(--text-secondary, #9ca3af);
+  gap: 8px;
+}

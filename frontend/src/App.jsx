@@ -24,6 +24,9 @@ import AutomationList from './pages/Automation/AutomationList';
 import FlowBuilder from './pages/Automation/FlowBuilder';
 import FlowErrors from './pages/Automation/FlowErrors';
 import Analytics from './pages/Analytics/Analytics';
+import ReportList from './pages/Reports/ReportList';
+import ReportBuilder from './pages/Reports/ReportBuilder';
+import ReportView from './pages/Reports/ReportView';
 import UserManagement from './pages/Admin/UserManagement/UserManagement';
 import UserDetail from './pages/Admin/UserDetail';
 import UserForm from './pages/Admin/UserForm';
@@ -459,6 +462,22 @@ export default function App() {
       <Route
         path="/analytics"
         element={<Analytics />}
+      />
+      <Route
+        path="/reports"
+        element={<Guard><ReportList /></Guard>}
+      />
+      <Route
+        path="/reports/new"
+        element={<Guard><ReportBuilder /></Guard>}
+      />
+      <Route
+        path="/reports/:id"
+        element={<Guard><ReportView /></Guard>}
+      />
+      <Route
+        path="/reports/:id/edit"
+        element={<Guard><ReportBuilder /></Guard>}
       />
       <Route
         path="/search"

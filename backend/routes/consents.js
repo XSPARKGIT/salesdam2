@@ -5,16 +5,16 @@ import {
   checkConsent,
   listConsents,
 } from '../controllers/consentController.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
 router.use(requireAuth, enforceTenant);
 
-// Enforcement query — declared before the '/:subjectType/:subjectId' routes.
 router.post('/check', checkConsent);
-router.get('/', requireAdmin, listConsents);
+router.get('/', checkAppPermission('canCustomizeApplication'), listConsents);
 
 router.get('/:subjectType/:subjectId', getConsent);
 router.put('/:subjectType/:subjectId', updateConsent);

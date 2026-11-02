@@ -42,8 +42,8 @@ import recordMergeService from '../services/recordMergeService.js';
  * Resolves a view key to its definition. Config-defined defaults are checked
  * first, then the user's own saved views (by id).
  */
-async function resolveListView({ tenantId, userId, objectMeta, viewKey }) {
-  const fromDefaults = defaultViewsFor(objectMeta).find((v) => v.key === viewKey);
+async function resolveListView({ tenantId, userId, objectMeta, viewKey, fields }) {
+  const fromDefaults = defaultViewsFor(objectMeta, fields).find((v) => v.key === viewKey);
   if (fromDefaults) return fromDefaults;
 
   if (!mongoose.isValidObjectId(viewKey)) return null;
@@ -113,6 +113,7 @@ const listRecords = asyncHandler(async (req, res) => {
         userId: req.user._id,
         objectMeta: obj,
         viewKey,
+        fields,
       })
     : null;
 

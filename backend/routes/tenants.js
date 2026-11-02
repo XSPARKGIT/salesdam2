@@ -1,7 +1,8 @@
 import express from 'express';
 import Tenant from '../models/Tenant.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
 
@@ -9,13 +10,11 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-// Get current tenant info
 router.get('/current', enforceTenant, asyncHandler(async (req, res) => {
   sendSuccess(res, { data: req.tenant });
 }));
 
-// Update tenant settings (admin only)
-router.put('/current/settings', enforceTenant, requireAdmin, asyncHandler(async (req, res) => {
+router.put('/current/settings', enforceTenant, checkAppPermission('canManageTenantSettings'), asyncHandler(async (req, res) => {
   const allowed = ['settings', 'name', 'logo'];
   const tenant = req.tenant;
   allowed.forEach(key => {

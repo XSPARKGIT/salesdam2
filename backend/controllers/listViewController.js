@@ -38,7 +38,7 @@ const validatePayload = async ({ tenantId, obj, body }) => {
 
   // Root columns are always addressable even though they aren't FieldMeta rows.
   const ROOT = ['createdAt', 'updatedAt', 'ownerId', 'createdBy', 'lastModifiedBy', '_id'];
-  const fields = await FieldMeta.find({ tenantId, objectApiName: obj.apiName }).select('apiName');
+  const fields = await FieldMeta.find({ tenantId, objectApiName: obj.apiName }).select('apiName type isHelper displayOrder');
   const known = new Set([...fields.map((f) => f.apiName), ...ROOT]);
 
   const unknownColumns = columns.filter((c) => !known.has(c));
@@ -66,7 +66,9 @@ const validatePayload = async ({ tenantId, obj, body }) => {
       operator: c.operator || 'eq',
       value: c.value,
     })),
-    columns: columns.length > 0 ? columns : DEFAULT_COLUMNS[obj.apiName] || [],
+    columns: columns.length > 0
+      ? columns
+      : (defaultViewsFor(obj, fields)[0]?.columns || []),
     sortField: body.sortField || null,
     sortOrder: body.sortOrder === 'asc' ? 'asc' : 'desc',
     isShared: !!body.isShared,
@@ -87,7 +89,8 @@ const listViews = asyncHandler(async (req, res) => {
     $or: [{ isShared: true }, { createdBy: req.user._id }],
   }).sort({ name: 1 });
 
-  const defaults = defaultViewsFor(obj).map((v) => ({
+  const fields = await FieldMeta.find({ tenantId: req.tenantId, objectApiName }).sort({ displayOrder: 1 });
+  const defaults = defaultViewsFor(obj, fields).map((v) => ({
     key: v.key,
     name: v.name,
     filters: v.filters,

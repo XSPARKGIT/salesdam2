@@ -39,7 +39,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 // Create
-router.post('/', checkAppPermission('canManageAutomations'), asyncHandler(async (req, res) => {
+router.post('/', checkAppPermission('canManageDocumentTemplates'), asyncHandler(async (req, res) => {
   const { apiName } = req.body;
   if (!apiName) throw new AppError('apiName is required.', 400);
   const existing = await PdfTemplate.findOne({ tenantId: req.tenantId, apiName });
@@ -55,7 +55,7 @@ router.post('/', checkAppPermission('canManageAutomations'), asyncHandler(async 
 }));
 
 // Update
-router.put('/:id', checkAppPermission('canManageAutomations'), asyncHandler(async (req, res) => {
+router.put('/:id', checkAppPermission('canManageDocumentTemplates'), asyncHandler(async (req, res) => {
   const tmpl = await PdfTemplate.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!tmpl) throw new AppError('PDF template not found.', 404);
 
@@ -72,7 +72,7 @@ router.put('/:id', checkAppPermission('canManageAutomations'), asyncHandler(asyn
 }));
 
 // Delete
-router.delete('/:id', checkAppPermission('canManageAutomations'), asyncHandler(async (req, res) => {
+router.delete('/:id', checkAppPermission('canManageDocumentTemplates'), asyncHandler(async (req, res) => {
   const tmpl = await PdfTemplate.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!tmpl) throw new AppError('PDF template not found.', 404);
   await tmpl.deleteOne();
@@ -81,7 +81,7 @@ router.delete('/:id', checkAppPermission('canManageAutomations'), asyncHandler(a
 }));
 
 // Duplicate
-router.post('/:id/duplicate', checkAppPermission('canManageAutomations'), asyncHandler(async (req, res) => {
+router.post('/:id/duplicate', checkAppPermission('canManageDocumentTemplates'), asyncHandler(async (req, res) => {
   const src = await PdfTemplate.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!src) throw new AppError('PDF template not found.', 404);
 

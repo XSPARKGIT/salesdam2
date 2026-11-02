@@ -102,34 +102,39 @@ export const AuthProvider = ({ children }) => {
   const buildPermissions = (userData) => {
     if (!userData) return;
 
-    // Safely resolve role name
     const roleName = userData.role?.name?.toLowerCase?.();
 
     const perms = {
       roleName,
     };
 
-    // Superuser / Admin privileges
+    // Superuser / Admin get everything.
     if (roleName === 'superuser' || roleName === 'admin') {
       perms.isAdmin = true;
-      perms.canManageUsers = true;
-      perms.canManageRoles = true;
-      perms.canManageObjects = true;
-      perms.canManageAutomations = true;
-      perms.canManageIntegrations = true;
-      perms.canViewAnalytics = true;
-      perms.canManageAnalytics = true;
-      perms.canViewAuditLog = true;
-      perms.canManageTenantSettings = true;
-      perms.canManageApiKeys = true;
-      perms.canManageWebhooks = true;
     }
 
-    // Merge role-level app permissions (additive)
-    if (userData.role?.appPermissions) {
-      Object.entries(userData.role.appPermissions).forEach(([key, val]) => {
+    // BRD 9.3: use the effective permissions computed server-side (Role ∪
+    // Permission Sets) when available; fall back to role appPermissions.
+    const effective = userData.effectivePermissions || userData.role?.appPermissions;
+    if (effective) {
+      Object.entries(effective).forEach(([key, val]) => {
         if (val) perms[key] = true;
       });
+    }
+
+    // Admin/superuser always has everything.
+    if (perms.isAdmin) {
+      const ALL_KEYS = [
+        'canCustomizeApplication', 'canManageUsers', 'canManageRoles',
+        'canManageObjects', 'canManageLayouts', 'canManageAutomations',
+        'canManageApprovals', 'canManageCustomCode', 'canDeployCustomCode',
+        'canManageIntegrations', 'canViewAnalytics', 'canManageAnalytics',
+        'canViewAuditLog', 'canManageTenantSettings', 'canManageApiKeys',
+        'canManageWebhooks', 'canExportData', 'canImportData',
+        'canViewCallRecordings', 'canManageCommunicationTemplates',
+        'canManageDocumentTemplates',
+      ];
+      ALL_KEYS.forEach((k) => { perms[k] = true; });
     }
 
     setPermissions(perms);
@@ -269,11 +274,16 @@ export const AuthProvider = ({ children }) => {
         isAdmin: ['superuser', 'admin'].includes(
           user?.role?.name?.toLowerCase(),
         ),
-        // Expose common permissions directly for convenience
+        // Expose all system permissions directly for convenience
+        canCustomizeApplication: permissions.canCustomizeApplication,
         canManageUsers: permissions.canManageUsers,
         canManageRoles: permissions.canManageRoles,
         canManageObjects: permissions.canManageObjects,
+        canManageLayouts: permissions.canManageLayouts,
         canManageAutomations: permissions.canManageAutomations,
+        canManageApprovals: permissions.canManageApprovals,
+        canManageCustomCode: permissions.canManageCustomCode,
+        canDeployCustomCode: permissions.canDeployCustomCode,
         canManageIntegrations: permissions.canManageIntegrations,
         canViewAnalytics: permissions.canViewAnalytics,
         canManageAnalytics: permissions.canManageAnalytics,
@@ -281,6 +291,11 @@ export const AuthProvider = ({ children }) => {
         canManageTenantSettings: permissions.canManageTenantSettings,
         canManageApiKeys: permissions.canManageApiKeys,
         canManageWebhooks: permissions.canManageWebhooks,
+        canExportData: permissions.canExportData,
+        canImportData: permissions.canImportData,
+        canViewCallRecordings: permissions.canViewCallRecordings,
+        canManageCommunicationTemplates: permissions.canManageCommunicationTemplates,
+        canManageDocumentTemplates: permissions.canManageDocumentTemplates,
       }}
     >
       {children}

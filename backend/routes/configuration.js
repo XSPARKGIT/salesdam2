@@ -9,10 +9,10 @@ import {
 } from '../controllers/configurationController.js';
 import {
   requireAuth,
-  requireAdmin,
   requireSuperuser,
 } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
@@ -25,7 +25,7 @@ router.delete('/defaults/:key', requireSuperuser, resetSystemDefault);
 
 // Tenant-level view and overrides.
 router.get('/', getEffectiveConfig);
-router.put('/:key', requireAdmin, updateTenantConfig);
-router.delete('/:key', requireAdmin, resetTenantConfig);
+router.put('/:key', checkAppPermission('canManageTenantSettings'), updateTenantConfig);
+router.delete('/:key', checkAppPermission('canManageTenantSettings'), resetTenantConfig);
 
 export default router;

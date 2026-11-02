@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 import {
   listGlobalValueSets,
   getGlobalValueSet,
@@ -19,13 +19,11 @@ router.use(requireAuth, enforceTenant);
 router.get('/', listGlobalValueSets);
 router.get('/:id', getGlobalValueSet);
 
-// Write operations are admin-only — value set changes propagate to all linked
-// fields tenant-wide, so a regular user must not be able to alter them.
-router.post('/', requireAdmin, createGlobalValueSet);
-router.put('/:id', requireAdmin, updateGlobalValueSet);
-router.delete('/:id', requireAdmin, deleteGlobalValueSet);
+router.post('/', checkAppPermission('canManageObjects'), createGlobalValueSet);
+router.put('/:id', checkAppPermission('canManageObjects'), updateGlobalValueSet);
+router.delete('/:id', checkAppPermission('canManageObjects'), deleteGlobalValueSet);
 
-router.post('/:id/link', requireAdmin, linkField);
-router.post('/:id/unlink', requireAdmin, unlinkField);
+router.post('/:id/link', checkAppPermission('canManageObjects'), linkField);
+router.post('/:id/unlink', checkAppPermission('canManageObjects'), unlinkField);
 
 export default router;

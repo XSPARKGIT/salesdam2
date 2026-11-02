@@ -63,6 +63,7 @@ const createPermissionSet = asyncHandler(async (req, res) => {
     label,
     description: req.body.description,
     appIds: (await validateAppIds(req.tenantId, req.body.appIds)) || [],
+    systemPermissions: req.body.systemPermissions || {},
     assignedUserIds: (await validateUserIds(req.tenantId, req.body.assignedUserIds)) || [],
     createdBy: req.user._id,
     lastModifiedBy: req.user._id,
@@ -90,6 +91,7 @@ const updatePermissionSet = asyncHandler(async (req, res) => {
   if (req.body.description !== undefined) set.description = req.body.description;
   const appIds = await validateAppIds(req.tenantId, req.body.appIds);
   if (appIds !== undefined) set.appIds = appIds;
+  if (req.body.systemPermissions !== undefined) set.systemPermissions = req.body.systemPermissions;
   const userIds = await validateUserIds(req.tenantId, req.body.assignedUserIds);
   if (userIds !== undefined) set.assignedUserIds = userIds;
   set.lastModifiedBy = req.user._id;

@@ -153,14 +153,29 @@ const OBJECT_VIEWS = {
  * Builds the full set of default views for an object.
  *
  * @param {object} objectMeta - ObjectMeta doc (needs apiName + pluralLabel)
+ * @param {Array}  [fields]   - optional FieldMeta docs; when supplied, custom
+ *                               objects without hardcoded columns derive a
+ *                               sensible default set from their field definitions.
  * @returns {Array} view descriptors
  */
-export const defaultViewsFor = (objectMeta) => {
+export const defaultViewsFor = (objectMeta, fields) => {
   const apiName = objectMeta?.apiName;
   if (!apiName) return [];
 
   const plural = objectMeta.pluralLabel || objectMeta.label || apiName;
   const ownerField = ownershipFieldFor(apiName);
+
+  let columns = DEFAULT_COLUMNS[apiName] || [];
+
+  // For objects without hardcoded columns, derive a sensible set from fields.
+  if (columns.length === 0 && Array.isArray(fields) && fields.length > 0) {
+    const SKIP_TYPES = ['textarea', 'richtext', 'address'];
+    columns = fields
+      .filter((f) => !SKIP_TYPES.includes(f.type) && !f.isHelper)
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+      .slice(0, 6)
+      .map((f) => f.apiName);
+  }
 
   const universal = [
     { key: 'all', name: `All ${plural}`, filters: [] },
@@ -177,8 +192,6 @@ export const defaultViewsFor = (objectMeta) => {
   return [...universal, ...extras].map((view) => {
     const filters = [...(view.filters || [])];
 
-    // Leads and deals hide converted records everywhere except the view that
-    // exists specifically to show them.
     if (EXCLUDES_CONVERTED.has(apiName) && !view.includeConverted) {
       filters.push(NOT_CONVERTED);
     }
@@ -188,7 +201,7 @@ export const defaultViewsFor = (objectMeta) => {
       name: view.name,
       objectApiName: apiName,
       filters,
-      columns: DEFAULT_COLUMNS[apiName] || [],
+      columns,
       sortField: view.sortField || null,
       sortOrder: view.sortOrder || 'desc',
       source: view.source || 'records',

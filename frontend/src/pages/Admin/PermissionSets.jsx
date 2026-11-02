@@ -9,7 +9,31 @@ import Layout from '../../layout/Layout';
 import roleStyles from './RoleManagement.module.css';
 import styles from './PermissionSets.module.css';
 
-const EMPTY = { label: '', description: '', appIds: [], assignedUserIds: [] };
+const SYSTEM_PERMISSIONS = [
+  { key: 'canCustomizeApplication', label: 'Customize Application' },
+  { key: 'canManageObjects', label: 'Manage Custom Objects and Fields' },
+  { key: 'canManageLayouts', label: 'Manage Page Layouts' },
+  { key: 'canManageAutomations', label: 'Manage Flows' },
+  { key: 'canManageApprovals', label: 'Manage Approval Processes' },
+  { key: 'canManageCustomCode', label: 'Manage Custom Code' },
+  { key: 'canDeployCustomCode', label: 'Deploy Custom Code' },
+  { key: 'canManageIntegrations', label: 'Manage Integrations' },
+  { key: 'canManageApiKeys', label: 'Manage API Credentials' },
+  { key: 'canManageWebhooks', label: 'Manage Webhooks' },
+  { key: 'canManageUsers', label: 'Manage Users' },
+  { key: 'canManageRoles', label: 'Manage Profiles and Permissions' },
+  { key: 'canManageTenantSettings', label: 'Manage Tenant Configuration' },
+  { key: 'canExportData', label: 'Export Data' },
+  { key: 'canImportData', label: 'Import Data' },
+  { key: 'canViewAuditLog', label: 'View Audit Logs' },
+  { key: 'canViewAnalytics', label: 'View Analytics' },
+  { key: 'canManageAnalytics', label: 'Manage Analytics' },
+  { key: 'canViewCallRecordings', label: 'View Call Recordings' },
+  { key: 'canManageCommunicationTemplates', label: 'Manage Communication Templates' },
+  { key: 'canManageDocumentTemplates', label: 'Manage Document Templates' },
+];
+
+const EMPTY = { label: '', description: '', appIds: [], systemPermissions: {}, assignedUserIds: [] };
 const idOf = (x) => String(x?._id || x);
 const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
 
@@ -53,6 +77,7 @@ export default function PermissionSets() {
             label: set.label,
             description: set.description || '',
             appIds: (set.appIds || []).map(idOf),
+            systemPermissions: set.systemPermissions || {},
             assignedUserIds: (set.assignedUserIds || []).map(idOf),
           }
         : { ...EMPTY },
@@ -76,6 +101,7 @@ export default function PermissionSets() {
         label: editing.label.trim(),
         description: editing.description,
         appIds: editing.appIds,
+        systemPermissions: editing.systemPermissions,
         assignedUserIds: editing.assignedUserIds,
       };
       if (editing._id) await api.put(`/permission-sets/${editing._id}`, body);
@@ -223,6 +249,30 @@ export default function PermissionSets() {
                   ))}
                 </div>
               )}
+            </fieldset>
+
+            <fieldset className={styles.group}>
+              <legend className={styles.label}>System Permissions</legend>
+              <div className={roleStyles.permGrid}>
+                {SYSTEM_PERMISSIONS.map((perm) => (
+                  <label key={perm.key} className={roleStyles.permItem}>
+                    <input
+                      type="checkbox"
+                      checked={!!editing.systemPermissions[perm.key]}
+                      onChange={() =>
+                        setEditing((p) => ({
+                          ...p,
+                          systemPermissions: {
+                            ...p.systemPermissions,
+                            [perm.key]: !p.systemPermissions[perm.key],
+                          },
+                        }))
+                      }
+                    />
+                    {perm.label}
+                  </label>
+                ))}
+              </div>
             </fieldset>
 
             <fieldset className={styles.group}>

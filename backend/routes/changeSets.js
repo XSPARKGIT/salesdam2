@@ -11,10 +11,10 @@ import {
 } from '../controllers/changeSetController.js';
 import {
   requireAuth,
-  requireAdmin,
   requireSuperuser,
 } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
@@ -33,9 +33,9 @@ router.post('/sandbox', requireSuperuser, cloneSandbox);
 router.post('/:id/validate', requireSuperuser, validateChangeSet);
 router.post('/:id/deploy', requireSuperuser, deployChangeSet);
 
-// Packaging stays within the caller's own tenant (admin).
-router.get('/', requireAdmin, listChangeSets);
-router.post('/', requireAdmin, createChangeSet);
-router.get('/:id', requireAdmin, getChangeSet);
+// Packaging stays within the caller's own tenant.
+router.get('/', checkAppPermission('canCustomizeApplication'), listChangeSets);
+router.post('/', checkAppPermission('canCustomizeApplication'), createChangeSet);
+router.get('/:id', checkAppPermission('canCustomizeApplication'), getChangeSet);
 
 export default router;

@@ -9,8 +9,9 @@ import {
   listProviders,
   dial,
 } from '../controllers/telephonyController.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.use(requireAuth, enforceTenant);
 
 router.get('/status/me', getMyStatus);
 router.put('/status/me', setMyStatus);
-router.get('/status', requireAdmin, listStatuses);
+router.get('/status', checkAppPermission('canManageUsers'), listStatuses);
 
 router.get('/dispositions', getDispositions);
 router.get('/providers', listProviders);

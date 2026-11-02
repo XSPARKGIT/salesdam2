@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import api from '../../../services/api';
 import Button from '../../../components/common/Button/Button';
 import AdminSettingsPage from '../AdminSettingsPage';
+import { useAuth } from '../../../hooks/useAuth';
 import styles from '../AdminSettingsPage.module.css';
 import s from './DataImport.module.css';
 
@@ -54,7 +55,8 @@ export default function DataImport() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
 
-  const fileRef = useRef(null);
+  const [bypassValidation, setBypassValidation] = useState(false);
+  const { isAdmin } = useAuth();
 
   // Load all objects on mount
   useEffect(() => {
@@ -217,12 +219,19 @@ export default function DataImport() {
   );
 
   const handleImport = async () => {
+    if (bypassValidation) {
+      const ok = window.confirm(
+        'Bypass Validation Rules and Flows for this import? This is for controlled data migration only.',
+      );
+      if (!ok) return;
+    }
     setImporting(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('object', objectApiName);
       formData.append('mapping', JSON.stringify(mapping));
+      formData.append('bypassValidation', bypassValidation ? 'true' : 'false');
       const res = await api.post('/admin/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -534,6 +543,25 @@ export default function DataImport() {
               <strong>{selectedObject?.label || objectApiName}</strong>. This
               action cannot be undone.
             </p>
+            {isAdmin && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={bypassValidation}
+                    onChange={(e) => setBypassValidation(e.target.checked)}
+                  />
+                  <span>
+                    Bypass Validation Rules and Flows (admin only; for data migration)
+                  </span>
+                </label>
+                {bypassValidation && (
+                  <p style={{ color: '#b45309', fontSize: 12, marginTop: 6 }}>
+                    Warning: validation rules and flows will be skipped for this import only.
+                  </p>
+                )}
+              </div>
+            )}
             <div className={s.confirmActions}>
               <Button variant="secondary" onClick={() => setStep('map')}>
                 Back

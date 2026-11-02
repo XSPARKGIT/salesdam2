@@ -2,7 +2,7 @@ import express from 'express';
 import OpenAI from 'openai';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 import { asyncHandler, sendSuccess } from '../utils/errors.js';
 import { runAIOnboarding, getOnboardingStatus } from '../services/aiOnboardingService.js';
 
@@ -15,7 +15,7 @@ router.get('/onboarding-status', asyncHandler(async (req, res) => {
   sendSuccess(res, { data: status });
 }));
 
-router.post('/onboarding', requireAdmin, asyncHandler(async (req, res) => {
+router.post('/onboarding', checkAppPermission('canCustomizeApplication'), asyncHandler(async (req, res) => {
   const { industry, useCase } = req.body;
   // Run async - don't wait
   runAIOnboarding(req.tenantId, req.user._id, { industry, useCase }).catch(() => {});

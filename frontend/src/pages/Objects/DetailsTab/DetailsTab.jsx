@@ -39,6 +39,35 @@ const DetailsTab = ({ objForm, onChange, isEdit, onIconChange, fields = [] }) =>
     });
   };
 
+  // Calendar config
+  const dateFields = fields.filter(f => ['date', 'datetime'].includes(f.type));
+  const allFields = fields.filter(f => !f.isReadOnly || f.apiName === (objForm.nameFieldApiName || 'name'));
+
+  const handleCalendarChange = (e) => {
+    const { name, checked } = e.target;
+    onChange({
+      target: {
+        name: 'calendarConfig',
+        value: {
+          ...objForm.calendarConfig,
+          [name]: checked,
+        },
+      },
+    });
+  };
+
+  const handleCalendarFieldChange = (fieldKey) => (e) => {
+    onChange({
+      target: {
+        name: 'calendarConfig',
+        value: {
+          ...objForm.calendarConfig,
+          [fieldKey]: e.target.value,
+        },
+      },
+    });
+  };
+
   const handleKanbanFieldChange = (e) => {
     const { value } = e.target;
     onChange({
@@ -600,6 +629,87 @@ const DetailsTab = ({ objForm, onChange, isEdit, onIconChange, fields = [] }) =>
             {objForm.kanbanConfig?.enabled && picklistFields.length === 0 && (
               <p style={{ fontSize: '12px', color: 'var(--color-orange-600)', margin: '8px 0 0 0' }}>
                 ⚠️ No picklist fields available. Create at least one picklist field to enable kanban view.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Calendar Settings */}
+        <div className={`${styles.field} ${styles.fullWidth}`}>
+          <div style={{
+            padding: '16px 14px',
+            background: 'var(--color-gray-50)',
+            borderRadius: 'var(--border-radius)',
+            border: '1px solid var(--border-color)'
+          }}>
+            <div style={{ marginBottom: '12px' }}>
+              <label className={styles.label} style={{ fontSize: '13px', marginBottom: '8px', display: 'block' }}>
+                Calendar View
+              </label>
+              <label className={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  name="enabled"
+                  checked={objForm.calendarConfig?.enabled || false}
+                  onChange={handleCalendarChange}
+                />
+                Enable calendar view for this object
+              </label>
+              <p style={{ fontSize: '11px', color: 'var(--color-gray-500)', marginTop: '4px' }}>
+                Calendar view displays records on a calendar based on a date field
+              </p>
+            </div>
+
+            {objForm.calendarConfig?.enabled && dateFields.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label className={styles.label} style={{ fontSize: '12px' }}>
+                    Date Field *
+                  </label>
+                  <select
+                    value={objForm.calendarConfig?.dateFieldApiName || ''}
+                    onChange={handleCalendarFieldChange('dateFieldApiName')}
+                    className={styles.select}
+                    style={{ marginTop: '6px' }}
+                  >
+                    <option value="">Select a date field...</option>
+                    {dateFields.map(field => (
+                      <option key={field.apiName} value={field.apiName}>
+                        {field.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: '11px', color: 'var(--color-gray-500)', marginTop: '4px' }}>
+                    Records will be placed on the calendar based on this field's value
+                  </p>
+                </div>
+                <div>
+                  <label className={styles.label} style={{ fontSize: '12px' }}>
+                    Title Field
+                  </label>
+                  <select
+                    value={objForm.calendarConfig?.titleFieldApiName || ''}
+                    onChange={handleCalendarFieldChange('titleFieldApiName')}
+                    className={styles.select}
+                    style={{ marginTop: '6px' }}
+                  >
+                    <option value="">Use name field (default)</option>
+                    {allFields.map(field => (
+                      <option key={field.apiName} value={field.apiName}>
+                        {field.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: '11px', color: 'var(--color-gray-500)', marginTop: '4px' }}>
+                    Field displayed as the event title on the calendar
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {objForm.calendarConfig?.enabled && dateFields.length === 0 && (
+              <p style={{ fontSize: '12px', color: 'var(--color-orange-600)', margin: '8px 0 0 0' }}>
+                ⚠️ No date fields available. Create at least one date or datetime field to enable calendar view.
               </p>
             )}
           </div>

@@ -70,7 +70,7 @@ const RULE_OPERATORS = new Set(['eq', 'neq', 'is_set', 'is_blank']);
 const MAX_RULES = 50;
 
 // List every Role's assignment for an object.
-router.get('/:objectApiName/assignments', checkAppPermission('canManageObjects'), asyncHandler(async (req, res) => {
+router.get('/:objectApiName/assignments', checkAppPermission('canManageLayouts'), asyncHandler(async (req, res) => {
   res.set('Cache-Control', 'no-store');
   const assignments = await LayoutAssignment.find({
     tenantId: req.tenantId,
@@ -83,7 +83,7 @@ router.get('/:objectApiName/assignments', checkAppPermission('canManageObjects')
 //   { assignments: [{ roleId, defaultLayoutId, rules: [{ field, operator, value, layoutId }] }] }
 // Rule order is priority order. A Role sent with no default and no rules, or
 // left out, has its assignment removed and falls back to the object default.
-router.put('/:objectApiName/assignments', checkAppPermission('canManageObjects'), asyncHandler(async (req, res) => {
+router.put('/:objectApiName/assignments', checkAppPermission('canManageLayouts'), asyncHandler(async (req, res) => {
   const { objectApiName } = req.params;
   const tenantId = req.tenantId;
   const input = req.body?.assignments;
@@ -150,7 +150,7 @@ router.put('/:objectApiName/assignments', checkAppPermission('canManageObjects')
 }));
 
 // Create layout
-router.post('/', checkAppPermission('canManageObjects'), asyncHandler(async (req, res) => {
+router.post('/', checkAppPermission('canManageLayouts'), asyncHandler(async (req, res) => {
   const { objectApiName } = req.body;
   const obj = await ObjectMeta.findOne({ tenantId: req.tenantId, apiName: objectApiName });
   if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
@@ -174,7 +174,7 @@ router.post('/', checkAppPermission('canManageObjects'), asyncHandler(async (req
 }));
 
 // Update layout
-router.put('/:id', checkAppPermission('canManageObjects'), asyncHandler(async (req, res) => {
+router.put('/:id', checkAppPermission('canManageLayouts'), asyncHandler(async (req, res) => {
   const layout = await Layout.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!layout) throw new AppError('Layout not found.', 404);
 
@@ -194,7 +194,7 @@ router.put('/:id', checkAppPermission('canManageObjects'), asyncHandler(async (r
 }));
 
 // Delete layout
-router.delete('/:id', checkAppPermission('canManageObjects'), asyncHandler(async (req, res) => {
+router.delete('/:id', checkAppPermission('canManageLayouts'), asyncHandler(async (req, res) => {
   const layout = await Layout.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!layout) throw new AppError('Layout not found.', 404);
   if (layout.isDefault) throw new AppError('Cannot delete the default layout.', 403);

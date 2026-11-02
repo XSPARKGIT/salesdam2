@@ -6,20 +6,18 @@ import {
 } from '../controllers/emailSenderController.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
 router.use(requireAuth, enforceTenant);
 
-// Any authenticated user — returns only senders they're allowed to use
 router.get('/mine', myEmailSenders);
 
-// Admin-only management
-router.get('/',         requireAdmin, listEmailSenders);
-router.post('/',        requireAdmin, createEmailSender);
-router.put('/:id',      requireAdmin, updateEmailSender);
-router.delete('/:id',   requireAdmin, deleteEmailSender);
-router.post('/:id/test', requireAdmin, testEmailSender);
+router.get('/',         checkAppPermission('canManageCommunicationTemplates'), listEmailSenders);
+router.post('/',        checkAppPermission('canManageCommunicationTemplates'), createEmailSender);
+router.put('/:id',      checkAppPermission('canManageCommunicationTemplates'), updateEmailSender);
+router.delete('/:id',   checkAppPermission('canManageCommunicationTemplates'), deleteEmailSender);
+router.post('/:id/test', checkAppPermission('canManageCommunicationTemplates'), testEmailSender);
 
 export default router;

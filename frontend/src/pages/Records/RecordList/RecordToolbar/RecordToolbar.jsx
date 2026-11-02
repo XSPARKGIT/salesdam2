@@ -6,6 +6,7 @@ import {
   Columns2 as Columns,
   Layout,
   LayoutGrid,
+  Calendar,
 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -153,7 +154,8 @@ const RecordToolbar = ({
           )}
         </div>
 
-        {objMeta?.kanbanConfig?.enabled && objMeta?.kanbanConfig?.fieldApiName && (
+        {(objMeta?.kanbanConfig?.enabled && objMeta?.kanbanConfig?.fieldApiName ||
+          objMeta?.calendarConfig?.enabled && objMeta?.calendarConfig?.dateFieldApiName) && (
           <div className={styles.viewModeToggle}>
             <button
               className={`${styles.viewBtn} ${viewMode === 'list' ? styles.active : ''}`}
@@ -162,13 +164,24 @@ const RecordToolbar = ({
             >
               <Layout size={16} />
             </button>
-            <button
-              className={`${styles.viewBtn} ${viewMode === 'kanban' ? styles.active : ''}`}
-              onClick={() => setViewMode('kanban')}
-              title="Kanban view"
-            >
-              <LayoutGrid size={16} />
-            </button>
+            {objMeta?.kanbanConfig?.enabled && objMeta?.kanbanConfig?.fieldApiName && (
+              <button
+                className={`${styles.viewBtn} ${viewMode === 'kanban' ? styles.active : ''}`}
+                onClick={() => setViewMode('kanban')}
+                title="Kanban view"
+              >
+                <LayoutGrid size={16} />
+              </button>
+            )}
+            {objMeta?.calendarConfig?.enabled && objMeta?.calendarConfig?.dateFieldApiName && (
+              <button
+                className={`${styles.viewBtn} ${viewMode === 'calendar' ? styles.active : ''}`}
+                onClick={() => setViewMode('calendar')}
+                title="Calendar view"
+              >
+                <Calendar size={16} />
+              </button>
+            )}
           </div>
         )}
 

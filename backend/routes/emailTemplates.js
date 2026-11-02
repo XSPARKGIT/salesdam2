@@ -40,7 +40,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/email-templates
-router.post('/', checkAppPermission('canManageAutomations'), asyncHandler(async (req, res) => {
+router.post('/', checkAppPermission('canManageCommunicationTemplates'), asyncHandler(async (req, res) => {
   const { name, subject, bodyText, bodyHtml, category, description, tags } = req.body;
   if (!name || !subject) throw new AppError('name and subject are required.', 400);
 
@@ -55,7 +55,7 @@ router.post('/', checkAppPermission('canManageAutomations'), asyncHandler(async 
 }));
 
 // PUT /api/email-templates/:id
-router.put('/:id', checkAppPermission('canManageAutomations'), asyncHandler(async (req, res) => {
+router.put('/:id', checkAppPermission('canManageCommunicationTemplates'), asyncHandler(async (req, res) => {
   const tmpl = await EmailTemplate.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!tmpl) throw new AppError('Template not found.', 404);
 
@@ -67,7 +67,7 @@ router.put('/:id', checkAppPermission('canManageAutomations'), asyncHandler(asyn
 }));
 
 // DELETE /api/email-templates/:id
-router.delete('/:id', checkAppPermission('canManageAutomations'), asyncHandler(async (req, res) => {
+router.delete('/:id', checkAppPermission('canManageCommunicationTemplates'), asyncHandler(async (req, res) => {
   await EmailTemplate.deleteOne({ _id: req.params.id, tenantId: req.tenantId });
   sendSuccess(res, {}, 'Template deleted');
 }));

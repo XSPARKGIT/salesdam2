@@ -8,16 +8,16 @@ import {
   deleteIntegration,
   verifyToken,
 } from '../controllers/integrationController.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
 // Public endpoint for token verification (no auth required)
 router.post('/verify-token', verifyToken);
 
-// Admin-only endpoints
-router.use(requireAuth, enforceTenant, requireAdmin);
+router.use(requireAuth, enforceTenant, checkAppPermission('canManageIntegrations'));
 
 /**
  * GET /api/integrations

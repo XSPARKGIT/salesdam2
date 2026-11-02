@@ -34,12 +34,18 @@ const roleSchema = new mongoose.Schema({
   // Object-level permissions
   objectPermissions: [objectPermissionSchema],
 
-  // App-level permissions
+  // System Permissions (BRD 9.3) — independently configurable on Profiles and
+  // Permission Sets. Effective permissions = union of Role + assigned sets.
   appPermissions: {
+    canCustomizeApplication: { type: Boolean, default: false },
     canManageUsers: { type: Boolean, default: false },
     canManageRoles: { type: Boolean, default: false },
     canManageObjects: { type: Boolean, default: false },
+    canManageLayouts: { type: Boolean, default: false },
     canManageAutomations: { type: Boolean, default: false },
+    canManageApprovals: { type: Boolean, default: false },
+    canManageCustomCode: { type: Boolean, default: false },
+    canDeployCustomCode: { type: Boolean, default: false },
     canManageIntegrations: { type: Boolean, default: false },
     canViewAnalytics: { type: Boolean, default: false },
     canManageAnalytics: { type: Boolean, default: false },
@@ -47,6 +53,11 @@ const roleSchema = new mongoose.Schema({
     canManageTenantSettings: { type: Boolean, default: false },
     canManageApiKeys: { type: Boolean, default: false },
     canManageWebhooks: { type: Boolean, default: false },
+    canExportData: { type: Boolean, default: false },
+    canImportData: { type: Boolean, default: false },
+    canViewCallRecordings: { type: Boolean, default: false },
+    canManageCommunicationTemplates: { type: Boolean, default: false },
+    canManageDocumentTemplates: { type: Boolean, default: false },
   },
 
   // Apps (Workspaces) this Role sees in its App Switcher (BRD 5.3). Separate

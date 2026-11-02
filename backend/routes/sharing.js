@@ -8,11 +8,12 @@ import {
   updateSharingRule,
   deleteSharingRule,
 } from '../controllers/sharingController.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
-router.use(requireAuth, enforceTenant, requireAdmin);
+router.use(requireAuth, enforceTenant, checkAppPermission('canCustomizeApplication'));
 
 router.get('/settings', listSharingSettings);
 router.put('/settings/:objectApiName', updateSharingSetting);

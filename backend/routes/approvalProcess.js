@@ -12,8 +12,9 @@ import {
   getRecordState,
   listMyPending,
 } from '../controllers/approvalProcessController.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
@@ -27,11 +28,11 @@ router.post('/:id/approve', approveRequest);
 router.post('/:id/reject', rejectRequest);
 router.post('/:id/recall', recallRequest);
 
-// Process configuration (admin only).
-router.get('/', requireAdmin, listProcesses);
-router.post('/', requireAdmin, createProcess);
-router.get('/:id', requireAdmin, getProcess);
-router.put('/:id', requireAdmin, updateProcess);
-router.delete('/:id', requireAdmin, deleteProcess);
+// Process configuration — requires Manage Approval Processes.
+router.get('/', checkAppPermission('canManageApprovals'), listProcesses);
+router.post('/', checkAppPermission('canManageApprovals'), createProcess);
+router.get('/:id', checkAppPermission('canManageApprovals'), getProcess);
+router.put('/:id', checkAppPermission('canManageApprovals'), updateProcess);
+router.delete('/:id', checkAppPermission('canManageApprovals'), deleteProcess);
 
 export default router;

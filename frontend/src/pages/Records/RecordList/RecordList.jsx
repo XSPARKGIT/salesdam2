@@ -23,6 +23,7 @@ import RecordHeader from './RecordHeader/RecordHeader';
 import RecordToolbar from './RecordToolbar/RecordToolbar';
 import RecordTable from './RecordTable/RecordTable';
 import RecordKanban from './RecordKanban/RecordKanban';
+import RecordCalendar from './RecordCalendar/RecordCalendar';
 
 const DEFAULT_PAGE_SIZE = 50;
 const DEFAULT_COLUMN_COUNT = 6;
@@ -81,16 +82,21 @@ const RecordList = () => {
   // Row selection
   const [selected, setSelected] = useState([]);
 
-  // View mode (list or kanban) - check URL to determine initial mode
+  // View mode (list, kanban or calendar) - check URL to determine initial mode
   const isKanbanUrl = window.location.pathname.includes('/kanban');
-  const [viewMode, setViewMode] = useState(isKanbanUrl ? 'kanban' : 'list');
+  const isCalendarUrl = window.location.pathname.includes('/calendar');
+  const [viewMode, setViewMode] = useState(
+    isCalendarUrl ? 'calendar' : isKanbanUrl ? 'kanban' : 'list',
+  );
 
-  // A board is only usable when it is enabled *and* configured with a group-by
-  // field. If the config is cleared or disabled, fall back to the list view so a
-  // stale kanban URL cannot render an unusable board.
   const kanbanConfig = objMeta?.kanbanConfig || {};
   const isKanbanEnabled = Boolean(kanbanConfig.enabled && kanbanConfig.fieldApiName);
-  const effectiveViewMode = viewMode === 'kanban' && !isKanbanEnabled ? 'list' : viewMode;
+  const calendarConfig = objMeta?.calendarConfig || {};
+  const isCalendarEnabled = Boolean(calendarConfig.enabled && calendarConfig.dateFieldApiName);
+  const effectiveViewMode =
+    (viewMode === 'kanban' && !isKanbanEnabled) || (viewMode === 'calendar' && !isCalendarEnabled)
+      ? 'list'
+      : viewMode;
 
   // Cell text: 'clip' truncates with an ellipsis, 'wrap' flows onto more lines.
   // Lives in the URL (?wrap=), so it survives a reload and can be shared.
@@ -428,13 +434,22 @@ const RecordList = () => {
               onPageSizeChange={setPageSize}
             />
           </>
-        ) : (
+        ) : effectiveViewMode === 'kanban' ? (
           <div className={styles.kanbanWrapper}>
             <RecordKanban
               records={records}
               objectMeta={objMeta}
               objectApiName={objectApiName}
               onRecordUpdate={refetch}
+              fields={fields}
+            />
+          </div>
+        ) : (
+          <div className={styles.kanbanWrapper}>
+            <RecordCalendar
+              records={records}
+              objectMeta={objMeta}
+              objectApiName={objectApiName}
               fields={fields}
             />
           </div>

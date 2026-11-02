@@ -5,8 +5,10 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import AutoNumberCounter from '../models/AutoNumberCounter.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import duplicateDetectionService from '../services/duplicateDetectionService.js';
+import { fireAutomations } from '../services/automationService.js';
 import {
   getVisibleFields,
+  getEditableFields,
   buildDataAccessFilter,
 } from '../middleware/permissions.js';
 import {
@@ -500,6 +502,27 @@ export const importRecords = asyncHandler(async (req, res) => {
     fieldByApiName[f.apiName] = f;
   });
 
+  // Automation bypass (admin-only, temporary, per-import)
+  const bypassValidation =
+    req.body?.bypassValidation === true ||
+    String(req.body?.bypassValidation).toLowerCase() === 'true';
+
+  if (bypassValidation && !(req.user?.isAdmin && req.user.isAdmin())) {
+    throw new AppError('Automation bypass is restricted to administrators.', 403);
+  }
+
+  // Enforce editable-field security on explicit mappings
+  if (explicitMapping) {
+    const editable = await getEditableFields(req.user, objectApiName, fields.map((f) => f.apiName));
+    const editableSet = new Set(editable);
+    for (const [col, mapped] of Object.entries(explicitMapping)) {
+      if (!mapped || mapped === '__skip__') continue;
+      if (!editableSet.has(mapped)) {
+        throw new AppError(`You are not authorized to import into field "${mapped}".`, 403);
+      }
+    }
+  }
+
   const results = { created: 0, failed: 0, errors: [] };
 
   for (let i = 0; i < rows.length; i++) {
@@ -513,7 +536,7 @@ export const importRecords = asyncHandler(async (req, res) => {
       let apiName;
       if (explicitMapping) {
         const mapped = explicitMapping[col];
-        if (!mapped || mapped === SKIP) continue; // user skipped this column
+        if (!mapped || mapped === '__skip__') continue; // user skipped this column
         apiName = mapped;
       } else {
         apiName = labelToApiName[col.toLowerCase()];
@@ -529,11 +552,13 @@ export const importRecords = asyncHandler(async (req, res) => {
 
       // Formula values are computed into the context so imported rows are held
       // to the same rules as records created through the UI.
-      const ruleErrors = await evaluateValidationRules({
-        tenantId: req.tenantId,
-        rules: obj.validationRules || [],
-        data: { ...validatedData, ...computeFormulaValues(validatedData, fields) },
-      });
+      const ruleErrors = bypassValidation
+        ? []
+        : await evaluateValidationRules({
+            tenantId: req.tenantId,
+            rules: obj.validationRules || [],
+            data: { ...validatedData, ...computeFormulaValues(validatedData, fields) },
+          });
       if (valErrors.length > 0 || ruleErrors.length > 0) {
         results.failed++;
         results.errors.push({
@@ -588,6 +613,9 @@ export const importRecords = asyncHandler(async (req, res) => {
 
       record._searchText = await buildSearchText(record, fields);
       await record.save();
+      if (!bypassValidation) {
+        fireAutomations('create', objectApiName, record, req.tenantId).catch(() => {});
+      }
       results.created++;
     } catch (err) {
       results.failed++;
@@ -608,7 +636,7 @@ export const importRecords = asyncHandler(async (req, res) => {
     resource: 'DynamicRecord',
     objectApiName,
     req,
-    details: { created: results.created, failed: results.failed },
+    details: { created: results.created, failed: results.failed, bypassValidation },
   });
 
   sendSuccess(

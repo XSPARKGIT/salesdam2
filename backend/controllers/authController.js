@@ -451,6 +451,10 @@ const getMe = asyncHandler(async (req, res) => {
     .select('_id name slug color icon allowedObjects objectGroups isDefault')
     .sort({ isDefault: -1, name: 1 });
 
+  // BRD 9.3: Effective permissions = Role ∪ Permission Sets
+  const { getEffectivePermissions } = await import('../services/systemPermissionService.js');
+  const effectivePermissions = await getEffectivePermissions(user);
+
   sendSuccess(res, {
     data: {
       user: {
@@ -469,8 +473,8 @@ const getMe = asyncHandler(async (req, res) => {
         preferences: user.preferences,
         activeTenantId: req.sessionData?.tenantId,
         workspaces: workspaces || [],
-        // Last workspace chosen on the server session (POST /workspaces/switch).
         activeWorkspaceId: req.sessionData?.workspaceId || null,
+        effectivePermissions,
       },
       tenant: {
         ...tenant.toObject(),

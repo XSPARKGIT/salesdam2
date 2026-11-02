@@ -5,6 +5,7 @@ import ApproverGroup from '../models/ApproverGroup.js';
 import { validateAppIds } from '../services/appAccessService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
+import { getEffectivePermissions, SYSTEM_PERMISSION_KEYS } from '../services/systemPermissionService.js';
 
 const listRoles = asyncHandler(async (req, res) => {
   const roles = await Role.find({ tenantId: req.tenantId }).sort({ isSystem: -1, name: 1 });
@@ -50,6 +51,20 @@ const updateRole = asyncHandler(async (req, res) => {
 
   if (role.isSystem && !req.user.isSuperuser()) {
     throw new AppError('System roles can only be modified by superusers.', 403);
+  }
+
+  // BRD 9.3: prevent self-grant — non-superuser cannot add permissions they
+  // don't already hold (checked against their own effective set).
+  if (req.body.appPermissions && req.user.role?.name !== 'superuser') {
+    const own = await getEffectivePermissions(req.user);
+    for (const key of SYSTEM_PERMISSION_KEYS) {
+      if (req.body.appPermissions[key] && !own[key]) {
+        throw new AppError(
+          `You cannot grant "${key}" because you do not have it yourself.`,
+          403,
+        );
+      }
+    }
   }
 
   const allowed = ['label', 'description', 'objectPermissions', 'appPermissions', 'dataAccess', 'isDefault'];

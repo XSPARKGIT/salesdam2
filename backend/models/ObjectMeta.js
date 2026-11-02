@@ -118,6 +118,13 @@ const objectMetaSchema = new mongoose.Schema({
     fieldApiName: { type: String }, // which picklist field to group by
   },
 
+  // Calendar view configuration
+  calendarConfig: {
+    enabled: { type: Boolean, default: false },
+    dateFieldApiName: { type: String }, // date/datetime field for calendar placement
+    titleFieldApiName: { type: String }, // field used as event title
+  },
+
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, {

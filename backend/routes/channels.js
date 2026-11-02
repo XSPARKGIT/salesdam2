@@ -10,8 +10,9 @@ import {
   validateAccount,
   webhook,
 } from '../controllers/channelController.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
@@ -22,7 +23,7 @@ router.post('/webhook/:channel/:accountId', webhook);
 router.get('/capabilities', requireAuth, enforceTenant, capabilities);
 router.get('/providers', requireAuth, enforceTenant, providers);
 
-router.use(requireAuth, enforceTenant, requireAdmin);
+router.use(requireAuth, enforceTenant, checkAppPermission('canManageCommunicationTemplates'));
 router.get('/', listAccounts);
 router.post('/', createAccount);
 router.post('/:id/validate', validateAccount);

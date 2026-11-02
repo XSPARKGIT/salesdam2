@@ -7,26 +7,25 @@ import {
 import { checkAppPermission } from '../middleware/permissions.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
-import { requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 router.use(requireAuth, enforceTenant);
 
 // Any authenticated user
 router.get('/mine',           myWorkspaces);
-router.post('/switch',        switchWorkspace);   // set active workspace in session
+router.post('/switch',        switchWorkspace);
 
 // Apps to choose from when granting app access on a Role or Permission Set
 router.get('/catalogue',      checkAppPermission('canManageRoles'), appCatalogue);
 
-// Admin — manage workspaces within their tenant
-router.get('/',                              requireAdmin, listWorkspaces);
-router.post('/',                             requireAdmin, createWorkspace);
-router.get('/:id',                           requireAdmin, getWorkspace);
-router.put('/:id',                           requireAdmin, updateWorkspace);
-router.put('/:id/object-groups',             requireAdmin, updateObjectGroups);
-router.delete('/:id',                        requireAdmin, deleteWorkspace);
-router.post('/:id/members',                  requireAdmin, addMember);
-router.delete('/:id/members/:userId',        requireAdmin, removeMember);
+// Manage workspaces — requires Customize Application.
+router.get('/',                              checkAppPermission('canCustomizeApplication'), listWorkspaces);
+router.post('/',                             checkAppPermission('canCustomizeApplication'), createWorkspace);
+router.get('/:id',                           checkAppPermission('canCustomizeApplication'), getWorkspace);
+router.put('/:id',                           checkAppPermission('canCustomizeApplication'), updateWorkspace);
+router.put('/:id/object-groups',             checkAppPermission('canCustomizeApplication'), updateObjectGroups);
+router.delete('/:id',                        checkAppPermission('canCustomizeApplication'), deleteWorkspace);
+router.post('/:id/members',                  checkAppPermission('canCustomizeApplication'), addMember);
+router.delete('/:id/members/:userId',        checkAppPermission('canCustomizeApplication'), removeMember);
 
 export default router;

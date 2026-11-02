@@ -36,9 +36,9 @@ import {
 import {
   requireAuth,
   requireSuperuser,
-  requireAdmin,
 } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -77,30 +77,31 @@ router.use(requireAuth, enforceTenant);
 // Lead approval settings — readable by all authenticated users (used by tender dialog, etc.)
 router.get('/settings/lead-approval-settings', getLeadApprovalSettings);
 
-// Stats and logs — admin+
-router.get('/stats', requireAdmin, getSystemStats);
-router.get('/logs', requireAdmin, getAuditLogs);
+// Stats
+router.get('/stats', checkAppPermission('canCustomizeApplication'), getSystemStats);
+// Audit logs
+router.get('/logs', checkAppPermission('canViewAuditLog'), getAuditLogs);
 
-// Admin settings (company profile, targets, invoice/quote) — admin only
-router.get('/settings', requireAdmin, getAdminSettings);
-router.put('/settings', requireAdmin, logoUpload.single('logoFile'), updateAdminSettings);
+// Admin settings (company profile, targets, invoice/quote)
+router.get('/settings', checkAppPermission('canManageTenantSettings'), getAdminSettings);
+router.put('/settings', checkAppPermission('canManageTenantSettings'), logoUpload.single('logoFile'), updateAdminSettings);
 
-// Storage usage — admin only
-router.get('/storage-usage', requireAdmin, getStorageUsage);
+// Storage usage
+router.get('/storage-usage', checkAppPermission('canCustomizeApplication'), getStorageUsage);
 
-// Tenders config — admin only
-router.get('/settings/tenders-config', requireAdmin, getTendersConfig);
-router.put('/settings/tenders-config', requireAdmin, updateTendersConfig);
+// Tenders config
+router.get('/settings/tenders-config', checkAppPermission('canManageTenantSettings'), getTendersConfig);
+router.put('/settings/tenders-config', checkAppPermission('canManageTenantSettings'), updateTendersConfig);
 
-// Subscription management — admin only
-router.get('/subscription', requireAdmin, getSubscription);
-router.put('/subscription/plan', requireAdmin, updateSubscriptionPlan);
-router.put('/subscription/payment-method', requireAdmin, updatePaymentMethod);
-router.post('/subscription/cancel', requireAdmin, cancelSubscription);
+// Subscription management
+router.get('/subscription', checkAppPermission('canManageTenantSettings'), getSubscription);
+router.put('/subscription/plan', checkAppPermission('canManageTenantSettings'), updateSubscriptionPlan);
+router.put('/subscription/payment-method', checkAppPermission('canManageTenantSettings'), updatePaymentMethod);
+router.post('/subscription/cancel', checkAppPermission('canManageTenantSettings'), cancelSubscription);
 
-// Data import/export with field selection and filters — admin only
-router.post('/import', requireAdmin, importUpload.single('file'), importRecords);
-router.get('/export', requireAdmin, adminExport);
+// Data import/export
+router.post('/import', checkAppPermission('canImportData'), importUpload.single('file'), importRecords);
+router.get('/export', checkAppPermission('canExportData'), adminExport);
 
 // Tenant (workspace) management — superuser only
 router.get('/tenants', requireSuperuser, listTenants);

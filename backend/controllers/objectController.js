@@ -84,6 +84,62 @@ const resolveKanbanConfig = async ({
   return { enabled: true, fieldApiName };
 };
 
+const resolveCalendarConfig = async ({
+  tenantId,
+  objectApiName,
+  calendarConfig,
+}) => {
+  const enabled = Boolean(calendarConfig?.enabled);
+  const dateFieldApiName =
+    typeof calendarConfig?.dateFieldApiName === 'string'
+      ? calendarConfig.dateFieldApiName.trim().toLowerCase()
+      : '';
+  const titleFieldApiName =
+    typeof calendarConfig?.titleFieldApiName === 'string'
+      ? calendarConfig.titleFieldApiName.trim().toLowerCase()
+      : '';
+
+  if (!enabled) {
+    return { enabled: false, dateFieldApiName: '', titleFieldApiName: '' };
+  }
+
+  if (!dateFieldApiName) {
+    throw new AppError(
+      'Calendar view requires a date field when enabled.',
+      400,
+    );
+  }
+
+  const dateField = await FieldMeta.findOne({
+    tenantId,
+    objectApiName,
+    apiName: dateFieldApiName,
+  });
+
+  if (!dateField || !['date', 'datetime'].includes(dateField.type)) {
+    throw new AppError(
+      `Calendar date field "${dateFieldApiName}" must be a date or datetime field.`,
+      400,
+    );
+  }
+
+  if (titleFieldApiName) {
+    const titleField = await FieldMeta.findOne({
+      tenantId,
+      objectApiName,
+      apiName: titleFieldApiName,
+    });
+    if (!titleField) {
+      throw new AppError(
+        `Calendar title field "${titleFieldApiName}" does not exist.`,
+        400,
+      );
+    }
+  }
+
+  return { enabled: true, dateFieldApiName, titleFieldApiName };
+};
+
 /**
  * GET /api/objects
  * List all objects for the current tenant.
@@ -172,6 +228,7 @@ const createObject = asyncHandler(async (req, res) => {
     navOrder,
     sharingModel,
     kanbanConfig,
+    calendarConfig,
     nameFieldType,
     nameFieldLabel,
     autoNumberPrefix,
@@ -259,6 +316,9 @@ const createObject = asyncHandler(async (req, res) => {
     navOrder,
     sharingModel,
     kanbanConfig,
+    calendarConfig: calendarConfig?.enabled
+      ? await resolveCalendarConfig({ tenantId: req.tenantId, objectApiName: apiName, calendarConfig })
+      : { enabled: false, dateFieldApiName: '', titleFieldApiName: '' },
     isCustom: true,
     isActive: true,
     createdBy: req.user._id,
@@ -354,6 +414,7 @@ const updateObject = asyncHandler(async (req, res) => {
     'actionButtons',
     'validationRules',
     'kanbanConfig',
+    'calendarConfig',
     'isActive',
     'hasRecordTypes',
     'isJunctionObject',
@@ -447,9 +508,7 @@ const updateObject = asyncHandler(async (req, res) => {
   const wasSearchable = obj.searchable;
   const wasHasRecordTypes = obj.hasRecordTypes;
   allowedUpdates.forEach((key) => {
-    // Kanban is normalised through resolveKanbanConfig below so an enabled
-    // board cannot be saved without a valid group-by picklist field.
-    if (key === 'kanbanConfig') return;
+    if (key === 'kanbanConfig' || key === 'calendarConfig') return;
     if (req.body[key] !== undefined) obj[key] = req.body[key];
   });
   if (req.body.kanbanConfig !== undefined) {
@@ -457,6 +516,13 @@ const updateObject = asyncHandler(async (req, res) => {
       tenantId: req.tenantId,
       objectApiName: apiName,
       kanbanConfig: req.body.kanbanConfig,
+    });
+  }
+  if (req.body.calendarConfig !== undefined) {
+    obj.calendarConfig = await resolveCalendarConfig({
+      tenantId: req.tenantId,
+      objectApiName: apiName,
+      calendarConfig: req.body.calendarConfig,
     });
   }
   obj.lastModifiedBy = req.user._id;

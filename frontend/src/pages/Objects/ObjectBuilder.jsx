@@ -70,6 +70,11 @@ const ObjectBuilder = () => {
       enabled: false,
       fieldApiName: '',
     },
+    calendarConfig: {
+      enabled: false,
+      dateFieldApiName: '',
+      titleFieldApiName: '',
+    },
     // Object-level settings (BRD §3.1.1)
     isActive: true,
     enableHistory: false,
@@ -140,6 +145,11 @@ const ObjectBuilder = () => {
         enabled: false,
         fieldApiName: '',
       },
+      calendarConfig: objectData.calendarConfig || {
+        enabled: false,
+        dateFieldApiName: '',
+        titleFieldApiName: '',
+      },
       // Object-level settings
       isActive: objectData.isActive !== false,
       enableHistory: objectData.enableHistory || false,
@@ -164,9 +174,11 @@ const ObjectBuilder = () => {
     const { name, value, type, checked } = e.target;
     if (name === 'nameFieldApiName') setNameFieldApiNameTouched(true);
     setObjForm((prev) => {
-      // Handle nested kanbanConfig object
       if (name === 'kanbanConfig') {
         return { ...prev, kanbanConfig: value };
+      }
+      if (name === 'calendarConfig') {
+        return { ...prev, calendarConfig: value };
       }
 
       let coerced = type === 'checkbox' ? checked : value;

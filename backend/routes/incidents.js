@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 import { enforceTenant, injectTenantId } from '../middleware/tenant.js';
 import {
   getIncidents,
@@ -26,7 +27,7 @@ router.use(injectTenantId);
 // GET /api/incidents/admin/all - Incident administration.
 // Tenant admins see only their own tenant; cross-tenant listing is
 // limited to platform operators (superuser). See API_CONTRACT_CONFORMANCE.md.
-router.get('/admin/all', requireAdmin, getAllIncidents);
+router.get('/admin/all', checkAppPermission('canCustomizeApplication'), getAllIncidents);
 
 // GET /api/incidents - List incidents
 router.get('/', getIncidents);
@@ -38,7 +39,7 @@ router.get('/:id', getIncident);
 router.post('/', createIncident);
 
 // PATCH /api/incidents/:id - Update incident (admin only)
-router.patch('/:id', requireAdmin, updateIncident);
+router.patch('/:id', checkAppPermission('canCustomizeApplication'), updateIncident);
 
 // PATCH /api/incidents/:id/edit - Edit incident (reporter or admin)
 router.patch('/:id/edit', editIncident);

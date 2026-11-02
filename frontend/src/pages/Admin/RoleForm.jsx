@@ -8,17 +8,27 @@ import Layout from '../../layout/Layout';
 import styles from './RoleForm.module.css';
 
 const APP_PERMISSIONS = [
-  { key: 'canManageUsers', label: 'Manage Users' },
-  { key: 'canManageRoles', label: 'Manage Roles' },
-  { key: 'canManageObjects', label: 'Manage Objects & Fields' },
-  { key: 'canManageAutomations', label: 'Manage Automations' },
+  { key: 'canCustomizeApplication', label: 'Customize Application' },
+  { key: 'canManageObjects', label: 'Manage Custom Objects and Fields' },
+  { key: 'canManageLayouts', label: 'Manage Page Layouts' },
+  { key: 'canManageAutomations', label: 'Manage Flows' },
+  { key: 'canManageApprovals', label: 'Manage Approval Processes' },
+  { key: 'canManageCustomCode', label: 'Manage Custom Code' },
+  { key: 'canDeployCustomCode', label: 'Deploy Custom Code' },
   { key: 'canManageIntegrations', label: 'Manage Integrations' },
+  { key: 'canManageApiKeys', label: 'Manage API Credentials' },
+  { key: 'canManageWebhooks', label: 'Manage Webhooks' },
+  { key: 'canManageUsers', label: 'Manage Users' },
+  { key: 'canManageRoles', label: 'Manage Profiles and Permissions' },
+  { key: 'canManageTenantSettings', label: 'Manage Tenant Configuration' },
+  { key: 'canExportData', label: 'Export Data' },
+  { key: 'canImportData', label: 'Import Data' },
+  { key: 'canViewAuditLog', label: 'View Audit Logs' },
   { key: 'canViewAnalytics', label: 'View Analytics' },
   { key: 'canManageAnalytics', label: 'Manage Analytics' },
-  { key: 'canViewAuditLog', label: 'View Audit Logs' },
-  { key: 'canManageTenantSettings', label: 'Manage Settings' },
-  { key: 'canManageApiKeys', label: 'Manage API Keys' },
-  { key: 'canManageWebhooks', label: 'Manage Webhooks' },
+  { key: 'canViewCallRecordings', label: 'View Call Recordings' },
+  { key: 'canManageCommunicationTemplates', label: 'Manage Communication Templates' },
+  { key: 'canManageDocumentTemplates', label: 'Manage Document Templates' },
 ];
 
 const OBJECT_ACTIONS = [

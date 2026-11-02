@@ -1,5 +1,6 @@
 import Role from '../models/Role.js';
 import { AppError } from '../utils/errors.js';
+import { hasSystemPermission } from '../services/systemPermissionService.js';
 
 /**
  * hasObjectPermission(user, action, objectApiName)
@@ -50,32 +51,15 @@ const checkObjectPermission = (action, objectApiName) => {
 
 /**
  * checkAppPermission(permissionKey)
- * Checks app-level permissions like canManageUsers, canViewAnalytics, etc.
+ * Checks system permissions (BRD 9.3). The user's effective permissions are
+ * their Role's appPermissions merged (additive) with every assigned Permission
+ * Set's systemPermissions.
  */
 const checkAppPermission = (permissionKey) => {
   return async (req, res, next) => {
     try {
-      if (req.user.role?.name === 'superuser') return next();
-      if (req.user.role?.name === 'admin') return next();
-
-      const userRole = req.user.role;
-      if (!userRole) {
-        return next(new AppError('Permission denied.', 403));
-      }
-
-      const roleDoc = userRole.appPermissions
-        ? userRole
-        : await Role.findById(userRole._id || userRole);
-
-      if (
-        !roleDoc ||
-        !roleDoc.appPermissions ||
-        !roleDoc.appPermissions[permissionKey]
-      ) {
-        return next(new AppError('Permission denied.', 403));
-      }
-
-      next();
+      if (await hasSystemPermission(req.user, permissionKey)) return next();
+      return next(new AppError('Permission denied.', 403));
     } catch (err) {
       next(err);
     }

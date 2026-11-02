@@ -2,7 +2,7 @@ import styles from './Sidebar.module.css';
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
-import { LayoutDashboard, ScrollText, AlertTriangle, Inbox, PieChart } from 'lucide-react';
+import { LayoutDashboard, ScrollText, AlertTriangle, Inbox, PieChart, FileBarChart } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getMyPendingApprovals } from '../../services/api/approvals';
 import { useAuth } from '../../hooks/useAuth';
@@ -217,6 +217,14 @@ const Sidebar = () => {
               onNavigate={handleMobileNav}
             />
           )}
+
+          <SidebarNavItem
+            to="/reports"
+            icon={<FileBarChart size={17} />}
+            label="Reports"
+            collapsed={sidebarCollapsed}
+            onNavigate={handleMobileNav}
+          />
 
           <SidebarNavItem
             to="/approvals"

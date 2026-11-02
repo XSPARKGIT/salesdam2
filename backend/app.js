@@ -68,6 +68,7 @@ import channelRoutes from './routes/channels.js';
 import conversationRoutes from './routes/conversations.js';
 import messageTemplateRoutes from './routes/messageTemplates.js';
 import telephonyRoutes from './routes/telephony.js';
+import reportRoutes from './routes/reports.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('./package.json');
@@ -193,6 +194,7 @@ app.use(`${API_V1_PREFIX}/admin`, adminRoutes);
 app.use(`${API_V1_PREFIX}/ai`, aiRoutes);
 app.use(`${API_V1_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_V1_PREFIX}/dashboards`, dashboardRoutes);
+app.use(`${API_V1_PREFIX}/reports`, reportRoutes);
 app.use(`${API_V1_PREFIX}/dashboard-folders`, dashboardFolderRoutes);
 app.use(`${API_V1_PREFIX}/external-objects`, externalObjectRoutes);
 app.use(`${API_V1_PREFIX}/custom-screens`, customScreenRoutes);
