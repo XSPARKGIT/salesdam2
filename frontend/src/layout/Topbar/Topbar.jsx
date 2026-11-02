@@ -16,12 +16,14 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useBranding } from '../../hooks/useBranding';
 import { useAppContext } from '../../context/AppContext';
 import { useOnboarding } from '../../components/onboarding/OnboardingProvider';
 import { globalSearch } from '../../services/api/search';
 
 const Topbar = () => {
   const { user, logout } = useAuth();
+  const branding = useBranding();
   const { openWelcome } = useOnboarding();
   const {
     sidebarCollapsed,
@@ -45,6 +47,11 @@ const Topbar = () => {
 
   const navigate = useNavigate();
   const notifRef = useRef(null);
+  useEffect(() => {
+    if (branding?.primaryColor) {
+      document.documentElement.style.setProperty('--color-primary', branding.primaryColor);
+    }
+  }, [branding?.primaryColor]);
   const profileRef = useRef(null);
   const searchRef = useRef(null);
   const debounceRef = useRef(null);

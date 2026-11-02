@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { LogIn } from 'lucide-react';
@@ -6,12 +6,19 @@ import Button from '../../components/common/Button/Button';
 import FormInput from '../../components/common/FormInput/FormInput';
 import styles from './Login.module.css';
 import { useAuth } from '../../hooks/useAuth';
+import { useBranding } from '../../hooks/useBranding';
 import { version } from '../../../package.json';
 
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+  const branding = useBranding();
+  useEffect(() => {
+    if (branding?.primaryColor) {
+      document.documentElement.style.setProperty('--color-primary', branding.primaryColor);
+    }
+  }, [branding?.primaryColor]);
 
   // Get username from the URL
   const searchParams = new URLSearchParams(location.search);
