@@ -11,6 +11,8 @@ export default function CustomCodePage() {
   const [inputs, setInputs] = useState('{}');
   const [testMode, setTestMode] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [execResult, setExecResult] = useState(null);
+  const [changeNote, setChangeNote] = useState('');
 
   const load = async () => {
     try {
@@ -33,7 +35,21 @@ export default function CustomCodePage() {
       setName('');
       load();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Create failed');
+      toast.error(e.message || 'Create failed');
+    }
+  };
+
+  const addVersion = async (n) => {
+    if (!code) return toast.error('Code required');
+    try {
+      let parsedInputs = {};
+      try { parsedInputs = JSON.parse(inputs); } catch {}
+      await api.post(`/custom-code/${n}/versions`, { code, inputs: parsedInputs, changeNote });
+      toast.success('Version added');
+      setChangeNote('');
+      load();
+    } catch (e) {
+      toast.error(e.message || 'Add version failed');
     }
   };
 
@@ -47,7 +63,7 @@ export default function CustomCodePage() {
         setSelected(n);
       }
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Activate failed');
+      toast.error(e.message || 'Activate failed');
     }
   };
 
@@ -57,7 +73,7 @@ export default function CustomCodePage() {
       toast.success(`v${v} restored`);
       load();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Restore failed');
+      toast.error(e.message || 'Restore failed');
     }
   };
 
@@ -69,8 +85,8 @@ export default function CustomCodePage() {
       setExecResult(res.data?.data);
       toast.success('Executed');
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Execute failed');
-      setExecResult(e.response?.data || null);
+      toast.error(e.message || 'Execute failed');
+      setExecResult(e.data || null);
     }
   };
 
@@ -81,7 +97,7 @@ export default function CustomCodePage() {
       toast.success('Deleted');
       load();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Delete failed');
+      toast.error(e.message || 'Delete failed');
     }
   };
 
@@ -89,16 +105,20 @@ export default function CustomCodePage() {
     <Layout title="Custom Code" description="Tenant-specific code snippets">
       <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
         <section>
-          <h3>Create Custom Code</h3>
+          <h3>Code Editor</h3>
+          <p style={{ fontSize: 13, color: '#666', marginTop: -4 }}>
+            Used both to create a new snippet below and to add a new version to an existing one via the row's "Add Version" button.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, maxWidth: 600 }}>
-            <input placeholder="Name" value={name} onChange={e=>setName(e.target.value)} />
+            <input placeholder="Name (for new snippet only)" value={name} onChange={e=>setName(e.target.value)} />
             <textarea rows={6} value={code} onChange={e=>setCode(e.target.value)} style={{ fontFamily: 'monospace' }} />
             <input placeholder='Inputs JSON (e.g. {"x":5})' value={inputs} onChange={e=>setInputs(e.target.value)} />
+            <input placeholder="Change note (used by Add Version only)" value={changeNote} onChange={e=>setChangeNote(e.target.value)} />
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
               <input type="checkbox" checked={testMode} onChange={e=>setTestMode(e.target.checked)} />
               Test mode (disable writes)
             </label>
-            <Button onClick={create}>Create (v1 draft)</Button>
+            <Button onClick={create}>Create New Snippet (v1 draft)</Button>
           </div>
         </section>
 
@@ -113,6 +133,9 @@ export default function CustomCodePage() {
                   <td>{c.activeVersion ?? 'none'}</td>
                   <td>{(c.versions||[]).map(v=>`v${v.version}(${v.status})`).join(', ')}</td>
                   <td>
+                    <Button size="sm" variant="secondary" onClick={()=>addVersion(c.name)} style={{ marginRight: 4 }}>
+                      Add Version (from code box above)
+                    </Button>
                     {(c.versions||[]).filter(v=>v.status!=='active').map(v=>(
                       <Button key={v.version} size="sm" onClick={()=>activate(c.name,v.version)} style={{ marginRight: 4 }}>
                         Activate v{v.version}

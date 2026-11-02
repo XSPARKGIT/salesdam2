@@ -15,6 +15,8 @@ import {
   Users2,
   KeyRound,
   Package,
+  Radio,
+  MessageCircle,
 } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import SidebarNavGroup from './SidebarNavGroup';
@@ -33,7 +35,8 @@ const SidebarSetup = ({
     hasPermission('canManageRoles') ||
     hasPermission('canManageTenantSettings') ||
     hasPermission('canManageAutomations') ||
-    hasPermission('canManageIntegrations');
+    hasPermission('canManageIntegrations') ||
+    hasPermission('canManageCommunicationTemplates');
 
   if (!hasSetupAccess) {
     return null;
@@ -80,6 +83,26 @@ const SidebarSetup = ({
           to="/integrations"
           icon={<Globe size={15} />}
           label="Integrations"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {hasPermission('canManageCommunicationTemplates') && (
+        <SidebarNavItem
+          to="/admin/channels"
+          icon={<Radio size={15} />}
+          label="Channel Accounts"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {hasPermission('canManageCommunicationTemplates') && (
+        <SidebarNavItem
+          to="/admin/message-templates"
+          icon={<MessageCircle size={15} />}
+          label="Message Templates"
           collapsed={sidebarCollapsed}
           onNavigate={onNavigate}
         />

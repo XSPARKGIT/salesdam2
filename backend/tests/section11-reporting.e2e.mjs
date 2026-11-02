@@ -173,7 +173,7 @@ try {
       method: 'POST', cookie: adminCookie2, body: data,
     });
     check(`project "${data.name}" created`, r.status === 201);
-    projectIds.push(r.json?.data?._id);
+    projectIds.push(r.json?.data?.id || r.json?.data?._id);
   }
 
   // ── 6. Create task records (linked to projects) ─────────────────────────
@@ -325,16 +325,6 @@ try {
   check('filter between works', r.json?.data?.results?.[0]?.count === 4, '10,15,20,40');
 
   // ── 18. Cross-object: tasks grouped by project status ───────────────────
-  // Debug: check what fields exist on child object
-  const childFields = await FieldMeta.find({ tenantId, objectApiName: childApi }).select('apiName type').lean();
-  console.log('DEBUG child fields:', childFields.map(f => `${f.apiName}(${f.type})`).join(', '));
-  // Also check one record
-  const debugRecs = await DynamicRecord.find({ tenantId, objectApiName: childApi, isDeleted: false }).limit(1);
-  const dr = debugRecs[0];
-  if (dr) {
-    console.log('DEBUG data keys:', dr.data instanceof Map ? [...dr.data.keys()] : Object.keys(dr.data || {}));
-  }
-
   r = await req('/api/v1/reports/run', {
     method: 'POST', cookie: adminCookie2,
     body: {
@@ -349,7 +339,6 @@ try {
   });
   check('cross-object report runs', r.status === 200);
   const crossResults = r.json?.data?.results || [];
-  console.log('DEBUG cross results:', JSON.stringify(crossResults));
   check('cross-object returns groups', crossResults.length >= 2, `got ${crossResults.length}`);
   const activeGroup = crossResults.find((g) => g._id === 'active');
   check('cross-object: active project tasks hours = 120', activeGroup?.total_hours === 120, `got ${activeGroup?.total_hours}`);

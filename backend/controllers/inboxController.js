@@ -89,6 +89,19 @@ const reply = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: message }, 'Reply queued', 201);
 });
 
+const replyWithTemplate = asyncHandler(async (req, res) => {
+  const { templateId, values } = req.body || {};
+  if (!templateId) throw new AppError('templateId is required.', 400);
+  const message = await inboxService.replyWithTemplate({
+    tenantId: req.tenantId,
+    id: req.params.id,
+    templateId,
+    extraValues: values || {},
+    user: req.user,
+  });
+  sendSuccess(res, { data: message }, 'Template reply queued', 201);
+});
+
 const addNote = asyncHandler(async (req, res) => {
   const message = await inboxService.addNote({
     tenantId: req.tenantId,
@@ -144,6 +157,7 @@ export {
   setStatus,
   linkRecord,
   reply,
+  replyWithTemplate,
   addNote,
   createRecordFromConversation,
 };

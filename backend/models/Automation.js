@@ -19,6 +19,7 @@ const flowNodeSchema = new mongoose.Schema(
         'action_update_record',
         'action_delete_record',
         'action_send_email',
+        'action_send_message_template', // WhatsApp/Messenger/Instagram/SMS template, provider-approval gated
         'action_send_notification',
         'action_webhook',
         'action_http_request', // call an ExternalObject or arbitrary endpoint

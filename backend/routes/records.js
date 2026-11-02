@@ -165,6 +165,26 @@ router.get('/:objectApiName/:id/history', checkObjectPermission('read'), asyncHa
 router.get('/:objectApiName/deleted', checkObjectPermission('read'), listDeletedRecords);
 router.post('/:objectApiName/:id/restore', checkObjectPermission('update'), restoreRecord);
 
+// ─── Send email from a record (Core BRD §16.7) ────────────────────────────────
+// Reuses the omnichannel send path (consent check, channel adapter dispatch,
+// Activity logging) — not a second email system.
+router.post(
+  '/:objectApiName/:id/send-email',
+  checkObjectPermission('update'),
+  asyncHandler(async (req, res) => {
+    const inboxService = (await import('../services/inboxService.js')).default;
+    const { to, subject, body, templateId, channelAccountId } = req.body || {};
+    const result = await inboxService.sendEmailToRecord({
+      tenantId: req.tenantId,
+      objectApiName: req.params.objectApiName,
+      recordId: req.params.id,
+      to, subject, body, templateId, channelAccountId,
+      user: req.user,
+    });
+    sendSuccess(res, { data: result }, 'Email sent', 201);
+  }),
+);
+
 // ─── Standard record CRUD ─────────────────────────────────────────────────────
 router.get('/:objectApiName', checkObjectPermission('read'), listRecords);
 router.get('/:objectApiName/:id', checkObjectPermission('read'), getRecord);

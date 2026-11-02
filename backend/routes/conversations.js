@@ -7,6 +7,7 @@ import {
   setStatus,
   linkRecord,
   reply,
+  replyWithTemplate,
   addNote,
   createRecordFromConversation,
 } from '../controllers/inboxController.js';
@@ -24,6 +25,7 @@ router.post('/:id/assign', assignConversation);
 router.post('/:id/status', setStatus);
 router.post('/:id/link', linkRecord);
 router.post('/:id/reply', reply);
+router.post('/:id/reply-template', replyWithTemplate);
 router.post('/:id/notes', addNote);
 router.post('/:id/create-record', createRecordFromConversation);
 

@@ -345,6 +345,10 @@ const executeNode = async (node, allNodes, record, ctx, tenantId) => {
       await executeEmail(node.config, record, ctx, tenantId);
       break;
 
+    case 'action_send_message_template':
+      await executeSendMessageTemplate(node.config, record, ctx, tenantId);
+      break;
+
     case 'action_webhook':
     case 'action_http_request':
       await executeHttpRequest(node.config, record, ctx, tenantId);
@@ -554,77 +558,66 @@ async function executeNotification(config, record, ctx, tenantId) {
   );
 }
 
+/**
+ * Flow "Send Email" action (Core BRD §5, §16.7). Resolves {field}/{variable}
+ * tokens with the Flow's own interpolate() (record fields, ctx variables,
+ * system fields — richer than a plain record-data merge), then dispatches
+ * through inboxService.sendEmailToRecord — the same consent check, channel
+ * adapter and Activity logging used by every manual email and reply. This
+ * used to send directly via nodemailer + EmailSender with no consent check
+ * and no Activity record; that path bypassed BRD §16.6 entirely and is gone.
+ */
 async function executeEmail(config, record, ctx, tenantId) {
   if (!config.to) return;
   try {
-    const nodemailer = (await import('nodemailer')).default;
-    const EmailSender = (await import('../models/EmailSender.js')).default;
+    const inboxService = (await import('./inboxService.js')).default;
+    const to = interpolate(config.to, record, ctx);
+    const subject = interpolate(config.subject || 'Automation notification', record, ctx);
+    const body = interpolate(config.htmlBody || config.body || '', record, ctx);
 
-    // Prefer a configured EmailSender: use the one specified on the action,
-    // fall back to the workspace default, then fall back to env vars.
-    let smtpConfig = null;
-    let fromAddress = process.env.SMTP_FROM || 'noreply@crm.local';
-
-    if (config.emailSenderId) {
-      smtpConfig = await EmailSender.findOne({
-        _id: config.emailSenderId,
-        tenantId,
-        isActive: true,
-      }).select('+smtpUser +smtpPass');
-    }
-
-    if (!smtpConfig) {
-      smtpConfig = await EmailSender.findOne({
-        tenantId,
-        isDefault: true,
-        isActive: true,
-      }).select('+smtpUser +smtpPass');
-    }
-
-    let transportOpts;
-    if (smtpConfig?.smtpHost) {
-      transportOpts = {
-        host: smtpConfig.smtpHost,
-        port: smtpConfig.smtpPort || 587,
-        secure: smtpConfig.smtpSecure,
-        auth: smtpConfig.smtpUser
-          ? { user: smtpConfig.smtpUser, pass: smtpConfig.smtpPass || '' }
-          : undefined,
-      };
-      fromAddress = smtpConfig.replyTo
-        ? `"${smtpConfig.name}" <${smtpConfig.email}>`
-        : `"${smtpConfig.name}" <${smtpConfig.email}>`;
-    } else if (process.env.SMTP_HOST) {
-      transportOpts = {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: process.env.SMTP_USER
-          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-          : undefined,
-      };
-    } else {
-      logger.warn('No SMTP configuration found — skipping automation email');
-      return;
-    }
-
-    const transporter = nodemailer.createTransport(transportOpts);
-    await transporter.sendMail({
-      from: fromAddress,
-      replyTo: smtpConfig?.replyTo || undefined,
-      to: interpolate(config.to, record, ctx),
-      subject: interpolate(
-        config.subject || 'Automation notification',
-        record,
-        ctx,
-      ),
-      text: interpolate(config.body || '', record, ctx),
-      html: config.htmlBody
-        ? interpolate(config.htmlBody, record, ctx)
-        : undefined,
+    await inboxService.sendEmailToRecord({
+      tenantId,
+      objectApiName: record.objectApiName,
+      recordId: record._id,
+      to,
+      subject,
+      body,
+      templateId: config.templateId,
+      channelAccountId: config.channelAccountId,
+      user: null, // system-triggered, not an agent action
     });
   } catch (err) {
-    logger.warn('Automation email failed:', err.message);
+    // Consistent with every other node executor here: log and let the caller
+    // (fireAutomations' per-automation try/catch) record the Flow failure
+    // without taking down the rest of the run.
+    logger.warn(`Automation email failed: ${err.message}`);
+    throw err;
+  }
+}
+
+/**
+ * Flow "Send Message Template" action (Core BRD §5, §16.3) — WhatsApp,
+ * Messenger, Instagram or SMS. Dispatches through inboxService.sendTemplateToRecord,
+ * which enforces the exact same WhatsApp provider-approval gate used by a
+ * manual Inbox send: a Flow cannot send an unapproved WhatsApp template any
+ * more than an agent can.
+ */
+async function executeSendMessageTemplate(config, record, ctx, tenantId) {
+  if (!config.to || !config.templateId) return;
+  try {
+    const inboxService = (await import('./inboxService.js')).default;
+    await inboxService.sendTemplateToRecord({
+      tenantId,
+      objectApiName: record.objectApiName,
+      recordId: record._id,
+      channel: config.channel,
+      to: interpolate(config.to, record, ctx),
+      templateId: config.templateId,
+      channelAccountId: config.channelAccountId,
+      user: null,
+    });
+  } catch (err) {
+    logger.warn(`Automation template send failed: ${err.message}`);
     throw err;
   }
 }

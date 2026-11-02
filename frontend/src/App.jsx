@@ -51,6 +51,9 @@ import PdfTemplateEditor from './pages/PdfTemplates/PdfTemplateEditor';
 import AdminSettings from './pages/Admin/AdminSettings';
 import Deployments from './pages/Admin/Deployments';
 import CustomCodePage from './pages/Admin/CustomCode';
+import ChannelAccountsPage from './pages/Admin/ChannelAccounts';
+import MessageTemplatesPage from './pages/Admin/MessageTemplates';
+import InboxPage from './pages/Inbox/Inbox';
 import CompanyInfo from './pages/Admin/settings/CompanyInfo';
 import SalesTargets from './pages/Admin/settings/SalesTargets';
 import InvoiceQuote from './pages/Admin/settings/InvoiceQuote';
@@ -801,6 +804,26 @@ export default function App() {
         path="/admin/custom-code"
         element={
           <CustomCodePage />
+        }
+      />
+      <Route
+        path="/admin/channels"
+        element={
+          <ChannelAccountsPage />
+        }
+      />
+      <Route
+        path="/admin/message-templates"
+        element={
+          <MessageTemplatesPage />
+        }
+      />
+      <Route
+        path="/inbox"
+        element={
+          <Guard>
+            <InboxPage />
+          </Guard>
         }
       />
       <Route

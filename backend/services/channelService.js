@@ -50,6 +50,7 @@ const createAccount = async ({ tenantId, data = {}, user }) => {
     credentials: data.credentials,
     webhookSecret: data.webhookSecret,
     matchRules: data.matchRules,
+    fieldMappings: data.fieldMappings,
     defaultOwnerId: data.defaultOwnerId,
     createObjectApiName: data.createObjectApiName,
     createdBy: user?._id,
@@ -64,6 +65,7 @@ const updateAccount = async ({ tenantId, id, updates = {} }) => {
     'credentials',
     'webhookSecret',
     'matchRules',
+    'fieldMappings',
     'defaultOwnerId',
     'createObjectApiName',
   ];

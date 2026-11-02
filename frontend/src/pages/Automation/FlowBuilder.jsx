@@ -40,6 +40,7 @@ import {
   Navigation,
   FileText,
   FileCode,
+  MessageCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -202,6 +203,12 @@ const STEP_TYPES = {
     label: 'Send Email',
     icon: <Mail size={16} />,
     color: '#0ea5e9',
+    group: 'Actions',
+  },
+  action_send_message_template: {
+    label: 'Send Message Template',
+    icon: <MessageCircle size={16} />,
+    color: '#25d366',
     group: 'Actions',
   },
   action_http_request: {
@@ -704,6 +711,81 @@ function EmailConfig({ config, onChange, fields, relatedFields = {} }) {
   );
 }
 
+const MESSAGE_CHANNELS = ['whatsapp', 'facebook', 'instagram', 'sms'];
+
+// Flow "Send Message Template" action (§16.3/§16.5). The backend always
+// re-fetches the template at send time and re-checks WhatsApp approval, so
+// this form only needs to reference it by id — no content is baked in here.
+function MessageTemplateConfig({ config, onChange, fields, relatedFields = {} }) {
+  const [templates, setTemplates] = useState([]);
+  const channel = config.channel || 'whatsapp';
+
+  useEffect(() => {
+    api
+      .get('/message-templates', { params: { channel, isActive: true } })
+      .then((r) => setTemplates(r.data.data || []))
+      .catch(() => {});
+  }, [channel]);
+
+  const selected = templates.find((t) => t._id === config.templateId);
+  const toMode = config.toMode || 'custom';
+  const phoneFields = fields.filter((f) => f.type === 'phone');
+
+  return (
+    <div className={styles.cfgSection}>
+      <Row label="Channel">
+        <Sel
+          value={channel}
+          onChange={(v) => onChange({ ...config, channel: v, templateId: '' })}
+          options={MESSAGE_CHANNELS.map((c) => ({ value: c, label: c }))}
+        />
+      </Row>
+      <Row label="Template">
+        <Sel
+          value={config.templateId || ''}
+          onChange={(v) => onChange({ ...config, templateId: v })}
+          placeholder="— Select a template —"
+          options={templates.map((t) => ({
+            value: t._id,
+            label: channel === 'whatsapp' ? `${t.name} (${t.providerStatus || 'unapproved'})` : t.name,
+          }))}
+        />
+      </Row>
+      {channel === 'whatsapp' && selected && selected.providerStatus !== 'approved' && (
+        <p className={styles.cfgHint} style={{ color: '#dc2626' }}>
+          This template is not provider-approved — the send will be blocked at runtime until its status is "approved".
+        </p>
+      )}
+      <Row label="To — recipient">
+        <div className={styles.inlineRow}>
+          <Sel
+            value={toMode}
+            onChange={(v) => onChange({ ...config, toMode: v, to: '', toField: '' })}
+            options={[
+              { value: 'custom', label: 'Custom / variable' },
+              { value: 'field', label: 'Phone field on record' },
+            ]}
+          />
+          {toMode === 'field' ? (
+            <Sel
+              value={config.toField || ''}
+              onChange={(v) => onChange({ ...config, to: `{${v}}`, toField: v })}
+              placeholder="— Select phone field —"
+              options={phoneFields.map((f) => ({ value: f.apiName, label: f.label }))}
+            />
+          ) : (
+            <Inp
+              value={config.to}
+              onChange={(v) => onChange({ ...config, to: v })}
+              placeholder="{phone} or +15551234567"
+            />
+          )}
+        </div>
+      </Row>
+    </div>
+  );
+}
+
 function HttpRequestConfig({ config, onChange, externalObjects }) {
   const headerPairs = Object.entries(config.headers || {}).map(
     ([key, value]) => ({ key, value }),
@@ -1072,6 +1154,10 @@ function StepCard({
           : c.to
             ? `To: ${c.to}`
             : 'Not configured';
+      case 'action_send_message_template':
+        return c.templateId
+          ? `${c.channel || 'whatsapp'} template → ${c.to || c.toField || '?'}`
+          : 'Not configured';
       case 'action_http_request':
         return c.url ? `${c.method || 'POST'} ${c.url}` : 'Not configured';
       case 'screen':
@@ -1246,6 +1332,15 @@ function StepCard({
       case 'action_send_email':
         return (
           <EmailConfig
+            config={c}
+            onChange={setConfig}
+            fields={fields}
+            relatedFields={relatedFields}
+          />
+        );
+      case 'action_send_message_template':
+        return (
+          <MessageTemplateConfig
             config={c}
             onChange={setConfig}
             fields={fields}

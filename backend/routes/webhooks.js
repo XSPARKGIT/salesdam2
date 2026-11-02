@@ -16,6 +16,12 @@ router.get('/', asyncHandler(async (req, res) => {
   sendSuccess(res, { data: webhooks });
 }));
 
+router.get('/:id', asyncHandler(async (req, res) => {
+  const webhook = await Webhook.findOne({ _id: req.params.id, tenantId: req.tenantId });
+  if (!webhook) throw new AppError('Webhook not found.', 404);
+  sendSuccess(res, { data: webhook });
+}));
+
 router.post('/', checkAppPermission('canManageWebhooks'), asyncHandler(async (req, res) => {
   const secret = crypto.randomBytes(32).toString('hex');
   const webhook = await Webhook.create({

@@ -210,6 +210,11 @@ app.use(`${API_V1_PREFIX}/registration`, registrationRoutes);
 app.use(`${API_V1_PREFIX}/billing`, billingRoutes);
 app.use(`${API_V1_PREFIX}/subscription`, subscriptionRoutes);
 app.use(`${API_V1_PREFIX}/incidents`, incidentRoutes);
+// Must be mounted before the generic /integrations router below: that router
+// applies requireAuth to every path under its prefix, including sub-paths it
+// has no route for, which would otherwise swallow this public Meta webhook
+// before Express ever reaches its actual handler.
+app.use(`${API_V1_PREFIX}/integrations/facebook`, facebookLeadRoutes);
 app.use(`${API_V1_PREFIX}/integrations`, integrationRoutes);
 app.use(`${API_V1_PREFIX}/recurring-tasks`, recurringTaskRoutes);
 app.use(`${API_V1_PREFIX}/tenders`, tendersRoutes);
@@ -233,7 +238,6 @@ app.use(`${API_V1_PREFIX}/activities`, activityRoutes);
 // Metadata deployment & change sets (Core BRD §13).
 app.use(`${API_V1_PREFIX}/change-sets`, changeSetRoutes);
 app.use(`${API_V1_PREFIX}/custom-code`, customCodeRoutes);
-app.use(`${API_V1_PREFIX}/integrations/facebook`, facebookLeadRoutes);
 app.use(`${API_V1_PREFIX}/webhooks/incoming`, incomingWebhookRoutes);
 // Shared picklist catalogue (Core BRD §3.2 — PICK-002).
 app.use(`${API_V1_PREFIX}/global-value-sets`, globalValueSetRoutes);

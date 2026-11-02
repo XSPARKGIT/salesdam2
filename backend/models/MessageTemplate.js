@@ -23,9 +23,15 @@ const messageTemplateSchema = new mongoose.Schema(
     language: { type: String, default: 'en', trim: true },
     isActive: { type: Boolean, default: true, index: true },
 
-    // Set where the external provider requires template approval.
+    // Set where the external provider requires template approval. A WhatsApp
+    // template may only be sent once this is 'approved' (§16.5) — enforced in
+    // inboxService.replyWithTemplate, not just advisory here.
     providerTemplateId: { type: String, default: '' },
-    providerStatus: { type: String, default: '' },
+    providerStatus: {
+      type: String,
+      enum: ['', 'local_only', 'pending', 'approved', 'rejected'],
+      default: '',
+    },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },

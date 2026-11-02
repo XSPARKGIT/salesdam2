@@ -35,6 +35,7 @@ const TYPE_META = {
   delete_records: { color: '#dc2626', label: 'Delete Records' },
   action_send_notification: { color: '#8b5cf6', label: 'Send Notification' },
   action_send_email: { color: '#0ea5e9', label: 'Send Email' },
+  action_send_message_template: { color: '#25d366', label: 'Send Message Template' },
   action_http_request: { color: '#f59e0b', label: 'HTTP Request' },
   action_toast: { color: '#f59e0b', label: 'Toast' },
   action_wait: { color: '#64748b', label: 'Wait' },

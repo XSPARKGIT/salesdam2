@@ -7,6 +7,7 @@ import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import consentService from './consentService.js';
 import channelProviders from './channelProviders.js';
+import messageTemplateService from './messageTemplateService.js';
 import duplicateDetectionService from './duplicateDetectionService.js';
 import { validateRecordData, evaluateValidationRules, buildValidationFailure } from './validationService.js';
 import { buildSearchText } from './searchService.js';
@@ -132,27 +133,33 @@ const _assertCanContact = async ({ tenantId, channel, linkedRecord }) => {
   return result;
 };
 
-const reply = async ({ tenantId, id, body, attachments = [], user }) => {
-  if (!body) throw new AppError('A reply body is required.', 400);
-  const conversation = await getConversation({ tenantId, id });
-  if (conversation.status === 'closed') {
-    throw new AppError('Reopen the conversation before replying.', 409);
-  }
+/** Resolve the recipient address/number/PSID the adapter must send to. */
+const _recipientFor = (conversation) => conversation.contactIdentifier;
 
+/**
+ * Shared outbound-send core used by both a free-text reply and a template
+ * send: consent check, channel adapter dispatch, Message + Activity record.
+ * `extra` carries subject/template so each caller's concerns stay separate.
+ */
+const _sendAndRecord = async ({ tenantId, conversation, body, attachments = [], user, subject, template }) => {
   await _assertCanContact({
     tenantId,
     channel: conversation.channel,
     linkedRecord: conversation.linkedRecord,
   });
 
-  // Send through the channel abstraction: adapter availability and provider
-  // credentials decide the resulting status.
   const account = await ChannelAccount.findOne({
     _id: conversation.channelAccountId,
     tenantId,
   }).select('+credentials');
   const adapter = channelProviders.getAdapter(conversation.channel);
-  const outcome = await adapter.send(account, { body, attachments });
+  const outcome = await adapter.send(account, {
+    body,
+    attachments,
+    subject,
+    template,
+    recipientIdentifier: _recipientFor(conversation),
+  });
 
   const message = await Message.create({
     tenantId,
@@ -161,12 +168,14 @@ const reply = async ({ tenantId, id, body, attachments = [], user }) => {
     channel: conversation.channel,
     direction: 'outbound',
     authorId: user?._id,
-    senderName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+    senderName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Automation',
     body,
     attachments,
+    externalMessageId: outcome.externalMessageId,
     status: outcome.status,
     providerStatus: outcome.providerStatus,
     providerNote: outcome.note,
+    metadata: template ? { templateId: String(template.id || ''), templateName: template.name } : {},
   });
 
   if (conversation.linkedRecord) {
@@ -178,7 +187,7 @@ const reply = async ({ tenantId, id, body, attachments = [], user }) => {
     await Activity.create({
       tenantId,
       type,
-      subject: `${conversation.channel} reply`,
+      subject: subject || `${conversation.channel} reply`,
       body,
       objectApiName: conversation.linkedRecord.objectApiName,
       recordId: conversation.linkedRecord.recordId,
@@ -193,6 +202,218 @@ const reply = async ({ tenantId, id, body, attachments = [], user }) => {
   conversation.lastMessageAt = new Date();
   await conversation.save();
   return message;
+};
+
+const reply = async ({ tenantId, id, body, attachments = [], user }) => {
+  if (!body) throw new AppError('A reply body is required.', 400);
+  const conversation = await getConversation({ tenantId, id });
+  if (conversation.status === 'closed') {
+    throw new AppError('Reopen the conversation before replying.', 409);
+  }
+  return _sendAndRecord({ tenantId, conversation, body, attachments, user });
+};
+
+/**
+ * Send a reusable MessageTemplate into a conversation (§16.5). Merge fields
+ * resolve from the conversation's linked record. A WhatsApp template may only
+ * be sent once its provider has approved it — unlike free text, WhatsApp's
+ * Business Platform rejects unapproved templates, so this is enforced before
+ * any provider call is attempted, not left to the provider to reject.
+ */
+/**
+ * Shared template-send core (§16.5): channel match, WhatsApp provider-approval
+ * gate, merge-field resolution, dispatch. Used by both a reply to an existing
+ * conversation and a fresh send-to-record (e.g. from a Flow action) so the
+ * approval rule can never be bypassed by taking a different entry point.
+ */
+const _sendTemplateCore = async ({ tenantId, conversation, templateId, extraValues = {}, user }) => {
+  const template = await messageTemplateService.getTemplate({ tenantId, id: templateId });
+  if (!template.isActive) throw new AppError('This template is inactive.', 400);
+  if (template.channel !== conversation.channel) {
+    throw new AppError(
+      `This template is for ${template.channel}, not ${conversation.channel}.`,
+      400,
+    );
+  }
+  if (conversation.channel === 'whatsapp' && template.providerStatus !== 'approved') {
+    throw new AppError(
+      `WhatsApp template "${template.name}" has not been approved by the provider (status: ${template.providerStatus || 'none'}).`,
+      409,
+    );
+  }
+
+  const values = await _recordMergeValues({
+    tenantId,
+    linkedRecord: conversation.linkedRecord,
+    extraValues,
+  });
+  const body = messageTemplateService.render(template.body, values);
+  const subject = messageTemplateService.render(template.subject, values);
+
+  return _sendAndRecord({
+    tenantId,
+    conversation,
+    body,
+    user,
+    subject,
+    template: {
+      id: template._id,
+      name: template.name,
+      providerTemplateId: template.providerTemplateId,
+      language: template.language,
+    },
+  });
+};
+
+const replyWithTemplate = async ({ tenantId, id, templateId, extraValues = {}, user }) => {
+  const conversation = await getConversation({ tenantId, id });
+  if (conversation.status === 'closed') {
+    throw new AppError('Reopen the conversation before replying.', 409);
+  }
+  return _sendTemplateCore({ tenantId, conversation, templateId, extraValues, user });
+};
+
+/** Build a flat merge-field values object from a linked record's data map. */
+const _recordMergeValues = async ({ tenantId, linkedRecord, extraValues = {} }) => {
+  if (!linkedRecord) return { ...extraValues };
+  const record = await DynamicRecord.findOne({
+    tenantId,
+    _id: linkedRecord.recordId,
+    objectApiName: linkedRecord.objectApiName,
+    isDeleted: false,
+  }).lean();
+  if (!record) return { ...extraValues };
+  const fieldData =
+    record.data instanceof Map ? Object.fromEntries(record.data) : record.data || {};
+  return { ...fieldData, ...extraValues };
+};
+
+// EmailTemplate uses single-brace {field} tokens (distinct from MessageTemplate's
+// {{field}}) — matches the existing /email-templates/:id/preview route's own
+// renderer so merge behaviour is identical whether previewed or actually sent.
+const _renderEmailTemplate = (str, values) =>
+  String(str || '').replace(/\{(\w+)\}/g, (_, k) => (values?.[k] ?? `{${k}}`));
+
+/**
+ * Send a real email from a Lead/Contact/Account/other record (§16.7), reusing
+ * the same consent check, channel adapter dispatch and Activity logging as
+ * every other channel — no second messaging path. Finds or creates an email
+ * Conversation for the recipient and links it to the record, so the sent
+ * email (and any future reply) shows up in that record's Activity timeline.
+ */
+/**
+ * Find or create the Conversation a fresh outbound message (not a reply in an
+ * already-open thread) should attach to, linking it to the triggering record.
+ * Shared by sendEmailToRecord and sendTemplateToRecord so "start a new
+ * correspondence from a record" behaves identically across channels.
+ */
+const _findOrCreateConversationForRecord = async ({ tenantId, account, identifier, linkedRecord, contactName }) => {
+  const identifier_ = String(identifier).toLowerCase().trim();
+  const externalThreadId = `contact:${identifier_}`;
+  let conversation = await Conversation.findOne({
+    tenantId,
+    channelAccountId: account._id,
+    externalThreadId,
+  });
+  if (!conversation) {
+    conversation = await Conversation.create({
+      tenantId,
+      channel: account.channel,
+      channelAccountId: account._id,
+      externalThreadId,
+      contactIdentifier: identifier_,
+      contactName: contactName || '',
+      linkedRecord,
+      status: 'open',
+    });
+  } else {
+    if (!conversation.linkedRecord) conversation.linkedRecord = linkedRecord;
+    // A fresh send is new correspondence from the agent/Flow's side — surface
+    // it even if the thread had previously been closed.
+    conversation.status = 'open';
+    await conversation.save();
+  }
+  return conversation;
+};
+
+const sendEmailToRecord = async ({ tenantId, objectApiName, recordId, to, subject, body, templateId, channelAccountId, user }) => {
+  if (!to) throw new AppError('A recipient email address is required.', 400);
+
+  const account = channelAccountId
+    ? await ChannelAccount.findOne({ _id: channelAccountId, tenantId, channel: 'email' }).select('+credentials')
+    : await ChannelAccount.findOne({ tenantId, channel: 'email', isActive: true }).select('+credentials');
+  if (!account) {
+    throw new AppError(
+      'No active email channel account is configured. Create one under Channel Accounts (channel: email) first.',
+      400,
+    );
+  }
+
+  const linkedRecord = { objectApiName, recordId };
+  let finalSubject = subject;
+  let finalBody = body;
+  let templateMeta;
+
+  if (templateId) {
+    const EmailTemplate = (await import('../models/EmailTemplate.js')).default;
+    const template = await EmailTemplate.findOne({ _id: templateId, tenantId });
+    if (!template) throw new AppError('Email template not found.', 404);
+    if (!template.isActive) throw new AppError('This email template is inactive.', 400);
+    const values = await _recordMergeValues({ tenantId, linkedRecord });
+    finalSubject = _renderEmailTemplate(template.subject, values);
+    finalBody = _renderEmailTemplate(template.bodyHtml || template.bodyText, values);
+    templateMeta = { id: template._id, name: template.name };
+  } else {
+    if (!subject || !body) {
+      throw new AppError('subject and body are required when not using a template.', 400);
+    }
+    const values = await _recordMergeValues({ tenantId, linkedRecord });
+    finalSubject = _renderEmailTemplate(subject, values);
+    finalBody = _renderEmailTemplate(body, values);
+  }
+
+  const conversation = await _findOrCreateConversationForRecord({
+    tenantId, account, identifier: to, linkedRecord,
+  });
+
+  const message = await _sendAndRecord({
+    tenantId,
+    conversation,
+    body: finalBody,
+    user,
+    subject: finalSubject,
+    template: templateMeta,
+  });
+
+  return { message, conversationId: String(conversation._id) };
+};
+
+/**
+ * Send a reusable MessageTemplate to a record on any channel without an
+ * existing conversation — the Flow action path (§5, §16.5). Goes through the
+ * exact same _sendTemplateCore as a manual Inbox reply, so a Flow can no more
+ * send an unapproved WhatsApp template than an agent can.
+ */
+const sendTemplateToRecord = async ({ tenantId, objectApiName, recordId, channel, to, templateId, channelAccountId, extraValues = {}, user }) => {
+  if (!channel) throw new AppError('channel is required.', 400);
+  if (!to) throw new AppError('A recipient identifier (phone/email/handle) is required.', 400);
+
+  const account = channelAccountId
+    ? await ChannelAccount.findOne({ _id: channelAccountId, tenantId, channel }).select('+credentials')
+    : await ChannelAccount.findOne({ tenantId, channel, isActive: true }).select('+credentials');
+  if (!account) {
+    throw new AppError(
+      `No active ${channel} channel account is configured. Create one under Channel Accounts first.`,
+      400,
+    );
+  }
+
+  const conversation = await _findOrCreateConversationForRecord({
+    tenantId, account, identifier: to, linkedRecord: { objectApiName, recordId },
+  });
+
+  const message = await _sendTemplateCore({ tenantId, conversation, templateId, extraValues, user });
+  return { message, conversationId: String(conversation._id) };
 };
 
 const addNote = async ({ tenantId, id, body, user }) => {
@@ -342,6 +563,9 @@ export default {
   setStatus,
   linkRecord,
   reply,
+  replyWithTemplate,
   addNote,
   createRecordFromConversation,
+  sendEmailToRecord,
+  sendTemplateToRecord,
 };
