@@ -106,4 +106,10 @@ router.get('/:id/deliveries', checkAppPermission('canManageWebhooks'), asyncHand
   sendSuccess(res, { data: logs });
 }));
 
+// Process pending webhook retries (admin only)
+router.post('/process-retries', checkAppPermission('canManageWebhooks'), asyncHandler(async (req, res) => {
+  const { processWebhookRetries } = await import('../services/webhookRetryService.js');
+  const processed = await processWebhookRetries();
+  sendSuccess(res, { data: { processed } }, `Processed ${processed} pending deliveries`);
+}));
 export default router;

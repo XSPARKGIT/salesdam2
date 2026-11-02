@@ -29,6 +29,44 @@ router.get('/', asyncHandler(async (req, res) => {
   sendSuccess(res, { data: keys });
 }));
 
+// ─── GET /api/api-keys/usage-summary ────────────────────────────────────────
+// Tenant-level API usage summary
+router.get('/usage-summary', asyncHandler(async (req, res) => {
+  const days = parseInt(req.query.days) || 7;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const summary = await ApiKeyUsageLog.aggregate([
+    { $match: { tenantId: new (require('mongoose')).Types.ObjectId(req.tenantId), timestamp: { $gte: since } } },
+    { $group: {
+        _id: null,
+        total: { $sum: 1 },
+        errors: { $sum: { $cond: [{ $gte: ['$statusCode', 400] }, 1, 0] } },
+        avgResponse: { $avg: '$responseTime' },
+    }},
+  ]);
+
+  const byKey = await ApiKeyUsageLog.aggregate([
+    { $match: { tenantId: new (require('mongoose')).Types.ObjectId(req.tenantId), timestamp: { $gte: since } } },
+    { $group: { _id: '$keyId', count: { $sum: 1 }, errors: { $sum: { $cond: [{ $gte: ['$statusCode', 400] }, 1, 0] } } } },
+    { $sort: { count: -1 } },
+    { $limit: 10 },
+  ]);
+
+  const s = summary[0] || { total: 0, errors: 0, avgResponse: 0 };
+  sendSuccess(res, {
+    data: {
+      period: `${days}d`,
+      total: s.total,
+      errors: s.errors,
+      successes: s.total - s.errors,
+      successRate: s.total > 0 ? +((100 * (s.total - s.errors) / s.total).toFixed(1)) : 100,
+      avgResponseMs: s.avgResponse ? Math.round(s.avgResponse) : 0,
+      byKey: byKey.map((k) => ({ keyId: k._id, count: k.count, errors: k.errors })),
+    },
+  });
+}));
+
+
 // GET /api/api-keys/:id
 router.get('/:id', asyncHandler(async (req, res) => {
   const key = await ApiKey.findOne({ _id: req.params.id, tenantId: req.tenantId })

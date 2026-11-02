@@ -65,6 +65,17 @@ const requireAuth = async (req, res, next) => {
 
     next();
   } catch (err) {
+    try {
+      const AuthFailureLog = (await import('../models/AuthFailureLog.js')).default;
+      await AuthFailureLog.create({
+        tenantId: req.tenantId || null,
+        integration: 'session',
+        reason: err.message || 'Authentication failed',
+        ip: req.ip || req.headers['x-forwarded-for'],
+        path: req.path,
+        method: req.method,
+      });
+    } catch { /* ignore */ }
     next(err);
   }
 };
@@ -199,13 +210,21 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
 
     next();
   } catch (err) {
+    try {
+      const AuthFailureLog = (await import('../models/AuthFailureLog.js')).default;
+      await AuthFailureLog.create({
+        tenantId: null,
+        integration: 'api-key',
+        identifier: rawKey ? rawKey.substring(0, 8) + '...' : undefined,
+        reason: err.message || 'API key authentication failed',
+        ip: req.ip || req.headers['x-forwarded-for'],
+        path: req.path,
+        method: req.method,
+      });
+    } catch { /* ignore */ }
     next(err);
   }
 };
-
-/**
- * requireSuperuser - Only the global superuser can access.
- */
 const requireSuperuser = (req, res, next) => {
   if (!req.user || !req.user.role || req.user.role.name !== 'superuser') {
     return next(new AppError('Superuser access required.', 403));
