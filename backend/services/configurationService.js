@@ -1,4 +1,5 @@
 import TenantConfiguration from '../models/TenantConfiguration.js';
+import crypto from 'crypto';
 import { AppError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 
@@ -63,10 +64,84 @@ export const SYSTEM_DEFAULTS = {
       'Whether a customer with no recorded consent may be contacted when enforcement is on.',
     editableByTenant: true,
   },
+
+  // ── Branding (Section 14) ───────────────────────────────────────────────
+  'branding.company_name': {
+    value: 'Salesdam',
+    dataType: 'string',
+    category: 'branding',
+    label: 'Company Name',
+    description: 'Company name shown in the application header and login page.',
+    editableByTenant: true,
+  },
+  'branding.primary_color': {
+    value: '#0066FF',
+    dataType: 'string',
+    category: 'branding',
+    label: 'Primary Brand Colour',
+    description: 'Hex colour used for primary UI accents.',
+    editableByTenant: true,
+  },
+  'branding.logo_url': {
+    value: '',
+    dataType: 'string',
+    category: 'branding',
+    label: 'Company Logo URL',
+    description: 'URL to the company logo shown in the application header.',
+    editableByTenant: true,
+  },
+  'branding.login_logo_url': {
+    value: '',
+    dataType: 'string',
+    category: 'branding',
+    label: 'Login Page Logo URL',
+    description: 'URL to the logo shown on the login page.',
+    editableByTenant: true,
+  },
+
+  // ── Integration secrets (Section 14) ────────────────────────────────────
+  'integration.email.smtp_password': {
+    value: '',
+    dataType: 'string',
+    category: 'integration',
+    label: 'SMTP Password',
+    description: 'SMTP password for outbound email. Stored encrypted.',
+    editableByTenant: true,
+    isSecret: true,
+  },
 };
+
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'dev-only-insecure-key-change-me';
 
 const hasDefault = (key) =>
   Object.prototype.hasOwnProperty.call(SYSTEM_DEFAULTS, key);
+
+const deriveKey = () => crypto.scryptSync(ENCRYPTION_KEY, 'salesdam-config-salt', 32);
+
+const encryptSecret = (plaintext) => {
+  const key = deriveKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(String(plaintext ?? ''), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:${iv.toString('base64')}:${tag.toString('base64')}:${enc.toString('base64')}`;
+};
+
+const isEncrypted = (v) => typeof v === 'string' && v.startsWith('enc:');
+
+const decryptSecret = (stored) => {
+  if (!isEncrypted(stored)) return stored;
+  const parts = stored.split(':');
+  if (parts.length !== 4) return stored;
+  const [, ivB64, tagB64, dataB64] = parts;
+  const key = deriveKey();
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+  const dec = Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]);
+  return dec.toString('utf8');
+};
+
+const maskSecret = () => '••••••••';
 
 const metaFor = (key, doc = {}) => {
   const base = hasDefault(key) ? SYSTEM_DEFAULTS[key] : {};
@@ -81,6 +156,7 @@ const metaFor = (key, doc = {}) => {
         : base.editableByTenant !== undefined
           ? base.editableByTenant
           : true,
+    isSecret: doc.isSecret !== undefined ? doc.isSecret : base.isSecret === true,
   };
 };
 
@@ -123,10 +199,10 @@ const resolve = async (key, tenantId = null, fallback = undefined) => {
   const tenantDoc = tenantId
     ? docs.find((d) => d.tenantId && d.tenantId.toString() === tenantId.toString())
     : null;
-  if (tenantDoc) return tenantDoc.value;
+  if (tenantDoc) return isEncrypted(tenantDoc.value) ? decryptSecret(tenantDoc.value) : tenantDoc.value;
 
   const systemDoc = docs.find((d) => !d.tenantId);
-  if (systemDoc) return systemDoc.value;
+  if (systemDoc) return isEncrypted(systemDoc.value) ? decryptSecret(systemDoc.value) : systemDoc.value;
 
   if (hasDefault(key)) return SYSTEM_DEFAULTS[key].value;
   return fallback;
@@ -154,12 +230,12 @@ const resolveMany = async (keys, tenantId = null) => {
         )
       : null;
     if (tenantDoc) {
-      result[key] = tenantDoc.value;
+      result[key] = isEncrypted(tenantDoc.value) ? decryptSecret(tenantDoc.value) : tenantDoc.value;
       continue;
     }
     const systemDoc = docs.find((d) => d.key === key && !d.tenantId);
     if (systemDoc) {
-      result[key] = systemDoc.value;
+      result[key] = isEncrypted(systemDoc.value) ? decryptSecret(systemDoc.value) : systemDoc.value;
       continue;
     }
     if (hasDefault(key)) result[key] = SYSTEM_DEFAULTS[key].value;
@@ -204,12 +280,17 @@ const getEffective = async (tenantId = null) => {
       value = SYSTEM_DEFAULTS[key].value;
     }
 
+    const meta = metaFor(key, tenantDoc || systemDoc || {});
+    if (meta.isSecret) {
+      value = value ? maskSecret() : '';
+    }
+
     entries.push({
       key,
       value,
       source,
       isOverridden: source === 'tenant',
-      ...metaFor(key, tenantDoc || systemDoc || {}),
+      ...meta,
     });
   }
   entries.sort((a, b) => a.key.localeCompare(b.key));
@@ -237,7 +318,11 @@ const set = async ({ key, tenantId = null, value, dataType, category, label, des
     { key, tenantId },
     {
       $set: {
-        value: castValue(value, meta.dataType),
+        value: meta.isSecret
+          ? (value === '' || value === null || value === undefined
+              ? ''
+              : encryptSecret(value))
+          : castValue(value, meta.dataType),
         dataType: meta.dataType,
         category: meta.category,
         label: meta.label,

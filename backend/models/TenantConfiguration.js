@@ -28,6 +28,8 @@ const tenantConfigurationSchema = new mongoose.Schema(
     description: { type: String, default: '', trim: true },
     // Whether tenant admins are allowed to override this key
     editableByTenant: { type: Boolean, default: true },
+    // Whether the value is a secret (encrypted at rest, masked in UI)
+    isSecret: { type: Boolean, default: false },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true },
