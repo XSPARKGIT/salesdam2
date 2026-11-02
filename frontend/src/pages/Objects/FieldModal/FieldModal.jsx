@@ -90,7 +90,7 @@ const ROLLUP_AGGREGATABLE_TYPES = ['number', 'currency', 'percent', 'formula'];
 
 // System fields are managed by the platform — the backend rejects any other key
 // with a 403, so the payload must be narrowed to exactly these.
-const SYSTEM_FIELD_EDITABLE_KEYS = ['label', 'helpText', 'picklistValues'];
+const SYSTEM_FIELD_EDITABLE_KEYS = ['label', 'helpText', 'picklistValues', 'globalValueSetId'];
 
 const FieldModal = ({
   isOpen,
@@ -258,9 +258,14 @@ const FieldModal = ({
       }
     }
 
+    if (useGvs && !fieldForm.globalValueSetId && ['picklist', 'multipicklist'].includes(fieldForm.type)) {
+      toast.error('Select a Global Value Set, or untick "Link to a Global Value Set"');
+      return;
+    }
+
     try {
       if (editingField) {
-        // For a system field send only the two editable keys. Posting the whole
+        // For a system field send only the editable keys. Posting the whole
         // form made the backend reject the request outright with a 403.
         const payload = isSystemField
           ? SYSTEM_FIELD_EDITABLE_KEYS.reduce((acc, key) => {
@@ -499,7 +504,8 @@ const FieldModal = ({
                   onChange={(e) => {
                     setUseGvs(e.target.checked);
                     if (!e.target.checked) {
-                      setFieldForm((p) => ({ ...p, globalValueSetId: undefined }));
+                      // null (not undefined) so the unlink is sent to the server.
+                      setFieldForm((p) => ({ ...p, globalValueSetId: null }));
                     }
                   }}
                 />
@@ -513,9 +519,15 @@ const FieldModal = ({
                 <select
                   className={styles.select}
                   value={fieldForm.globalValueSetId || ''}
-                  onChange={(e) =>
-                    setFieldForm((p) => ({ ...p, globalValueSetId: e.target.value || undefined }))
-                  }
+                  onChange={(e) => {
+                    const gvs = globalValueSets.find((s) => s._id === e.target.value);
+                    setFieldForm((p) => ({
+                      ...p,
+                      globalValueSetId: e.target.value || null,
+                      // Mirror the set's values so the form shows what will be saved.
+                      ...(gvs ? { picklistValues: gvs.values || [] } : {}),
+                    }));
+                  }}
                 >
                   <option value="">-- Select a value set --</option>
                   {globalValueSets.map((gvs) => (

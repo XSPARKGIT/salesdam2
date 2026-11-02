@@ -172,6 +172,8 @@ const RoleForm = () => {
   const [roleUsers, setRoleUsers] = useState([]);
   const [loadingRoleUsers, setLoadingRoleUsers] = useState(false);
   const [objects, setObjects] = useState([]);
+  // Apps (Workspaces) that can be granted to this role's App Switcher (BRD 5.3)
+  const [apps, setApps] = useState([]);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [existingRoleNames, setExistingRoleNames] = useState([]);
 
@@ -182,6 +184,7 @@ const RoleForm = () => {
     dataAccess: 'own',
     appPermissions: {},
     objectPermissions: [],
+    appIds: [],
   });
 
   useEffect(() => {
@@ -191,6 +194,10 @@ const RoleForm = () => {
     } else {
       fetchObjects();
     }
+    api
+      .get('/workspaces/catalogue')
+      .then((res) => setApps(res.data.data || []))
+      .catch(() => toast.error('Failed to load apps.'));
   }, [roleId]);
 
   useEffect(() => {
@@ -203,7 +210,7 @@ const RoleForm = () => {
     try {
       const res = await api.get(`/roles/${roleId}`);
       const role = res.data.data;
-      setForm(role);
+      setForm({ ...role, appIds: (role.appIds || []).map(String) });
       // Check if role is editable
       if (role.isEditable === false || role.name?.toLowerCase() === 'superuser') {
         setIsReadOnly(true);
@@ -218,7 +225,7 @@ const RoleForm = () => {
 
   const fetchObjects = async () => {
     try {
-      const res = await api.get('/objects');
+      const res = await api.get('/objects', { params: { scope: 'all' } });
       setObjects(res.data.data || []);
     } catch (err) {
       toast.error('Failed to load objects.');
@@ -355,13 +362,13 @@ const RoleForm = () => {
 
         {/* Tabs */}
         <div className={styles.tabs}>
-          {['basic', 'app permissions', 'object permissions', ...(isEdit ? ['users'] : [])].map((tab) => (
+          {['basic', 'app access', 'app permissions', 'object permissions', ...(isEdit ? ['users'] : [])].map((tab) => (
             <button
               key={tab}
               className={`${styles.tab} ${activeTab === tab ? styles.activeTab : ''}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === 'app permissions' ? 'App Permissions' : tab === 'object permissions' ? 'Object Permissions' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'app permissions' ? 'App Permissions' : tab === 'app access' ? 'App Access' : tab === 'object permissions' ? 'Object Permissions' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               {tab === 'users' && roleUsers.length > 0 && ` (${roleUsers.length})`}
             </button>
           ))}
@@ -431,6 +438,51 @@ const RoleForm = () => {
                     <option value="own">Own Records Only</option>
                   </select>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'app access' && (
+            <div className={styles.section} data-testid="role-app-access">
+              <p className={styles.sectionDescription}>
+                Apps this role sees in its App Switcher. This is separate from object
+                permissions: a role can read an object (for example, in reports) without
+                its app, and an app only shows the objects the role can read. Users also
+                get apps from their Permission Sets and from being added to an app directly.
+              </p>
+              <div className={styles.permGrid}>
+                {apps.map((app) => {
+                  const id = String(app._id);
+                  const checked = app.isDefault || (form.appIds || []).includes(id);
+                  return (
+                    <label
+                      key={id}
+                      className={styles.permItem}
+                      title={app.isDefault ? 'The default app is available to everyone' : undefined}
+                      style={{ opacity: isReadOnly || app.isDefault ? 0.6 : 1, cursor: isReadOnly || app.isDefault ? 'not-allowed' : 'pointer' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={isReadOnly || app.isDefault}
+                        onChange={() =>
+                          setForm((p) => {
+                            const current = (p.appIds || []).map(String);
+                            return {
+                              ...p,
+                              appIds: current.includes(id)
+                                ? current.filter((x) => x !== id)
+                                : [...current, id],
+                            };
+                          })
+                        }
+                      />
+                      {app.name}
+                      {app.isDefault && ' (default — everyone)'}
+                    </label>
+                  );
+                })}
+                {apps.length === 0 && <p className={styles.sectionDescription}>No apps yet.</p>}
               </div>
             </div>
           )}

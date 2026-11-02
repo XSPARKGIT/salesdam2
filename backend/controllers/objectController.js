@@ -14,9 +14,11 @@ import {
   seedDefaultFields,
   ensureUserObject,
 } from '../services/metadataService.js';
-import { validateFormula } from '../services/formulaParser.js';
-import { buildSampleContext } from '../services/validationEngine.js';
+import { validateFormula, configKeysIn } from '../services/formulaParser.js';
+import configurationService from '../services/configurationService.js';
+import { buildSampleContext, buildFieldKindMap } from '../services/validationEngine.js';
 import { reindexObject } from '../services/searchService.js';
+import { canManageSetup, getVisibleObjects, getReadableObjects } from '../services/objectAccessService.js';
 
 // API names the platform reserves for system fields on every object, so the
 // user's name field can't be created on top of one of them.
@@ -94,10 +96,23 @@ const listObjects = asyncHandler(async (req, res) => {
   if (includeInactive !== 'true') filter.isActive = true;
   if (navOnly === 'true') filter.showInNav = true;
 
-  // Filter by workspace allowedObjects if configured
-  if (req.tenant?.allowedObjects?.length > 0) {
-    filter.apiName = { $in: req.tenant.allowedObjects };
+  // Filter by the tenant's allowedObjects if configured
+  let allowed = req.tenant?.allowedObjects?.length > 0 ? req.tenant.allowedObjects : null;
+
+  // Workspace isolation + role read access. Setup pages (object manager, role
+  // and workspace editors) pass scope=all to get the full catalogue, which only
+  // users who manage the org's setup may do.
+  // Reports pass scope=readable: every object the Role can read, whichever
+  // App is open (BRD 5.3).
+  const fullCatalogue = req.query.scope === 'all' && (await canManageSetup(req.user));
+  if (req.query.scope === 'readable') {
+    const readable = await getReadableObjects(req);
+    if (readable) allowed = (allowed || [...readable]).filter((n) => readable.has(n));
+  } else if (!fullCatalogue) {
+    const visible = await getVisibleObjects(req);
+    if (visible) allowed = (allowed || [...visible]).filter((n) => visible.has(n));
   }
+  if (allowed) filter.apiName = { $in: allowed };
 
   const objects = await ObjectMeta.find(filter).sort({ navOrder: 1, name: 1 });
 
@@ -381,13 +396,44 @@ const updateObject = asyncHandler(async (req, res) => {
       objectApiName: apiName,
     });
     const sampleCtx = buildSampleContext(fields);
+    const fieldKinds = buildFieldKindMap(fields);
+    const fieldNames = new Set(fields.map((f) => f.apiName));
     const invalidRules = [];
     for (const rule of rules) {
+      const label = `"${rule.name || 'Unnamed rule'}"`;
+      // The error location must be a field on this object (or blank = top of record).
+      if (rule.errorField && !fieldNames.has(rule.errorField)) {
+        invalidRules.push(`${label}: error location "${rule.errorField}" is not a field on this object.`);
+        continue;
+      }
       // Only active rules are enforced at save time, so only they must parse.
       if (rule.isActive === false || !rule.expression) continue;
-      const result = validateFormula(rule.expression.trim(), sampleCtx);
+      // A rule's formula is a condition: TRUE blocks the save (BRD 6.1).
+      const result = validateFormula(rule.expression.trim(), sampleCtx, {
+        asCondition: true,
+        fieldKinds,
+      });
       if (!result.valid) {
-        invalidRules.push(`"${rule.name || 'Unnamed rule'}": ${result.error}`);
+        invalidRules.push(`${label}: ${result.error}`);
+      }
+    }
+    // BRD 6.2: CONFIG("key") must name a configuration value that exists for
+    // this tenant (its own override or a platform default).
+    if (invalidRules.length === 0) {
+      const used = new Map();
+      for (const rule of rules) {
+        if (rule.isActive === false || !rule.expression) continue;
+        for (const key of configKeysIn(rule.expression)) {
+          if (!used.has(key)) used.set(key, rule.name || 'Unnamed rule');
+        }
+      }
+      if (used.size) {
+        const found = await configurationService.resolveMany([...used.keys()], req.tenantId);
+        for (const [key, ruleName] of used) {
+          if (!(key in found)) {
+            invalidRules.push(`"${ruleName}": CONFIG("${key}") is not a configuration setting. Ask your platform admin to add it, or check the spelling.`);
+          }
+        }
       }
     }
     if (invalidRules.length > 0) {

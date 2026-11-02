@@ -22,6 +22,8 @@ import Incident from '../models/Incident.js';
 import Dashboard from '../models/Dashboard.js';
 import Session from '../models/Session.js';
 import { seedDefaultRoles } from '../services/roleService.js';
+import Workspace from '../models/Workspace.js';
+import { seedWorkspace } from './helpers/workspace.mjs';
 
 const RUN = Date.now().toString(36);
 const PASSWORD = 'IsoTest123!';
@@ -63,6 +65,7 @@ const seedTenant = async (label) => {
     searchable: true,
   });
   const objectMeta = await ObjectMeta.findOne({ tenantId: tenant._id, apiName: 'policy' });
+  await seedWorkspace(tenant._id, [user._id], ['policy']);
   const record = await DynamicRecord.create({
     tenantId: tenant._id,
     objectId: objectMeta._id,
@@ -222,7 +225,7 @@ try {
 } finally {
   await Tenant.deleteMany({ _id: { $in: createdTenantIds } });
   await Promise.all(
-    [User, Role, ObjectMeta, DynamicRecord, File, Incident, Dashboard, Session].map((M) =>
+    [User, Role, ObjectMeta, DynamicRecord, File, Incident, Dashboard, Session, Workspace].map((M) =>
       M.deleteMany({ tenantId: { $in: createdTenantIds } }).catch(() => {}),
     ),
   );

@@ -1,21 +1,24 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Layout from '../models/Layout.js';
+import LayoutAssignment from '../models/LayoutAssignment.js';
 import ObjectMeta from '../models/ObjectMeta.js';
+import FieldMeta from '../models/FieldMeta.js';
+import Role from '../models/Role.js';
+import DynamicRecord from '../models/DynamicRecord.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
-import { checkAppPermission } from '../middleware/permissions.js';
+import { requireObjectMetadataAccess } from '../services/objectAccessService.js';
+import { checkAppPermission, buildDataAccessFilter } from '../middleware/permissions.js';
+import { resolveLayout } from '../services/layoutResolver.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 
 const router = express.Router();
 
 router.use(requireAuth, enforceTenant);
 
-// The user model has a single populated `role`; normalise it to an id list.
-function roleIdsOf(user) {
-  const role = user.role;
-  if (!role) return [];
-  return [role._id || role];
-}
+// Workspace isolation: only objects reachable from the active workspace.
+router.param('objectApiName', requireObjectMetadataAccess);
 
 // Get layouts for an object — always fresh, never cached
 router.get('/:objectApiName', asyncHandler(async (req, res) => {
@@ -27,30 +30,123 @@ router.get('/:objectApiName', asyncHandler(async (req, res) => {
   sendSuccess(res, { data: layouts });
 }));
 
-// Get the applicable layout for current user
+// Get the layout the current user sees (BRD 4.2): the first matching
+// conditional rule for their Role, else the Role's default, else the object's
+// default. Pass recordId for an existing record; without it (a new record)
+// conditional rules are skipped.
 router.get('/:objectApiName/resolve', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   const { objectApiName } = req.params;
-  const userRoleIds = roleIdsOf(req.user);
+  const { recordId } = req.query;
 
-  // Try to find a role-specific layout first
-  let layout = await Layout.findOne({
+  let record = null;
+  if (recordId && mongoose.isValidObjectId(recordId)) {
+    // Same visibility rules as reading the record itself, so a rule can't be
+    // used to probe the values of a record the user can't see.
+    const dataFilter = await buildDataAccessFilter(req.user, objectApiName);
+    record = await DynamicRecord.findOne({
+      _id: recordId,
+      tenantId: req.tenantId,
+      objectApiName,
+      isDeleted: false,
+      ...dataFilter,
+    }).select('data').lean();
+  }
+
+  const { layout, source, ruleIndex } = await resolveLayout({
     tenantId: req.tenantId,
     objectApiName,
-    assignedRoles: { $in: userRoleIds },
+    user: req.user,
+    record,
     type: req.query.type || 'detail',
   });
 
-  // Fall back to default layout
-  if (!layout) {
-    layout = await Layout.findOne({
-      tenantId: req.tenantId,
-      objectApiName,
-      isDefault: true,
-      type: req.query.type || 'detail',
-    });
-  }
+  sendSuccess(res, { data: layout, assignment: { source, ruleIndex: ruleIndex ?? null } });
+}));
 
-  sendSuccess(res, { data: layout });
+// ─── Layout assignment (per Role) ────────────────────────────────────────────
+
+const RULE_OPERATORS = new Set(['eq', 'neq', 'is_set', 'is_blank']);
+const MAX_RULES = 50;
+
+// List every Role's assignment for an object.
+router.get('/:objectApiName/assignments', checkAppPermission('canManageObjects'), asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const assignments = await LayoutAssignment.find({
+    tenantId: req.tenantId,
+    objectApiName: req.params.objectApiName,
+  }).lean();
+  sendSuccess(res, { data: assignments });
+}));
+
+// Replace all of an object's assignments. Body:
+//   { assignments: [{ roleId, defaultLayoutId, rules: [{ field, operator, value, layoutId }] }] }
+// Rule order is priority order. A Role sent with no default and no rules, or
+// left out, has its assignment removed and falls back to the object default.
+router.put('/:objectApiName/assignments', checkAppPermission('canManageObjects'), asyncHandler(async (req, res) => {
+  const { objectApiName } = req.params;
+  const tenantId = req.tenantId;
+  const input = req.body?.assignments;
+  if (!Array.isArray(input)) throw new AppError('assignments must be an array.', 400);
+
+  const [layouts, fields, roles] = await Promise.all([
+    Layout.find({ tenantId, objectApiName }).select('_id').lean(),
+    FieldMeta.find({ tenantId, objectApiName }).select('apiName').lean(),
+    Role.find({ tenantId }).select('_id').lean(),
+  ]);
+  const layoutIds = new Set(layouts.map((l) => String(l._id)));
+  const fieldNames = new Set(fields.map((f) => f.apiName));
+  const roleIds = new Set(roles.map((r) => String(r._id)));
+
+  const seen = new Set();
+  const clean = input.map((a, i) => {
+    const where = `Assignment ${i + 1}`;
+    const roleId = String(a?.roleId || '');
+    if (!roleIds.has(roleId)) throw new AppError(`${where}: unknown role.`, 400);
+    if (seen.has(roleId)) throw new AppError(`${where}: the role is listed more than once.`, 400);
+    seen.add(roleId);
+
+    const defaultLayoutId = a.defaultLayoutId ? String(a.defaultLayoutId) : null;
+    if (defaultLayoutId && !layoutIds.has(defaultLayoutId)) {
+      throw new AppError(`${where}: the default layout does not belong to this object.`, 400);
+    }
+
+    const rules = Array.isArray(a.rules) ? a.rules : [];
+    if (rules.length > MAX_RULES) throw new AppError(`${where}: at most ${MAX_RULES} rules per role.`, 400);
+    const cleanRules = rules.map((r, j) => {
+      const at = `${where}, rule ${j + 1}`;
+      const operator = r?.operator || 'eq';
+      if (!RULE_OPERATORS.has(operator)) throw new AppError(`${at}: unknown operator.`, 400);
+      if (!fieldNames.has(r?.field)) throw new AppError(`${at}: unknown field.`, 400);
+      if (!layoutIds.has(String(r?.layoutId || ''))) {
+        throw new AppError(`${at}: the layout does not belong to this object.`, 400);
+      }
+      const value = r.value === undefined || r.value === null ? '' : String(r.value).trim();
+      if ((operator === 'eq' || operator === 'neq') && !value) {
+        throw new AppError(`${at}: a value is required.`, 400);
+      }
+      return { field: r.field, operator, value, layoutId: String(r.layoutId) };
+    });
+
+    return { roleId, defaultLayoutId, rules: cleanRules };
+  });
+
+  const keep = clean.filter((a) => a.defaultLayoutId || a.rules.length > 0);
+  await LayoutAssignment.deleteMany({
+    tenantId,
+    objectApiName,
+    roleId: { $nin: keep.map((a) => a.roleId) },
+  });
+  await Promise.all(keep.map((a) =>
+    LayoutAssignment.findOneAndUpdate(
+      { tenantId, objectApiName, roleId: a.roleId },
+      { $set: { defaultLayoutId: a.defaultLayoutId, rules: a.rules, lastModifiedBy: req.user._id } },
+      { upsert: true, runValidators: true },
+    ),
+  ));
+
+  const saved = await LayoutAssignment.find({ tenantId, objectApiName }).lean();
+  sendSuccess(res, { data: saved }, 'Layout assignment saved');
 }));
 
 // Create layout
@@ -103,6 +199,15 @@ router.delete('/:id', checkAppPermission('canManageObjects'), asyncHandler(async
   if (!layout) throw new AppError('Layout not found.', 404);
   if (layout.isDefault) throw new AppError('Cannot delete the default layout.', 403);
   await Layout.deleteOne({ _id: layout._id });
+  // Roles assigned to it fall back to the object default; its rules go.
+  await LayoutAssignment.updateMany(
+    { tenantId: req.tenantId, objectApiName: layout.objectApiName, defaultLayoutId: layout._id },
+    { $set: { defaultLayoutId: null } },
+  );
+  await LayoutAssignment.updateMany(
+    { tenantId: req.tenantId, objectApiName: layout.objectApiName },
+    { $pull: { rules: { layoutId: layout._id } } },
+  );
   sendSuccess(res, {}, 'Layout deleted');
 }));
 

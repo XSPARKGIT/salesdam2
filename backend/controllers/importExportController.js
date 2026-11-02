@@ -11,7 +11,7 @@ import {
 } from '../middleware/permissions.js';
 import {
   validateRecordData,
-  runObjectValidationRules,
+  evaluateValidationRules,
 } from '../services/validationService.js';
 import { buildSearchText } from '../services/searchService.js';
 import { computeFormulaValues } from '../services/formulaService.js';
@@ -37,6 +37,52 @@ function csvEscape(val) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
+}
+
+// Values the system calculates. They are exported for reference but ignored on
+// import, so an exported file can be imported back unchanged.
+const COMPUTED_TYPES = new Set(['auto_number', 'formula', 'rollup_summary']);
+
+/**
+ * Write a stored value in a form the importer reads back: dates as ISO,
+ * multi-select values joined with ";", addresses as JSON.
+ */
+function exportValue(val) {
+  if (val === null || val === undefined) return '';
+  if (val instanceof Date) return val.toISOString();
+  if (Array.isArray(val)) return val.join(';');
+  if (typeof val === 'object') {
+    if (typeof val.toHexString === 'function') return val.toHexString();
+    return JSON.stringify(val);
+  }
+  return val;
+}
+
+/** Turn a CSV cell back into the shape validation expects for the field. */
+function importValue(field, val) {
+  if (typeof val !== 'string') return val;
+  switch (field?.type) {
+    case 'multipicklist':
+      return val
+        .split(val.includes(';') ? ';' : ',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+    case 'boolean':
+      if (/^(true|yes|y|1)$/i.test(val)) return true;
+      if (/^(false|no|n|0)$/i.test(val)) return false;
+      return val;
+    case 'address':
+      if (val.startsWith('{')) {
+        try {
+          return JSON.parse(val);
+        } catch {
+          /* keep the plain string */
+        }
+      }
+      return val;
+    default:
+      return val;
+  }
 }
 
 /** Parse a CSV string → array of row objects keyed by header */
@@ -202,9 +248,9 @@ export const exportRecords = asyncHandler(async (req, res) => {
     objectApiName,
     allFieldNames,
   );
-  let visibleFields = fields.filter(
-    (f) => visibleNames.includes(f.apiName) && !f.isSystem,
-  );
+  // Built-in (isSystem) fields such as Name hold record data and are often
+  // required, so they are exported too — otherwise the file can't be imported.
+  let visibleFields = fields.filter((f) => visibleNames.includes(f.apiName));
 
   // Field-selectable export: honor requested subset, but never beyond FLS
   if (fieldsParam) {
@@ -217,7 +263,7 @@ export const exportRecords = asyncHandler(async (req, res) => {
     throw new AppError('No exportable fields selected.', 400);
 
   // Data access filter — export only records the user is allowed to see
-  const dataFilter = await buildDataAccessFilter(req.user);
+  const dataFilter = await buildDataAccessFilter(req.user, objectApiName);
 
   const records = await DynamicRecord.find({
     tenantId: req.tenantId,
@@ -235,7 +281,7 @@ export const exportRecords = asyncHandler(async (req, res) => {
   const csvLines = [headers.map(csvEscape).join(',')];
   records.forEach((rec) => {
     const data = toDataObj(rec.data);
-    const row = apiNames.map((apiName) => csvEscape(data[apiName] ?? ''));
+    const row = apiNames.map((apiName) => csvEscape(exportValue(data[apiName])));
     csvLines.push(row.join(','));
   });
 
@@ -294,8 +340,8 @@ export const adminExport = asyncHandler(async (req, res) => {
     objectApiName,
     allFields.map((f) => f.apiName),
   );
-  let exportFields = allFields.filter(
-    (f) => visibleApiNames.includes(f.apiName) && !f.isSystem,
+  let exportFields = allFields.filter((f) =>
+    visibleApiNames.includes(f.apiName),
   );
 
   if (fieldsParam) {
@@ -338,7 +384,7 @@ export const adminExport = asyncHandler(async (req, res) => {
   }
 
   const filterQuery = buildFilterQuery(filters, fieldMap);
-  const dataFilter = await buildDataAccessFilter(req.user);
+  const dataFilter = await buildDataAccessFilter(req.user, objectApiName);
 
   const records = await DynamicRecord.find({
     tenantId: req.tenantId,
@@ -393,7 +439,7 @@ export const adminExport = asyncHandler(async (req, res) => {
   const csvLines = [headers.map(csvEscape).join(',')];
   records.forEach((rec) => {
     const data = toDataObj(rec.data);
-    csvLines.push(apiNames.map((n) => csvEscape(data[n] ?? '')).join(','));
+    csvLines.push(apiNames.map((n) => csvEscape(exportValue(data[n]))).join(','));
   });
 
   res.setHeader('Content-Type', 'text/csv');
@@ -447,9 +493,11 @@ export const importRecords = asyncHandler(async (req, res) => {
 
   // Build a map of label→apiName for fallback auto-matching
   const labelToApiName = {};
+  const fieldByApiName = {};
   fields.forEach((f) => {
     labelToApiName[f.label?.toLowerCase()] = f.apiName;
     labelToApiName[f.apiName?.toLowerCase()] = f.apiName;
+    fieldByApiName[f.apiName] = f;
   });
 
   const results = { created: 0, failed: 0, errors: [] };
@@ -470,7 +518,9 @@ export const importRecords = asyncHandler(async (req, res) => {
       } else {
         apiName = labelToApiName[col.toLowerCase()];
       }
-      if (apiName && val !== '') inputData[apiName] = val;
+      const field = fieldByApiName[apiName];
+      if (field && COMPUTED_TYPES.has(field.type)) continue;
+      if (apiName && val !== '') inputData[apiName] = importValue(field, val);
     }
 
     try {
@@ -479,15 +529,16 @@ export const importRecords = asyncHandler(async (req, res) => {
 
       // Formula values are computed into the context so imported rows are held
       // to the same rules as records created through the UI.
-      const ruleErrors = runObjectValidationRules(obj.validationRules || [], {
-        ...validatedData,
-        ...computeFormulaValues(validatedData, fields),
+      const ruleErrors = await evaluateValidationRules({
+        tenantId: req.tenantId,
+        rules: obj.validationRules || [],
+        data: { ...validatedData, ...computeFormulaValues(validatedData, fields) },
       });
       if (valErrors.length > 0 || ruleErrors.length > 0) {
         results.failed++;
         results.errors.push({
           row: rowNum,
-          errors: [...valErrors, ...ruleErrors],
+          errors: [...valErrors, ...ruleErrors.map((e) => e.message)],
         });
         continue;
       }

@@ -98,3 +98,37 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Conditions (BRD 4.4: show the button only when the record matches) */
+.conditionRow {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1.2fr auto;
+  gap: var(--spacing-2);
+  align-items: center;
+}
+
+.noValue {
+  color: var(--color-gray-400);
+  font-size: var(--font-size-sm);
+}
+
+.removeCondition {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: transparent;
+  color: var(--color-gray-500);
+  cursor: pointer;
+}
+
+.removeCondition:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+@media (max-width: 640px) {
+  .conditionRow {
+    grid-template-columns: 1fr 1fr;
+  }
+}

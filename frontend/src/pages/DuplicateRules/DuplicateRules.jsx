@@ -336,7 +336,7 @@ function RuleDialog({ rule, objects, onClose, onSaved }) {
  */
 export default function DuplicateRules() {
   const queryClient = useQueryClient();
-  const { objects } = useTenantContext();
+  const { allObjects: objects } = useTenantContext();
   const [editing, setEditing] = useState(null); // null | {} (new) | rule
 
   const sortedObjects = useMemo(

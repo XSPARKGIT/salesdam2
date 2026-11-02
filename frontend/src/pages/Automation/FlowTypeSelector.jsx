@@ -5,6 +5,7 @@ import {
   Database,
   Clock,
   Monitor,
+  MousePointerClick,
   ArrowRight,
   Check,
 } from 'lucide-react';
@@ -36,13 +37,31 @@ const FLOW_TYPES = [
     bg: '#ecfeff',
     border: '#a5f3fc',
     description:
-      'Runs automatically on a cron schedule — hourly, daily, weekly, or custom.',
+      'Runs on a date — e.g. 3 days before a Due Date — or on a repeating schedule.',
     features: [
-      'Cron-based scheduling (5-field syntax)',
+      'Relative to a date field (before / after / on)',
+      'Or a repeating cron schedule',
       'Batch process multiple records',
       'Decision, Loop, Assignment, Formula',
       'Send emails, notifications & HTTP calls',
       'Subflows & external service calls',
+    ],
+  },
+  {
+    value: 'autolaunched',
+    label: 'Button-Launched Flow',
+    icon: MousePointerClick,
+    color: '#7c3aed',
+    bg: '#f5f3ff',
+    border: '#ddd6fe',
+    description:
+      'Manually invoked — runs when a user clicks a button on a record.',
+    features: [
+      'Add it as an action button on an object',
+      'Optional entry condition per record',
+      'Get / Create / Update records',
+      'Send emails, notifications & HTTP calls',
+      'No screens — runs straight through',
     ],
   },
   {

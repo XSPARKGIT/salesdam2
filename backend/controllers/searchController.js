@@ -3,6 +3,8 @@ import ObjectMeta from '../models/ObjectMeta.js';
 import User from '../models/User.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { reindexObject } from '../services/searchService.js';
+import { getVisibleObjects, getReachableObjects } from '../services/objectAccessService.js';
+import { hasObjectPermission, buildDataAccessFilter } from '../middleware/permissions.js';
 
 /**
  * GET /api/search?q=term&objects=contact,account&limit=20
@@ -20,21 +22,28 @@ const globalSearch = asyncHandler(async (req, res) => {
 
   // Determine which objects to search
   let objectFilter = { tenantId: req.tenantId, isActive: true, searchable: true };
-  if (objectsStr) {
-    const objectNames = objectsStr.split(',').map(s => s.trim());
-    objectFilter.apiName = { $in: objectNames };
-  }
+  let objectNames = objectsStr ? objectsStr.split(',').map(s => s.trim()) : null;
+  // Only search objects visible in the active workspace that the role can read.
+  const visible = await getVisibleObjects(req);
+  if (visible) objectNames = (objectNames || [...visible]).filter((n) => visible.has(n));
+  if (objectNames) objectFilter.apiName = { $in: objectNames };
 
   const searchableObjects = await ObjectMeta.find(objectFilter).select('apiName name nameFieldApiName');
   const objectApiNames = searchableObjects.map(o => o.apiName);
 
-  // Search records using MongoDB text index
+  // Search records using MongoDB text index, scoped by the Sharing Model.
   let recordResults = [];
   if (objectApiNames.length > 0) {
+    const visibilityClauses = await Promise.all(
+      objectApiNames.map(async (name) => ({
+        objectApiName: name,
+        ...(await buildDataAccessFilter(req.user, name)),
+      })),
+    );
     recordResults = await DynamicRecord.find({
       tenantId: req.tenantId,
-      objectApiName: { $in: objectApiNames },
       isDeleted: false,
+      $or: visibilityClauses,
       $text: { $search: searchTerm },
     })
       .select({ score: { $meta: 'textScore' }, data: 1, objectApiName: 1, createdAt: 1, ownerId: 1 })
@@ -49,8 +58,17 @@ const globalSearch = asyncHandler(async (req, res) => {
     const idMatch = await DynamicRecord.findOne({
       _id: searchTerm, tenantId: req.tenantId, isDeleted: false,
     }).lean();
-    if (idMatch && !recordResults.find(r => r._id.toString() === searchTerm)) {
-      recordResults.unshift(idMatch);
+    if (idMatch && objectApiNames.includes(idMatch.objectApiName)) {
+      const accessFilter = await buildDataAccessFilter(req.user, idMatch.objectApiName);
+      const visible = await DynamicRecord.exists({
+        _id: searchTerm,
+        tenantId: req.tenantId,
+        isDeleted: false,
+        ...accessFilter,
+      });
+      if (visible && !recordResults.find(r => r._id.toString() === searchTerm)) {
+        recordResults.unshift(idMatch);
+      }
     }
   }
 
@@ -127,6 +145,15 @@ const suggest = asyncHandler(async (req, res) => {
   const { q, object: objectApiName, field = 'name', limit = 10 } = req.query;
   if (!objectApiName) return sendSuccess(res, { data: [] });
 
+  // Suggestions are record data: same workspace and role checks as /records.
+  const reachable = await getReachableObjects(req);
+  if (reachable && !reachable.has(objectApiName)) {
+    throw new AppError(`"${objectApiName}" is not available in your current workspace.`, 403);
+  }
+  if (objectApiName !== 'user' && !(await hasObjectPermission(req.user, 'read', objectApiName))) {
+    throw new AppError(`You do not have permission to read ${objectApiName}.`, 403);
+  }
+
   const trimmed = (q || '').trim();
 
   // Special handling for 'user' object type
@@ -183,10 +210,12 @@ const suggest = asyncHandler(async (req, res) => {
   }
 
   // For non-user objects, search DynamicRecords
+  const accessFilter = await buildDataAccessFilter(req.user, objectApiName);
   const query = {
     tenantId: req.tenantId,
     objectApiName,
     isDeleted: false,
+    ...accessFilter,
   };
 
   if (trimmed) {

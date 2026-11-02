@@ -16,10 +16,11 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import * as LucideIcons from 'lucide-react';
-import { AlertCircle, Loader } from 'lucide-react';
+import { Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import FlowWizard from './FlowWizard';
+import useConfirm from './useConfirm';
 import styles from './ActionFlowRunner.module.css';
 
 function buildNavPath(nav) {
@@ -28,44 +29,6 @@ function buildNavPath(nav) {
     return `/o/${nav.objectApiName}/${nav.recordId}`;
   }
   return `/o/${nav.objectApiName}`;
-}
-
-// ─── Confirm dialog ────────────────────────────────────────────────────────────
-function useConfirm() {
-  const [pending, setPending] = useState(null);
-
-  const confirm = (message) =>
-    new Promise((resolve) => {
-      if (!message) {
-        resolve(true);
-        return;
-      }
-      setPending({ resolve, message });
-    });
-
-  const answer = (yes) => {
-    pending?.resolve(yes);
-    setPending(null);
-  };
-
-  const ConfirmDialog = pending ? (
-    <div className={styles.confirmOverlay}>
-      <div className={styles.confirmBox}>
-        <AlertCircle size={20} className={styles.confirmIcon} />
-        <p className={styles.confirmMsg}>{pending.message}</p>
-        <div className={styles.confirmActions}>
-          <button className={styles.confirmNo} onClick={() => answer(false)}>
-            Cancel
-          </button>
-          <button className={styles.confirmYes} onClick={() => answer(true)}>
-            Confirm
-          </button>
-        </div>
-      </div>
-    </div>
-  ) : null;
-
-  return { confirm, ConfirmDialog };
 }
 
 // ─── Popup modal ───────────────────────────────────────────────────────────────

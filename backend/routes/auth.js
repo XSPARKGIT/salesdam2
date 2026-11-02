@@ -10,6 +10,7 @@ import {
   forgotPassword,
   verifyResetToken,
   resetPassword,
+  switchTenant,
 } from '../controllers/authController.js';
 import {
   registerWithFreePlan,
@@ -38,6 +39,7 @@ router.post('/verify-payment', validate(schemas.verifyPayment), verifyPayment);
 // Login & auth
 router.post('/login', authLimiter, validate(schemas.login), login);
 router.post('/logout', requireAuth, logout);
+router.post('/switch-tenant', requireAuth, switchTenant);
 router.get('/me', requireAuth, enforceTenant, getMe);
 
 // Password reset flow

@@ -23,7 +23,7 @@ class AppError extends Error {
  * @param {string} [options.message]     overrides the default (first error).
  */
 class ValidationError extends Error {
-  constructor(errors, statusCode = 400, { fieldErrors = null, message } = {}) {
+  constructor(errors, statusCode = 400, { fieldErrors = null, message, issues = null } = {}) {
     const list = Array.isArray(errors) ? errors : [errors];
     super(message || list[0]);
     this.statusCode = statusCode;
@@ -33,6 +33,9 @@ class ValidationError extends Error {
     if (fieldErrors && Object.keys(fieldErrors).length > 0) {
       this.fieldErrors = fieldErrors;
     }
+    // Every problem as { message, errorField } ('' = top of record), so a
+    // client can list them all at once (BRD 6.2).
+    if (issues?.length) this.issues = issues;
     Error.captureStackTrace(this, this.constructor);
   }
 }

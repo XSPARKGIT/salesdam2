@@ -15,11 +15,17 @@ const RecordContent = ({
   lookupLabels,
   perms,
   objectApiName,
+  enableActivities = true,
 }) => {
   return (
     <>
-      {activeTab === 'activity' && (
+      {activeTab === 'activity' && enableActivities && (
         <ActivityTimeline objectApiName={objectApiName} recordId={record?.id || record?._id} />
+      )}
+      {activeTab === 'activity' && !enableActivities && (
+        <div style={{ padding: 24, textAlign: 'center', color: 'var(--color-gray-500)' }}>
+          Activities are disabled for this object.
+        </div>
       )}
 
       {/* Custom screen content */}

@@ -29,6 +29,8 @@ import DuplicateRule from '../models/DuplicateRule.js';
 import Activity from '../models/Activity.js';
 import AuditLog from '../models/AuditLog.js';
 import { seedDefaultRoles } from '../services/roleService.js';
+import Workspace from '../models/Workspace.js';
+import { seedWorkspace } from './helpers/workspace.mjs';
 
 const RUN = Date.now().toString(36);
 const PASSWORD = 'Capture123!';
@@ -124,6 +126,8 @@ try {
     await FieldMeta.create({ tenantId: tenantAId, objectId: contactObj._id, objectApiName: 'contact', name: apiName, label: apiName, apiName, type });
   }
 
+  await seedWorkspace(tenantAId, [admin._id, agent._id, viewer._id], ['contact']);
+
   // Existing contact whose email will collide with the duplicate gate.
   await req('/api/v1/records/contact', {
     method: 'POST', cookie: cookieAdmin, body: { name: 'Existing', email: 'dup@x.com' },
@@ -202,7 +206,7 @@ try {
     await Tenant.deleteMany({ _id: { $in: ids } });
     const cleanup = [
       User, Role, Session, ObjectMeta, FieldMeta, DynamicRecord, AuditLog,
-      ChannelAccount, Conversation, Message, Activity, DuplicateRule,
+      ChannelAccount, Conversation, Message, Activity, DuplicateRule, Workspace,
     ];
     await Promise.all(cleanup.map((M) => M.deleteMany({ tenantId: { $in: ids } }).catch(() => {})));
   }

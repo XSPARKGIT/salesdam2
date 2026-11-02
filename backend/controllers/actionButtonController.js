@@ -3,6 +3,7 @@ import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
 import { v4 as uuidv4 } from 'uuid';
 import mongoose from 'mongoose';
+import { validateActionInput, runNativeAction } from '../services/actionService.js';
 
 /**
  * GET /api/action-buttons/:objectApiName
@@ -36,6 +37,9 @@ export const createActionButton = asyncHandler(async (req, res) => {
   });
 
   if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
+  if (!String(req.body.label || '').trim()) throw new AppError('Button label is required.', 400);
+
+  const behaviour = await validateActionInput(req.tenantId, objectApiName, req.body);
 
   const action = {
     id: uuidv4(),
@@ -45,16 +49,18 @@ export const createActionButton = asyncHandler(async (req, res) => {
     color: req.body.color,
     size: req.body.size || 'sm',
     location: req.body.location || 'record_detail',
-    automationId: req.body.automationId,
     confirmMessage: req.body.confirmMessage,
     resultMode: req.body.resultMode || 'popup',
     order: req.body.order ?? obj.actionButtons.length,
+    ...behaviour,
   };
 
   obj.actionButtons.push(action);
   obj.lastModifiedBy = req.user._id;
 
   await obj.save();
+  // Return the stored button, which carries the _id used to edit or run it.
+  const created = obj.actionButtons[obj.actionButtons.length - 1];
 
   await audit({
     tenantId: req.tenantId,
@@ -66,7 +72,7 @@ export const createActionButton = asyncHandler(async (req, res) => {
     req,
   });
 
-  sendSuccess(res, { data: action }, 'Action button created', 201);
+  sendSuccess(res, { data: created }, 'Action button created', 201);
 });
 
 /**
@@ -84,6 +90,9 @@ export const updateActionButton = asyncHandler(async (req, res) => {
     throw new AppError(`Object "${objectApiName}" not found.`, 404);
   }
 
+  if (!mongoose.isValidObjectId(actionId)) {
+    throw new AppError('Action button not found.', 404);
+  }
   const actionObjectId = new mongoose.Types.ObjectId(actionId);
 
   const action = obj.actionButtons.find((a) => a._id.equals(actionObjectId));
@@ -98,7 +107,6 @@ export const updateActionButton = asyncHandler(async (req, res) => {
     'color',
     'size',
     'location',
-    'automationId',
     'confirmMessage',
     'resultMode',
     'order',
@@ -109,6 +117,17 @@ export const updateActionButton = asyncHandler(async (req, res) => {
       action[key] = req.body[key];
     }
   });
+  if (!String(action.label || '').trim()) throw new AppError('Button label is required.', 400);
+
+  // What the button runs and when it shows are checked as a whole, against
+  // the stored button for anything the request leaves out.
+  const behaviour = await validateActionInput(req.tenantId, objectApiName, req.body, {
+    actionType: action.actionType,
+    automationId: action.automationId ? String(action.automationId) : undefined,
+    nativeAction: action.nativeAction,
+    conditions: (action.conditions || []).map((c) => ({ field: c.field, operator: c.operator, value: c.value })),
+  });
+  Object.assign(action, behaviour);
 
   obj.lastModifiedBy = req.user._id;
   await obj.save();
@@ -141,6 +160,9 @@ export const deleteActionButton = asyncHandler(async (req, res) => {
     throw new AppError(`Object "${objectApiName}" not found.`, 404);
   }
 
+  if (!mongoose.isValidObjectId(actionId)) {
+    throw new AppError('Action button not found.', 404);
+  }
   const actionObjectId = new mongoose.Types.ObjectId(actionId);
 
   const index = obj.actionButtons.findIndex((a) =>
@@ -204,4 +226,25 @@ export const reorderActionButtons = asyncHandler(async (req, res) => {
   });
 
   sendSuccess(res, { data: obj.actionButtons }, 'Action buttons reordered');
+});
+
+/**
+ * POST /api/action-buttons/:objectApiName/:actionId/run  { recordId }
+ * Runs a server-side platform action (e.g. Convert to Order) for one record.
+ */
+export const runActionButton = asyncHandler(async (req, res) => {
+  const { objectApiName, actionId } = req.params;
+  const result = await runNativeAction({ req, objectApiName, actionId, recordId: req.body?.recordId });
+
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'run',
+    resource: 'ActionButton',
+    objectApiName,
+    metadata: { actionId, recordId: req.body?.recordId },
+    req,
+  });
+
+  sendSuccess(res, { data: result }, result.message);
 });

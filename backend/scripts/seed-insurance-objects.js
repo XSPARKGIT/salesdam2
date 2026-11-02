@@ -17,6 +17,7 @@ import User from '../models/User.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import { seedStandardObjects } from '../services/metadataService.js';
 import { seedInsuranceObjects, seedInsuranceWorkspace } from '../services/insuranceMetadataService.js';
+import { ensureDefaultActions } from '../services/actionService.js';
 
 const resolveTenants = async (arg) => {
   if (!arg) return Tenant.find({ hub: 'insurance' });
@@ -48,6 +49,7 @@ const run = async () => {
 
     const created = await seedInsuranceObjects(tenant._id, user?._id);
     const workspace = await seedInsuranceWorkspace(tenant._id, user?._id);
+    await ensureDefaultActions(tenant._id);
     console.log(
       `${tenant.name}: created ${created.length} insurance object(s); ` +
         `workspace "${workspace.name}" (${workspace.allowedObjects.length} objects).`,

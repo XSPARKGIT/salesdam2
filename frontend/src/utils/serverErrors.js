@@ -8,7 +8,7 @@
  *
  * @param {Error}  err     rejected request (must carry `response`)
  * @param {Array}  fields  FieldMeta for the form being submitted
- * @returns {{ fieldErrors: object, message: string }}
+ * @returns {{ fieldErrors: object, message: string, issues: Array }}
  */
 export const extractServerErrors = (err, fields = []) => {
   // The axios response interceptor (api.js) transforms errors into plain objects
@@ -39,5 +39,9 @@ export const extractServerErrors = (err, fields = []) => {
         : `Please fix ${attributed} highlighted fields.`;
   }
 
-  return { fieldErrors, message };
+  // Every problem as { message, errorField } — the whole list a save failed
+  // with (BRD 6.2), for showing them all together.
+  const issues = Array.isArray(data?.issues) ? data.issues : [];
+
+  return { fieldErrors, message, issues };
 };

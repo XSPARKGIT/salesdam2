@@ -13,6 +13,8 @@ import {
   CopyCheck,
   List,
   Users2,
+  KeyRound,
+  Package,
 } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import SidebarNavGroup from './SidebarNavGroup';
@@ -95,6 +97,16 @@ const SidebarSetup = ({
 
       {isAdmin && (
         <SidebarNavItem
+          to="/setup/approver-groups"
+          icon={<Users2 size={15} />}
+          label="Approver Groups"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {isAdmin && (
+        <SidebarNavItem
           to="/setup/duplicate-rules"
           icon={<CopyCheck size={15} />}
           label="Duplicate Rules"
@@ -166,11 +178,31 @@ const SidebarSetup = ({
         />
       )}
 
+      {(isAdmin || hasPermission('canManageRoles')) && (
+        <SidebarNavItem
+          to="/admin/permission-sets"
+          icon={<KeyRound size={16} />}
+          label="Permission Sets"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
       {isAdmin && (
         <SidebarNavItem
           to="/admin/settings"
           icon={<Shield size={16} />}
           label="Admin Settings"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {isAdmin && (
+        <SidebarNavItem
+          to="/admin/deployments"
+          icon={<Package size={16} />}
+          label="Deployments"
           collapsed={sidebarCollapsed}
           onNavigate={onNavigate}
         />

@@ -49,7 +49,7 @@ export default function DataExport() {
 
   useEffect(() => {
     api
-      .get('/objects', { params: { includeFields: false } })
+      .get('/objects', { params: { includeFields: false, scope: 'all' } })
       .then((res) => {
         const list = res.data?.data?.objects || res.data?.data || [];
         setObjects(list);

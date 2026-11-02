@@ -43,7 +43,7 @@ const stepSchema = new mongoose.Schema(
     name: { type: String, default: '', trim: true },
     approverType: {
       type: String,
-      enum: ['user', 'manager', 'field', 'queue'],
+      enum: ['user', 'manager', 'field', 'queue', 'group'],
       required: true,
     },
     // 'user': the named approver
@@ -52,6 +52,12 @@ const stepSchema = new mongoose.Schema(
     approverFieldApiName: { type: String, trim: true },
     // 'queue': any active user holding this role may decide
     approverRoleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Role' },
+    // 'group': any member of this public group of approvers may decide
+    approverGroupId: { type: mongoose.Schema.Types.ObjectId, ref: 'ApproverGroup' },
+    // 'manager': whose manager decides — the record's owner (default) or the
+    // person who submitted it. The manager is the user's assigned manager, or
+    // failing that anyone holding the role above theirs in the role hierarchy.
+    managerOf: { type: String, enum: ['owner', 'submitter'], default: 'owner' },
   },
   { _id: false },
 );
@@ -74,6 +80,15 @@ const actionSchema = new mongoose.Schema(
     // approvalComment, approvalProcessName and approvalRequestId are passed
     // as flow variables).
     flowId: { type: mongoose.Schema.Types.ObjectId, ref: 'Automation', default: null },
+    // Email the people involved, in addition to the in-app notification:
+    // the approver on submit, the submitter on approve / reject.
+    notifyByEmail: { type: Boolean, default: true },
+    // Platform action run on final approval (alongside the optional flow).
+    platformAction: { type: String, enum: ['none', 'convert_lead_to_deal'], default: 'none' },
+    // Field that receives the decision comment (e.g. rejection_reason).
+    reasonField: { type: String, default: '', trim: true },
+    // onSubmit: field that receives the person asked to approve (e.g. assigned_approver).
+    approverField: { type: String, default: '', trim: true },
   },
   { _id: false },
 );
@@ -90,6 +105,11 @@ const approvalProcessSchema = new mongoose.Schema(
     description: { type: String, default: '', trim: true },
     objectApiName: { type: String, required: true, trim: true, index: true },
 
+    // Entry Criteria (BRD §8): a true/false formula, same builder as validation
+    // rules and flow entry conditions — e.g. amount > CONFIG("approvals.threshold_amount").
+    // Empty = any record. Older processes keep their list of conditions below
+    // until they are saved from the editor.
+    entryCondition: { type: String, default: '', trim: true },
     entryCriteria: {
       logic: { type: String, enum: ['AND', 'OR'], default: 'AND' },
       conditions: { type: [conditionSchema], default: [] },
@@ -108,6 +128,9 @@ const approvalProcessSchema = new mongoose.Schema(
       onApprove: { type: actionSchema, default: () => ({}) },
       onReject: { type: actionSchema, default: () => ({}) },
     },
+
+    // Lead approval's built-in process (seeded per tenant) — see approvalProcessService.
+    systemKey: { type: String, default: '' },
 
     active: { type: Boolean, default: true, index: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

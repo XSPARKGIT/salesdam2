@@ -108,7 +108,7 @@ const ObjectBuilder = () => {
 
   const { data: allObjects } = useQuery({
     queryKey: ['all-Objects'],
-    queryFn: () => getObjects(),
+    queryFn: () => getObjects({ scope: 'all' }),
     onError: () => toast.error('Failed to load objects.'),
   });
 

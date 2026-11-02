@@ -45,6 +45,7 @@ import api from '../../services/api';
 import { useTenantContext } from '../../context/TenantContext';
 import Button from '../../components/common/Button/Button';
 import Layout from '../../layout/Layout';
+import FormulaEditor from '../../components/common/FormulaEditor/FormulaEditor';
 
 // ─── Shared primitives (used by inline configs below) ──────────────────────────
 import {
@@ -1506,18 +1507,283 @@ const FLOW_TYPE_META = {
     color: '#db2777',
     bg: '#fdf2f8',
   },
+  autolaunched: {
+    label: 'Button-Launched Flow',
+    icon: <Zap size={18} />,
+    color: '#7c3aed',
+    bg: '#f5f3ff',
+  },
 };
 
-function TriggerPanel({ form, setForm, objects, fields, onFieldsChange }) {
+// One-line description of what starts the flow, for the canvas.
+const triggerSummary = (form) => {
+  const obj = form.trigger?.objectApiName || '(object)';
+  if (form.type === 'record_triggered') {
+    const t = RECORD_TRIGGERS.find((x) => x.v === recordTriggerOf(form.trigger?.events));
+    return t ? `${t.label} — ${obj}` : `When ${obj} is (choose a trigger type)`;
+  }
+  if (form.type === 'screen_flow') {
+    return `Screen Flow — ${form.trigger?.entryPoint === 'embedded' ? `embedded in ${obj}` : 'manual start'}`;
+  }
+  if (form.type === 'autolaunched') return `Manually invoked — button on ${obj}`;
+  const sc = form.trigger?.schedule || {};
+  if ((sc.mode || (sc.cron ? 'cron' : 'relative_date')) === 'relative_date') {
+    return sc.when === 'on'
+      ? `Scheduled: on ${sc.dateField || '(date field)'} — ${obj}`
+      : `Scheduled: ${sc.days ?? 0} day(s) ${sc.when || 'before'} ${sc.dateField || '(date field)'} — ${obj}`;
+  }
+  return `Scheduled: ${sc.cron || '(not set)'}${form.trigger?.objectApiName ? ` · ${obj}` : ''}`;
+};
+
+// BRD 7.1 trigger types for record-triggered flows → stored events.
+const RECORD_TRIGGERS = [
+  { v: 'create', events: ['create'], label: 'Record Created', desc: 'When a new record is saved' },
+  { v: 'update', events: ['update'], label: 'Record Updated', desc: 'When an existing record is saved' },
+  { v: 'create_update', events: ['create', 'update'], label: 'Record Created or Updated', desc: 'On every save' },
+  { v: 'delete', events: ['delete'], label: 'Record Deleted', desc: 'When a record is deleted' },
+];
+const recordTriggerOf = (events = []) => {
+  const ev = new Set(events);
+  if (ev.has('all') || (ev.has('create') && ev.has('update'))) return 'create_update';
+  if (ev.has('create')) return 'create';
+  if (ev.has('update')) return 'update';
+  if (ev.has('delete')) return 'delete';
+  return '';
+};
+
+/**
+ * Older flows stored entry conditions as a list of { field, operator, value }.
+ * Convert them to the formula language the Entry Condition uses (BRD 7.1), so
+ * there is one way to write conditions.
+ */
+const quote = (v) => (v !== '' && !Number.isNaN(Number(v)) ? String(Number(v)) : JSON.stringify(String(v ?? '')));
+const conditionsToFormula = (conditions = [], logic = 'all') => {
+  const parts = conditions
+    .filter((c) => c?.field)
+    .map(({ field: f, operator, value: v }) => {
+      switch (operator) {
+        case 'equals': return `${f} == ${quote(v)}`;
+        case 'not_equals': return `${f} != ${quote(v)}`;
+        case 'contains': return `CONTAINS(${f}, ${JSON.stringify(String(v ?? ''))})`;
+        case 'starts_with': return `${f}.startsWith(${JSON.stringify(String(v ?? ''))})`;
+        case 'ends_with': return `${f}.endsWith(${JSON.stringify(String(v ?? ''))})`;
+        case 'greater_than': return `${f} > ${quote(v)}`;
+        case 'less_than': return `${f} < ${quote(v)}`;
+        case 'gte': return `${f} >= ${quote(v)}`;
+        case 'lte': return `${f} <= ${quote(v)}`;
+        case 'is_null': return `ISBLANK(${f})`;
+        case 'is_not_null': return `NOT(ISBLANK(${f}))`;
+        case 'changed': return `ISCHANGED(${f})`;
+        default: return null;
+      }
+    })
+    .filter(Boolean);
+  return parts.join(logic === 'any' ? ' OR ' : ' AND ');
+};
+
+// Entry Condition (BRD 7.1): same editor as validation rules, but TRUE means
+// "run the flow for this record".
+function EntryConditionSection({ form, setTrig, fields, hint }) {
+  return (
+    <div className={styles.section} data-testid="entry-condition">
+      <div className={styles.sectionTitle}>
+        Entry condition{' '}
+        <span style={{ fontWeight: 400, color: 'var(--color-gray-400)' }}>(optional)</span>
+      </div>
+      <p className={styles.hint} style={{ marginBottom: 8 }}>
+        {hint} The flow runs only for records where this is <strong>true</strong>. Leave it
+        empty to run every time. Same functions as validation rules — e.g.{' '}
+        <code>ISCHANGED(status) AND status == "sent"</code> or{' '}
+        <code>amount &gt; CONFIG("deals.minimum_value")</code>.
+      </p>
+      <FormulaEditor
+        objectApiName={form.trigger?.objectApiName || ''}
+        expression={form.trigger?.entryCondition || ''}
+        availableFields={fields}
+        onExpressionChange={(v) => setTrig('entryCondition', v)}
+        hideErrorMessage
+      />
+    </div>
+  );
+}
+
+// Scheduled / time-based trigger (BRD 7.1): N days before/after/on a date
+// field, or a repeating cron schedule.
+function ScheduleSection({ form, setTrig, objects, fields, onFieldsChange, flowId, isActive }) {
+  const schedule = form.trigger?.schedule || {};
+  const mode = schedule.mode || (schedule.cron ? 'cron' : 'relative_date');
+  const setSchedule = (patch) => setTrig('schedule', { ...schedule, mode, ...patch });
+  const dateFields = fields.filter((f) => f.type === 'date' || f.type === 'datetime');
+  const [running, setRunning] = useState(false);
+  const dateLabel = dateFields.find((f) => f.apiName === schedule.dateField)?.label || 'date field';
+  const days = Number(schedule.days ?? 0);
+  const when = schedule.when || 'before';
+
+  const runNow = async () => {
+    setRunning(true);
+    try {
+      const res = await api.post(`/automations/${flowId}/run-schedule`);
+      toast.success(res.data?.message || 'Done.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Run failed.');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <>
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Schedule</div>
+        <div className={styles.runWhenCards} data-testid="schedule-mode">
+          {[
+            { v: 'relative_date', label: 'Relative to a date field', desc: 'e.g. 3 days before Due Date — once per record' },
+            { v: 'cron', label: 'Repeating schedule', desc: 'Hourly, daily, weekly… (cron)' },
+          ].map((m) => (
+            <button
+              key={m.v}
+              type="button"
+              className={`${styles.runWhenCard} ${mode === m.v ? styles.runWhenActive : ''}`}
+              onClick={() => setSchedule({ mode: m.v })}
+            >
+              <strong>{m.label}</strong>
+              <span>{m.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>
+          Object{mode === 'cron' && <span style={{ fontWeight: 400, color: 'var(--color-gray-400)' }}> (optional)</span>}
+        </div>
+        <Sel
+          value={form.trigger?.objectApiName || ''}
+          placeholder="— Select object —"
+          onChange={(v) => {
+            setTrig('objectApiName', v);
+            onFieldsChange(v);
+          }}
+          options={[
+            ...(mode === 'cron' ? [{ value: '', label: '— None —' }] : []),
+            ...objects.map((o) => ({ value: o.apiName, label: o.label })),
+          ]}
+        />
+      </div>
+
+      {mode === 'relative_date' ? (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>When</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <input
+              type="number"
+              className={styles.inp}
+              style={{ width: 80 }}
+              min={0}
+              max={3650}
+              value={schedule.days ?? 0}
+              onChange={(e) => setSchedule({ days: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+              aria-label="Days"
+              disabled={when === 'on'}
+            />
+            <span>days</span>
+            <select className={styles.inp} style={{ width: 'auto' }} value={when} onChange={(e) => setSchedule({ when: e.target.value })} aria-label="Before or after">
+              <option value="before">before</option>
+              <option value="after">after</option>
+              <option value="on">on (same day as)</option>
+            </select>
+            <select
+              className={styles.inp}
+              style={{ width: 'auto', minWidth: 160 }}
+              value={schedule.dateField || ''}
+              onChange={(e) => setSchedule({ dateField: e.target.value })}
+              aria-label="Date field"
+              disabled={!form.trigger?.objectApiName}
+            >
+              <option value="">— Date field —</option>
+              {dateFields.map((f) => (
+                <option key={f.apiName} value={f.apiName}>{f.label}</option>
+              ))}
+            </select>
+            <span>at</span>
+            <input
+              type="time"
+              className={styles.inp}
+              style={{ width: 'auto' }}
+              value={schedule.time || '08:00'}
+              onChange={(e) => setSchedule({ time: e.target.value })}
+              aria-label="Time of day"
+            />
+          </div>
+          <p className={styles.hint} style={{ marginTop: 6 }}>
+            Runs once for each record,{' '}
+            {when === 'on' ? `on the day of its ${dateLabel}` : `${days} day${days === 1 ? '' : 's'} ${when} its ${dateLabel}`}
+            , from {schedule.time || '08:00'} ({schedule.timezone || 'UTC'}).
+            {form.trigger?.objectApiName && dateFields.length === 0 && ' This object has no date fields.'}
+          </p>
+        </div>
+      ) : (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Cron schedule</div>
+          <Inp
+            value={schedule.cron || ''}
+            onChange={(v) => setSchedule({ cron: v })}
+            placeholder="e.g. 0 9 * * 1  (every Monday 9am)"
+          />
+          <p className={styles.hint} style={{ marginTop: 6 }}>
+            <code>min hour day month weekday</code> · <code>0 * * * *</code>{' '}
+            hourly · <code>0 9 * * *</code> daily 9am.{' '}
+            {form.trigger?.objectApiName
+              ? 'Each run processes every matching record of the object.'
+              : 'With no object, the flow runs once per scheduled time.'}
+          </p>
+        </div>
+      )}
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Time zone</div>
+        <Inp
+          value={schedule.timezone || 'UTC'}
+          onChange={(v) => setSchedule({ timezone: v })}
+          placeholder="e.g. Africa/Johannesburg"
+        />
+      </div>
+
+      {form.trigger?.objectApiName && (
+        <EntryConditionSection
+          form={form}
+          setTrig={setTrig}
+          fields={fields}
+          hint="Checked for each record when the schedule runs."
+        />
+      )}
+
+      {flowId && (
+        <div className={styles.section}>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Play size={14} />}
+            loading={running}
+            disabled={!isActive}
+            title={isActive ? 'Process the records that are due now' : 'Activate and save the flow first'}
+            onClick={runNow}
+          >
+            Run now
+          </Button>
+          <p className={styles.hint} style={{ marginTop: 6 }}>
+            Processes the records due now without waiting for the time of day. Each record
+            still runs at most once per day.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+function TriggerPanel({ form, setForm, objects, fields, onFieldsChange, flowId, isActive, convertedNotice }) {
   const setTrig = (k, v) =>
     setForm((f) => ({ ...f, trigger: { ...f.trigger, [k]: v } }));
-  const toggleEv = (ev) => {
-    const evts = form.trigger?.events || [];
-    setTrig(
-      'events',
-      evts.includes(ev) ? evts.filter((x) => x !== ev) : [...evts, ev],
-    );
-  };
 
   const typeMeta = FLOW_TYPE_META[form.type] || FLOW_TYPE_META.record_triggered;
 
@@ -1551,6 +1817,15 @@ function TriggerPanel({ form, setForm, objects, fields, onFieldsChange }) {
         </div>
       </div>
 
+      {convertedNotice && (
+        <div className={styles.section}>
+          <p className={styles.hint} style={{ color: '#92400e', background: '#fef3c7', padding: '8px 10px', borderRadius: 6 }}>
+            This flow's older entry conditions were converted to a formula below. Review it and
+            save the flow to keep the change.
+          </p>
+        </div>
+      )}
+
       {form.type === 'record_triggered' && (
         <>
           <div className={styles.section}>
@@ -1569,93 +1844,48 @@ function TriggerPanel({ form, setForm, objects, fields, onFieldsChange }) {
             />
           </div>
           <div className={styles.section}>
-            <div className={styles.sectionTitle}>Trigger on</div>
-            <div className={styles.eventBoxes}>
-              {[
-                { ev: 'create', label: 'Created' },
-                { ev: 'update', label: 'Updated' },
-                { ev: 'delete', label: 'Deleted' },
-              ].map(({ ev, label }) => {
-                const on = (form.trigger?.events || []).includes(ev);
-                return (
-                  <button
-                    key={ev}
-                    type="button"
-                    className={`${styles.eventBox} ${on ? styles.eventBoxOn : ''}`}
-                    onClick={() => toggleEv(ev)}
-                  >
-                    <span className={styles.eventCheck}>{on ? '✓' : ''}</span>
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className={styles.section}>
-            <div className={styles.sectionTitle}>Run when</div>
-            <div className={styles.runWhenCards}>
-              {[
-                {
-                  v: 'always',
-                  label: 'Every time',
-                  desc: 'Run on every matching record event',
-                },
-                {
-                  v: 'conditions_met',
-                  label: 'Only when conditions met',
-                  desc: 'Define entry conditions below',
-                },
-              ].map((rw) => (
+            <div className={styles.sectionTitle}>Trigger type</div>
+            <div className={styles.runWhenCards} data-testid="record-trigger-type">
+              {RECORD_TRIGGERS.map((t) => (
                 <button
-                  key={rw.v}
+                  key={t.v}
                   type="button"
-                  className={`${styles.runWhenCard} ${(form.trigger?.runWhen || 'always') === rw.v ? styles.runWhenActive : ''}`}
-                  onClick={() => setTrig('runWhen', rw.v)}
+                  className={`${styles.runWhenCard} ${recordTriggerOf(form.trigger?.events) === t.v ? styles.runWhenActive : ''}`}
+                  onClick={() => setTrig('events', t.events)}
                 >
-                  <strong>{rw.label}</strong>
-                  <span>{rw.desc}</span>
+                  <strong>{t.label}</strong>
+                  <span>{t.desc}</span>
                 </button>
               ))}
             </div>
           </div>
-          {form.trigger?.runWhen === 'conditions_met' && (
-            <div className={styles.section}>
-              <div className={styles.sectionTitle}>Entry conditions</div>
-              <ConditionBuilder
-                conditions={form.trigger?.conditions || []}
-                logic={form.trigger?.conditionLogic || 'all'}
-                onLogicChange={(v) => setTrig('conditionLogic', v)}
-                onChange={(v) => setTrig('conditions', v)}
-                fields={fields}
-              />
-            </div>
+          {form.trigger?.objectApiName && (
+            <EntryConditionSection
+              form={form}
+              setTrig={setTrig}
+              fields={fields}
+              hint="Checked on every matching save. ISCHANGED() compares with the values before an update."
+            />
           )}
         </>
       )}
 
       {form.type === 'scheduled' && (
+        <ScheduleSection
+          form={form}
+          setTrig={setTrig}
+          objects={objects}
+          fields={fields}
+          onFieldsChange={onFieldsChange}
+          flowId={flowId}
+          isActive={isActive}
+        />
+      )}
+
+      {form.type === 'autolaunched' && (
         <>
           <div className={styles.section}>
-            <div className={styles.sectionTitle}>Cron schedule</div>
-            <Inp
-              value={form.trigger?.schedule?.cron || ''}
-              onChange={(v) =>
-                setTrig('schedule', { ...form.trigger?.schedule, cron: v })
-              }
-              placeholder="e.g. 0 9 * * 1  (every Monday 9am)"
-            />
-            <p className={styles.hint} style={{ marginTop: 6 }}>
-              <code>min hour day month weekday</code> · <code>0 * * * *</code>{' '}
-              hourly · <code>0 9 * * *</code> daily 9am
-            </p>
-          </div>
-          <div className={styles.section}>
-            <div className={styles.sectionTitle}>
-              Run on object{' '}
-              <span style={{ fontWeight: 400, color: 'var(--color-gray-400)' }}>
-                (optional)
-              </span>
-            </div>
+            <div className={styles.sectionTitle}>Object</div>
             <Sel
               value={form.trigger?.objectApiName || ''}
               placeholder="— Select object —"
@@ -1663,57 +1893,20 @@ function TriggerPanel({ form, setForm, objects, fields, onFieldsChange }) {
                 setTrig('objectApiName', v);
                 onFieldsChange(v);
               }}
-              options={[
-                { value: '', label: '— None —' },
-                ...objects.map((o) => ({ value: o.apiName, label: o.label })),
-              ]}
+              options={objects.map((o) => ({ value: o.apiName, label: o.label }))}
             />
             <p className={styles.hint} style={{ marginTop: 6 }}>
-              Each run will iterate over all records of this object.
+              Manually invoked: add it as a button on this object (Setup → Objects →
+              Actions → New Button, action type "Flow"). It runs when a user clicks it.
             </p>
           </div>
           {form.trigger?.objectApiName && (
-            <>
-              <div className={styles.section}>
-                <div className={styles.sectionTitle}>Run when</div>
-                <div className={styles.runWhenCards}>
-                  {[
-                    {
-                      v: 'always',
-                      label: 'Every record',
-                      desc: 'Process all records of this object on each run',
-                    },
-                    {
-                      v: 'conditions_met',
-                      label: 'Only when conditions met',
-                      desc: 'Filter records by entry conditions below',
-                    },
-                  ].map((rw) => (
-                    <button
-                      key={rw.v}
-                      type="button"
-                      className={`${styles.runWhenCard} ${(form.trigger?.runWhen || 'always') === rw.v ? styles.runWhenActive : ''}`}
-                      onClick={() => setTrig('runWhen', rw.v)}
-                    >
-                      <strong>{rw.label}</strong>
-                      <span>{rw.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {form.trigger?.runWhen === 'conditions_met' && (
-                <div className={styles.section}>
-                  <div className={styles.sectionTitle}>Entry conditions</div>
-                  <ConditionBuilder
-                    conditions={form.trigger?.conditions || []}
-                    logic={form.trigger?.conditionLogic || 'all'}
-                    onLogicChange={(v) => setTrig('conditionLogic', v)}
-                    onChange={(v) => setTrig('conditions', v)}
-                    fields={fields}
-                  />
-                </div>
-              )}
-            </>
+            <EntryConditionSection
+              form={form}
+              setTrig={setTrig}
+              fields={fields}
+              hint="Checked when the button is clicked."
+            />
           )}
         </>
       )}
@@ -1749,6 +1942,31 @@ function TriggerPanel({ form, setForm, objects, fields, onFieldsChange }) {
               ))}
             </div>
           </div>
+          {(form.trigger?.entryPoint || 'manual') === 'manual' && (
+            <div className={styles.section}>
+              <div className={styles.sectionTitle}>
+                Object{' '}
+                <span style={{ fontWeight: 400, color: 'var(--color-gray-400)' }}>(for record buttons)</span>
+              </div>
+              <Sel
+                value={form.trigger?.objectApiName || ''}
+                placeholder="— None —"
+                onChange={(v) => {
+                  setTrig('objectApiName', v);
+                  onFieldsChange(v);
+                }}
+                options={[{ value: '', label: '— None —' }, ...objects.map((o) => ({ value: o.apiName, label: o.label }))]}
+              />
+            </div>
+          )}
+          {form.trigger?.objectApiName && (
+            <EntryConditionSection
+              form={form}
+              setTrig={setTrig}
+              fields={fields}
+              hint="Checked when the flow is launched for a record."
+            />
+          )}
           {form.trigger?.entryPoint === 'embedded' && (
             <div className={styles.section}>
               <div className={styles.sectionTitle}>Embed on object</div>
@@ -1805,7 +2023,7 @@ function TriggerPanel({ form, setForm, objects, fields, onFieldsChange }) {
 export default function FlowBuilder() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { objects } = useTenantContext();
+  const { allObjects: objects } = useTenantContext();
   const isEdit = !!id;
 
   const [form, setForm] = useState({
@@ -1820,6 +2038,8 @@ export default function FlowBuilder() {
     },
   });
   const [typeChosen, setTypeChosen] = useState(isEdit); // new flows start at selector
+  // Set when older list-style entry conditions were converted on load
+  const [convertedNotice, setConvertedNotice] = useState(false);
   const [steps, setSteps] = useState([]);
   const [scheduledPaths, setScheduledPaths] = useState([]);
   const [variables, setVariables] = useState([]);
@@ -1854,11 +2074,26 @@ export default function FlowBuilder() {
         const auto = res.data.data;
         setIsActive(auto.isActive ?? false);
         setIsValid(auto.isValid ?? false);
+        // Older list-style entry conditions become a formula (BRD 7.1).
+        let trigger = auto.trigger || {};
+        if (
+          trigger.runWhen === 'conditions_met' &&
+          (trigger.conditions || []).length &&
+          !trigger.entryCondition
+        ) {
+          trigger = {
+            ...trigger,
+            entryCondition: conditionsToFormula(trigger.conditions, trigger.conditionLogic),
+            runWhen: 'always',
+            conditions: [],
+          };
+          setConvertedNotice(true);
+        }
         setForm({
           name: auto.name,
           description: auto.description || '',
           type: auto.type,
-          trigger: auto.trigger || {},
+          trigger,
           order: auto.order ?? 0,
           maxDepth: auto.maxDepth ?? 1,
           allowRecursion: auto.allowRecursion ?? false,
@@ -2117,7 +2352,18 @@ export default function FlowBuilder() {
       <Layout title="New Flow" description="Choose a flow type to get started">
         <FlowTypeSelector
           onSelect={(type) => {
-            setForm((f) => ({ ...f, type }));
+            // Scheduled flows start as "N days before a date field" (BRD 7.1);
+            // record-triggered keep their default "Record Created".
+            setForm((f) => ({
+              ...f,
+              type,
+              trigger:
+                type === 'scheduled'
+                  ? { objectApiName: '', schedule: { mode: 'relative_date', days: 3, when: 'before', time: '08:00', timezone: 'UTC' } }
+                  : type === 'record_triggered'
+                    ? f.trigger
+                    : { objectApiName: '' },
+            }));
             setTypeChosen(true);
           }}
         />
@@ -2263,6 +2509,9 @@ export default function FlowBuilder() {
             objects={objects}
             fields={fields}
             onFieldsChange={loadFields}
+            flowId={isEdit ? id : null}
+            isActive={isActive}
+            convertedNotice={convertedNotice}
           />
         )}
 
@@ -2280,16 +2529,14 @@ export default function FlowBuilder() {
               </span>
               <div className={styles.stepInfo}>
                 <span className={styles.stepLabel}>
-                  {form.type === 'record_triggered'
-                    ? `When ${form.trigger?.objectApiName || '(object)'} is ${(form.trigger?.events || []).join(' / ') || '(select events)'}`
-                    : form.type === 'screen_flow'
-                      ? `Screen Flow — ${form.trigger?.entryPoint === 'embedded' ? `embedded in ${form.trigger?.objectApiName || '(object)'}` : 'manual start'}`
-                      : `Scheduled: ${form.trigger?.schedule?.cron || '(not set)'}${form.trigger?.objectApiName ? ` · ${form.trigger.objectApiName}` : ''}`}
+                  {triggerSummary(form)}
                 </span>
                 <span className={styles.stepSummary}>
-                  {form.trigger?.runWhen === 'conditions_met'
-                    ? `${(form.trigger?.conditions || []).length} entry condition(s)`
-                    : 'Runs every time'}
+                  {form.trigger?.entryCondition
+                    ? `Only when: ${form.trigger.entryCondition}`
+                    : form.trigger?.runWhen === 'conditions_met'
+                      ? `${(form.trigger?.conditions || []).length} entry condition(s)`
+                      : 'Runs every time'}
                 </span>
               </div>
               <span className={styles.editHint}>click to edit</span>

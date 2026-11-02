@@ -23,8 +23,11 @@ import ApprovalProcess from '../models/ApprovalProcess.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import Automation from '../models/Automation.js';
 import TenantConfiguration from '../models/TenantConfiguration.js';
+import FieldMeta from '../models/FieldMeta.js';
 import configurationService from '../services/configurationService.js';
 import { seedDefaultRoles } from '../services/roleService.js';
+import Workspace from '../models/Workspace.js';
+import { seedWorkspace } from './helpers/workspace.mjs';
 
 const RUN = Date.now().toString(36);
 const PASSWORD = 'ApprTest123!';
@@ -97,6 +100,20 @@ try {
     apiName: 'policy', nameFieldApiName: 'name', isActive: true, searchable: true,
   });
 
+  // Approval processes are checked against the object's fields when saved, so
+  // the fields they read and update are defined here.
+  await FieldMeta.create(
+    [
+      ['name', 'Name', 'text'],
+      ['amount', 'Amount', 'number'],
+      ['status', 'Status', 'text'],
+      ['approver_id', 'Approver', 'lookup'],
+      ['flow_note', 'Flow Note', 'text'],
+    ].map(([apiName, label, type]) => ({
+      tenantId, objectId: objectMeta._id, objectApiName: 'policy', name: apiName, apiName, label, type,
+    })),
+  );
+
   const mkRecord = (data, owner = submitter) =>
     DynamicRecord.create({
       tenantId, objectId: objectMeta._id, objectApiName: 'policy',
@@ -106,6 +123,8 @@ try {
   await configurationService.set({
     key: THRESHOLD_KEY, tenantId, value: 1000,
   });
+
+  await seedWorkspace(tenantId, [adminUser, manager, submitter, approverA, approverB].map((u) => u._id), ['policy']);
 
   const cookieAdmin = await loginCookie(adminUser.username);
   const cookieSubmitter = await loginCookie(submitter.username);
@@ -474,8 +493,8 @@ try {
     const ids = [tenantId, tenantBId].filter(Boolean);
     await Tenant.deleteMany({ _id: { $in: ids } });
     await Promise.all([
-      User, Role, Session, ObjectMeta, DynamicRecord, Notification,
-      ApprovalProcess, ApprovalRequest, Automation,
+      User, Role, Session, ObjectMeta, FieldMeta, DynamicRecord, Notification,
+      ApprovalProcess, ApprovalRequest, Automation, Workspace,
     ].map((M) => M.deleteMany({ tenantId: { $in: ids } }).catch(() => {})));
     await TenantConfiguration.deleteMany({ tenantId: { $in: ids } });
   }

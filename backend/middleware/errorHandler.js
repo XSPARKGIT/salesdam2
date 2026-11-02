@@ -66,6 +66,8 @@ const errorHandler = (err, req, res, next) => {
     response.validationErrors = error.errors;
   }
 
+  if (error.issues?.length) response.issues = error.issues;
+
   // Per-field messages so the client can highlight the offending inputs.
   if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
     response.fieldErrors = error.fieldErrors;

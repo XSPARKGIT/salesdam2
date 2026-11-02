@@ -32,6 +32,16 @@ export const submitForApproval = (objectApiName, recordId, processId) =>
     .post('/approval-processes/submit', { objectApiName, recordId, processId })
     .then((res) => res.data.data);
 
+/* ── Approver groups (public groups of eligible approvers) ─────────────── */
+
+export const getApproverGroups = () =>
+  api.get('/approver-groups').then((res) => res.data.data || []);
+export const createApproverGroup = (data) =>
+  api.post('/approver-groups', data).then((res) => res.data.data);
+export const updateApproverGroup = (id, data) =>
+  api.put(`/approver-groups/${id}`, data).then((res) => res.data.data);
+export const deleteApproverGroup = (id) => api.delete(`/approver-groups/${id}`);
+
 export const approveRequest = (id, comment) =>
   api.post(`/approval-processes/${id}/approve`, { comment }).then((res) => res.data.data);
 

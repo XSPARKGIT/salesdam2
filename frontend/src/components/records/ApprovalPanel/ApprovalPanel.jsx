@@ -47,6 +47,10 @@ const approverLabel = (step) => {
     const role = step.approverRoleId;
     return `Anyone with the ${role.label || role.name || 'assigned'} role`;
   }
+  if (step.approverGroupId) {
+    const group = step.approverGroupId;
+    return `Anyone in the ${group.label || group.name || 'approver'} group`;
+  }
   if (step.status === 'waiting') return 'Assigned when this step starts';
   return '—';
 };

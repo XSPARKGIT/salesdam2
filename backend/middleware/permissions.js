@@ -1,5 +1,4 @@
 import Role from '../models/Role.js';
-import User from '../models/User.js';
 import { AppError } from '../utils/errors.js';
 
 /**
@@ -170,62 +169,31 @@ const getEditableFields = async (user, objectApiName, fieldApiNames) => {
 };
 
 /**
- * buildDataAccessFilter(user)
+ * buildDataAccessFilter(user, objectApiName)
  *
- * Returns a MongoDB query fragment that restricts records to those the user
- * is allowed to see based on their role's dataAccess setting:
+ * Returns a MongoDB query fragment that restricts records the user may READ.
  *
- *   'all'                  → {} (no restriction)
- *   'own'                  → { ownerId: user._id }
- *   'own_and_subordinates' → { ownerId: { $in: [user._id, ...subordinateUserIds] } }
- *   'custom'               → treated as 'own' until custom rules are configured
+ * When `objectApiName` is supplied the Sharing Model is applied (OWD + role
+ * hierarchy + sharing rules) via services/sharingService.js. Callers that do
+ * not have a single object scope (e.g. cross-object analytics) fall back to
+ * the legacy role `dataAccess` behaviour.
  *
  * Superusers and admins always receive {} (full access).
  */
-const buildDataAccessFilter = async (user) => {
+const buildDataAccessFilter = async (user, objectApiName) => {
   if (user.role?.name === 'superuser' || user.role?.name === 'admin') return {};
 
-  const userRole = user.role;
-  if (!userRole) return { ownerId: user._id };
+  const { buildRecordAccessFilter } = await import('../services/sharingService.js');
+  return buildRecordAccessFilter(user, objectApiName);
+};
 
-  const roleDoc =
-    userRole.dataAccess !== undefined
-      ? userRole
-      : await Role.findById(userRole._id || userRole);
-
-  if (!roleDoc) return { ownerId: user._id };
-
-  switch (roleDoc.dataAccess) {
-    case 'all':
-      return {};
-
-    case 'own_and_subordinates': {
-      // Find roles that list this role as their parentRole
-      const subordinateRoles = await Role.find({
-        tenantId: user.tenantId,
-        parentRole: roleDoc._id,
-      }).select('_id');
-
-      if (subordinateRoles.length === 0) {
-        return { ownerId: user._id };
-      }
-
-      const subordinateUsers = await User.find({
-        tenantId: user.tenantId,
-        role: { $in: subordinateRoles.map((r) => r._id) },
-        status: 'active',
-      }).select('_id');
-
-      return {
-        ownerId: { $in: [user._id, ...subordinateUsers.map((u) => u._id)] },
-      };
-    }
-
-    case 'own':
-    case 'custom':
-    default:
-      return { ownerId: user._id };
-  }
+/**
+ * buildDataWriteFilter(user, objectApiName) — records the user may modify.
+ * Requires object-level update/delete permission separately (route layer).
+ */
+const buildDataWriteFilter = async (user, objectApiName) => {
+  const { buildRecordWriteFilter } = await import('../services/sharingService.js');
+  return buildRecordWriteFilter(user, objectApiName);
 };
 
 export {
@@ -235,4 +203,5 @@ export {
   getVisibleFields,
   getEditableFields,
   buildDataAccessFilter,
+  buildDataWriteFilter,
 };

@@ -816,7 +816,7 @@ function KeyCard({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function IntegrationsPage() {
-  const { objects: allObjects } = useTenantContext();
+  const { allObjects } = useTenantContext();
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);

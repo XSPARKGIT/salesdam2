@@ -15,6 +15,11 @@ import {
   paginate,
 } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
+import mongoose from 'mongoose';
+import { checkRecordRules } from '../services/validationService.js';
+import { entryConditionMet } from '../services/automationService.js';
+import { validateFlowDefinition } from '../services/flowDefinitionService.js';
+import { runScheduledFlow } from '../services/scheduledFlowService.js';
 
 const router = express.Router();
 
@@ -118,6 +123,12 @@ router.post(
     if (existing)
       throw new AppError(`Automation "${apiName}" already exists.`, 409);
 
+    // BRD 7.1: object, trigger, entry condition and schedule are checked up front.
+    await validateFlowDefinition(req.tenantId, {
+      type: req.body.type || 'record_triggered',
+      trigger: req.body.trigger || {},
+    });
+
     const automation = await Automation.create({
       tenantId: req.tenantId,
       createdBy: req.user._id,
@@ -150,6 +161,11 @@ router.put(
 
     // Do not deactivate on node edits — the user controls active state explicitly.
 
+    // BRD 7.1: re-check the definition when the trigger changes.
+    if (req.body.trigger !== undefined) {
+      await validateFlowDefinition(req.tenantId, { type: automation.type, trigger: req.body.trigger });
+    }
+
     const allowed = [
       'name',
       'description',
@@ -176,6 +192,21 @@ router.put(
 // Executes nodes starting from startNodeId (or trigger→first if null).
 // Stops when it hits a screen node and returns { status:'screen', screen, resumeNodeId, ctx, ... }.
 // Runs to completion and returns { status:'complete', toasts, updatedCount, createdCount, errors, ctx }.
+// BRD 6.2: records written by flow steps are held to the object's validation
+// rules like any other create or update. These return the failing messages
+// (empty = the write may go ahead).
+async function flowUpdateRuleFailures(tenantId, targetId, fields) {
+  if (!mongoose.isValidObjectId(String(targetId))) return [];
+  const target = await DynamicRecord.findOne({ _id: targetId, tenantId, isDeleted: false });
+  if (!target) return [];
+  const prev = target.toDataObject();
+  return checkRecordRules({ tenantId, objectApiName: target.objectApiName, data: { ...prev, ...fields }, prev });
+}
+const flowCreateRuleFailures = (tenantId, objectApiName, fields) =>
+  checkRecordRules({ tenantId, objectApiName, data: fields });
+const blockedMessage = (verb, failures) =>
+  `${verb} blocked by validation rules: ${failures.join('; ')}`;
+
 async function runFlowUntilScreen(
   automation,
   rec,
@@ -317,9 +348,16 @@ async function runFlowUntilScreen(
           }
           if (!targetId) break;
           const updates = {};
+          const values = {};
           Object.entries(cfg.fields).forEach(([k, v]) => {
-            updates[`data.${k}`] = interp(String(v ?? ''));
+            values[k] = interp(String(v ?? ''));
+            updates[`data.${k}`] = values[k];
           });
+          const failures = await flowUpdateRuleFailures(tenantId, targetId, values);
+          if (failures.length) {
+            errors.push(blockedMessage('Update', failures));
+            break;
+          }
           await DynamicRecord.updateOne(
             { _id: targetId, tenantId },
             { $set: updates },
@@ -339,6 +377,11 @@ async function runFlowUntilScreen(
           Object.entries(cfg.fields || {}).forEach(([k, v]) =>
             dataMap.set(k, interp(String(v ?? ''))),
           );
+          const createFailures = await flowCreateRuleFailures(tenantId, cfg.objectApiName, Object.fromEntries(dataMap));
+          if (createFailures.length) {
+            errors.push(blockedMessage('Create', createFailures));
+            break;
+          }
           const created = await DynamicRecord.create({
             tenantId,
             objectId: obj._id,
@@ -515,9 +558,16 @@ async function runFlowUntilScreen(
                   }
                   if (!tid) break;
                   const iUpd = {};
+                  const iValues = {};
                   Object.entries(sc.fields).forEach(([k, v]) => {
-                    iUpd[`data.${k}`] = interp(String(v ?? ''));
+                    iValues[k] = interp(String(v ?? ''));
+                    iUpd[`data.${k}`] = iValues[k];
                   });
+                  const iFailures = await flowUpdateRuleFailures(tenantId, tid, iValues);
+                  if (iFailures.length) {
+                    errors.push(blockedMessage('Update', iFailures));
+                    break;
+                  }
                   await DynamicRecord.updateOne(
                     { _id: tid, tenantId },
                     { $set: iUpd },
@@ -536,6 +586,11 @@ async function runFlowUntilScreen(
                   Object.entries(sc.fields || {}).forEach(([k, v]) =>
                     iMap.set(k, interp(String(v ?? ''))),
                   );
+                  const iCreateFailures = await flowCreateRuleFailures(tenantId, sc.objectApiName, Object.fromEntries(iMap));
+                  if (iCreateFailures.length) {
+                    errors.push(blockedMessage('Create', iCreateFailures));
+                    break;
+                  }
                   const iCreated = await DynamicRecord.create({
                     tenantId,
                     objectId: iObj._id,
@@ -585,6 +640,27 @@ async function runFlowUntilScreen(
   };
 }
 
+// ─── POST /:id/run-schedule ───────────────────────────────────────────────────
+// "Run now" for a scheduled / time-based flow (BRD 7.1): processes the records
+// due today without waiting for the time of day. Each record still runs at
+// most once per day (or cron minute).
+router.post(
+  '/:id/run-schedule',
+  checkAppPermission('canManageAutomations'),
+  asyncHandler(async (req, res) => {
+    const automation = await Automation.findOne({ _id: req.params.id, tenantId: req.tenantId });
+    if (!automation) throw new AppError('Automation not found.', 404);
+    if (automation.type !== 'scheduled') throw new AppError('Only scheduled flows can be run on a schedule.', 400);
+    if (!automation.isActive) throw new AppError('Activate the flow before running it.', 409);
+    const result = await runScheduledFlow(automation, new Date(), { force: true });
+    sendSuccess(
+      res,
+      { data: result },
+      `Processed ${result.matched} record(s): ${result.ran} ran, ${result.alreadyRun} already ran, ${result.skipped} skipped, ${result.failed} failed.`,
+    );
+  }),
+);
+
 // ─── POST /:id/run-action ─────────────────────────────────────────────────────
 // Executes a flow triggered by a button click.
 // Stops at the first screen node and returns it for client-side rendering.
@@ -617,6 +693,12 @@ router.post(
       } catch {}
     }
 
+    // BRD 7.1: a manually invoked flow only runs for a record that meets its
+    // entry conditions.
+    if (primaryRecord && !(await entryConditionMet(automation, primaryRecord, req.tenantId))) {
+      throw new AppError(`"${automation.name}" can't run for this record — its entry conditions aren't met.`, 409);
+    }
+
     // Bulk: run straight through for each selected record (no screen pause for bulk)
     if (selectedRecordIds.length > 0) {
       let updatedCount = 0,
@@ -627,7 +709,12 @@ router.post(
         _id: { $in: selectedRecordIds },
         tenantId: req.tenantId,
       });
+      let notEligible = 0;
       for (const rec of bulkRecs) {
+        if (!(await entryConditionMet(automation, rec, req.tenantId))) {
+          notEligible++;
+          continue;
+        }
         const r = await runFlowUntilScreen(
           automation,
           rec,
@@ -643,6 +730,11 @@ router.post(
         createdCount += r.createdCount || 0;
         errors.push(...(r.errors || []));
       }
+      if (notEligible)
+        toasts.push({
+          message: `${notEligible} record${notEligible > 1 ? 's' : ''} skipped — entry conditions not met.`,
+          type: 'info',
+        });
       if (toasts.length === 0 && errors.length === 0)
         toasts.push({
           message: 'Action completed successfully.',
@@ -1033,9 +1125,17 @@ router.post(
               break;
             }
             const upd = {};
+            const tValues = {};
             Object.entries(cfg.fields || {}).forEach(([k, v]) => {
-              upd[`data.${k}`] = interp(String(v ?? ''));
+              tValues[k] = interp(String(v ?? ''));
+              upd[`data.${k}`] = tValues[k];
             });
+            const tFailures = await flowUpdateRuleFailures(req.tenantId, targetId, tValues);
+            if (tFailures.length) {
+              step.status = 'failed';
+              step.output = blockedMessage(`Update of ${targetLabel}`, tFailures);
+              break;
+            }
             await DynamicRecord.updateOne(
               { _id: targetId, tenantId: req.tenantId },
               { $set: upd },
@@ -1069,6 +1169,12 @@ router.post(
             Object.entries(cfg.fields || {}).forEach(([k, v]) =>
               dm.set(k, interp(String(v ?? ''))),
             );
+            const tCreateFailures = await flowCreateRuleFailures(req.tenantId, cfg.objectApiName, Object.fromEntries(dm));
+            if (tCreateFailures.length) {
+              step.status = 'failed';
+              step.output = blockedMessage(`Create ${cfg.objectApiName}`, tCreateFailures);
+              break;
+            }
             const cr = await DynamicRecord.create({
               tenantId: req.tenantId,
               objectId: obj._id,

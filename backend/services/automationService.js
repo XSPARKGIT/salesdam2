@@ -7,7 +7,9 @@ import FieldMeta from '../models/FieldMeta.js';
 import ExternalObject from '../models/ExternalObject.js';
 import FlowError from '../models/FlowError.js';
 import logger from '../utils/logger.js';
-import { validateRecordData } from './validationService.js';
+import { validateRecordData, checkRecordRules } from './validationService.js';
+import { evaluateFormula, configKeysIn } from './formulaParser.js';
+import configurationService from './configurationService.js';
 import duplicateDetectionService from './duplicateDetectionService.js';
 
 // ─── Recursion / depth guard ──────────────────────────────────────────────────
@@ -44,7 +46,7 @@ function _exit(tenantId, automationId) {
  *      - Default `maxDepth: 1` means the automation will not re-enter itself.
  *      - Set `allowRecursion: true` or raise `maxDepth` to allow chaining.
  */
-const fireAutomations = async (event, objectApiName, record, tenantId) => {
+const fireAutomations = async (event, objectApiName, record, tenantId, prev = null) => {
   try {
     const automations = await Automation.find({
       tenantId,
@@ -70,17 +72,11 @@ const fireAutomations = async (event, objectApiName, record, tenantId) => {
 
       const depth = _enter(tenantId, autoId);
       try {
-        if (automation.trigger.runWhen === 'conditions_met') {
-          if (
-            !evaluateConditions(
-              automation.trigger.conditions,
-              record,
-              automation.trigger.conditionLogic || 'all',
-            )
-          ) {
-            _exit(tenantId, autoId);
-            continue;
-          }
+        // BRD 7.1: only run for records that meet the entry conditions. On
+        // update, `prev` (the values before the save) feeds ISCHANGED().
+        if (!(await entryConditionMet(automation, record, tenantId, event === 'update' ? prev : null))) {
+          _exit(tenantId, autoId);
+          continue;
         }
 
         const ctx = buildContext(record, {}, tenantId);
@@ -126,7 +122,7 @@ const fireAutomations = async (event, objectApiName, record, tenantId) => {
  * Never throws: a failing flow must not undo the caller's work (e.g. a
  * recorded approval decision). Returns 'success' | 'failed' | 'skipped'.
  */
-const runAutomation = async (automationId, record, tenantId, variables = {}) => {
+const runAutomation = async (automationId, record, tenantId, variables = {}, options = {}) => {
   try {
     const automation = await Automation.findOne({
       _id: automationId,
@@ -134,6 +130,9 @@ const runAutomation = async (automationId, record, tenantId, variables = {}) => 
       isActive: true,
     });
     if (!automation || !record) return 'skipped';
+    if (!options.skipEntryCondition && !(await entryConditionMet(automation, record, tenantId))) {
+      return 'skipped';
+    }
 
     const autoId = String(automation._id);
     const maxDepth = automation.maxDepth ?? 1;
@@ -181,8 +180,41 @@ const runAutomation = async (automationId, record, tenantId, variables = {}) => 
   }
 };
 
+// ─── Entry conditions (BRD 7.1) ───────────────────────────────────────────────
+const dataOfRecord = (record) =>
+  record?.data instanceof Map ? Object.fromEntries(record.data) : record?.data || {};
+
+/**
+ * Does `record` meet the flow's entry conditions? Both the formula Entry
+ * Condition (same language as Validation Rules — ISCHANGED compares with
+ * `prev`, the values before an update; CONFIG reads tenant configuration) and
+ * any older list-style conditions must pass. A formula that can't be
+ * evaluated counts as not met, so a broken condition never runs a flow on
+ * every record.
+ */
+const entryConditionMet = async (automation, record, tenantId, prev = null) => {
+  const trigger = automation.trigger || {};
+  if (trigger.runWhen === 'conditions_met' && (trigger.conditions || []).length) {
+    if (!evaluateConditions(trigger.conditions, record, trigger.conditionLogic || 'all', prev)) return false;
+  }
+  const expression = String(trigger.entryCondition || '').trim();
+  if (!expression) return true;
+  try {
+    const keys = configKeysIn(expression);
+    const __config = keys.length ? await configurationService.resolveMany(keys, tenantId) : {};
+    return Boolean(
+      evaluateFormula(expression, { ...dataOfRecord(record), __config, ...(prev ? { __prev: prev } : {}) }),
+    );
+  } catch (err) {
+    logger.warn(`Entry condition of flow "${automation.name}" could not be evaluated: ${err.message}`);
+    return false;
+  }
+};
+
 // ─── Condition evaluation ─────────────────────────────────────────────────────
-const evaluateConditions = (conditions, record, logic = 'all') => {
+// `prev` (the values before an update) makes the 'changed' operator real; with
+// no previous values (create, scheduled, manual) nothing counts as changed.
+const evaluateConditions = (conditions, record, logic = 'all', prev = null) => {
   if (!conditions || conditions.length === 0) return true;
 
   const evalOne = (cond) => {
@@ -215,7 +247,7 @@ const evaluateConditions = (conditions, record, logic = 'all') => {
       case 'is_not_null':
         return fieldValue != null && fieldValue !== '';
       case 'changed':
-        return true; // simplified — would require before/after tracking
+        return prev ? String(prev[cond.field] ?? '') !== String(fieldValue ?? '') : false;
       default:
         return true;
     }
@@ -677,17 +709,34 @@ async function executeHttpRequest(config, record, ctx, tenantId) {
   });
 }
 
+// BRD 6.2: a flow's record writes are held to the object's validation rules.
+// A blocked write throws, so it is recorded as a Flow Error admins can see.
+async function assertRulesPass(tenantId, objectApiName, data, prev, verb) {
+  const failures = await checkRecordRules({ tenantId, objectApiName, data, prev });
+  if (failures.length) {
+    throw new Error(`${verb} blocked by validation rules: ${failures.join('; ')}`);
+  }
+}
+
 async function executeUpdateRecord(config, record, ctx, tenantId) {
   if (!config.fields || Object.keys(config.fields).length === 0) return;
 
   const updates = {};
+  const values = {};
   Object.entries(config.fields).forEach(([field, value]) => {
-    updates[`data.${field}`] = interpolate(String(value ?? ''), record, ctx);
+    values[field] = interpolate(String(value ?? ''), record, ctx);
+    updates[`data.${field}`] = values[field];
   });
 
   const targetId = config.targetRecordId
     ? interpolate(config.targetRecordId, record, ctx)
     : record._id;
+
+  const target = await DynamicRecord.findOne({ _id: targetId, tenantId, isDeleted: false }).catch(() => null);
+  if (target) {
+    const prev = target.toDataObject();
+    await assertRulesPass(tenantId, target.objectApiName, { ...prev, ...values }, prev, 'Update');
+  }
 
   await DynamicRecord.updateOne({ _id: targetId, tenantId }, { $set: updates });
 }
@@ -698,18 +747,36 @@ async function executeUpdateRelatedRecords(config, record, ctx, tenantId) {
 
   const parentId = String(record._id);
   const updates = {};
+  const values = {};
   Object.entries(fields).forEach(([field, value]) => {
-    updates[`data.${field}`] = interpolate(String(value ?? ''), record, ctx);
+    values[field] = interpolate(String(value ?? ''), record, ctx);
+    updates[`data.${field}`] = values[field];
   });
 
-  const result = await DynamicRecord.updateMany(
-    { tenantId, objectApiName, isDeleted: false, [`data.${lookupField}`]: parentId },
-    { $set: updates },
-  );
+  // Each related record is held to the validation rules; any that fail are
+  // left unchanged and reported as one Flow Error after the rest are updated.
+  const related = await DynamicRecord.find({
+    tenantId, objectApiName, isDeleted: false, [`data.${lookupField}`]: parentId,
+  });
+  const allowed = [];
+  const blocked = [];
+  for (const rel of related) {
+    const prev = rel.toDataObject();
+    const failures = await checkRecordRules({ tenantId, objectApiName, data: { ...prev, ...values }, prev });
+    if (failures.length) blocked.push(`${rel._id}: ${failures.join('; ')}`);
+    else allowed.push(rel._id);
+  }
+
+  const result = allowed.length
+    ? await DynamicRecord.updateMany({ _id: { $in: allowed }, tenantId }, { $set: updates })
+    : { matchedCount: 0, modifiedCount: 0 };
   logger.info(
     { objectApiName, lookupField, parentId, matched: result.matchedCount, modified: result.modifiedCount },
     'action_update_related_records complete',
   );
+  if (blocked.length) {
+    throw new Error(`Update blocked by validation rules for ${blocked.length} related record(s): ${blocked.join(' | ')}`);
+  }
 }
 
 async function executeCreateRecord(config, record, ctx, tenantId) {
@@ -738,6 +805,7 @@ async function executeCreateRecord(config, record, ctx, tenantId) {
     logger.warn({ objectApiName, errors }, 'Automation createRecord validation failed — record not created');
     return;
   }
+  await assertRulesPass(tenantId, objectApiName, validatedData, null, 'Create');
 
   // DUP-017: apply configured duplicate rules before inserting.
   const dupCheck = await duplicateDetectionService.check(tenantId, objectApiName, validatedData);
@@ -809,4 +877,4 @@ function interpolate(template, record, ctx = {}) {
   });
 }
 
-export { fireAutomations, runAutomation, evaluateConditions };
+export { fireAutomations, runAutomation, evaluateConditions, entryConditionMet, executeFlow, buildContext };

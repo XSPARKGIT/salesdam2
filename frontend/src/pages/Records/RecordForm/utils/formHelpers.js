@@ -58,6 +58,27 @@ export const initializeFormData = (fields, record, user, isEdit) => {
   return defaults;
 };
 
+// Values that must not be copied when cloning: calculated by the system,
+// required to be unique, or the record owner (the person cloning owns the copy).
+const NOT_CLONED_TYPES = new Set(['auto_number', 'formula', 'rollup_summary']);
+
+/**
+ * The values a clone of `source` starts with — every field except calculated,
+ * unique and owner fields (BRD 4.4 "clone" platform action).
+ */
+export const cloneableValues = (fields, source) => {
+  const values = {};
+  if (!source) return values;
+  fields.forEach((f) => {
+    if (NOT_CLONED_TYPES.has(f.type)) return;
+    if (f.isUnique || f.validations?.unique) return;
+    if (f.apiName === 'owner_id') return;
+    const v = source[f.apiName];
+    if (v !== undefined && v !== null && v !== '') values[f.apiName] = v;
+  });
+  return values;
+};
+
 /**
  * Validate form data against field requirements
  */

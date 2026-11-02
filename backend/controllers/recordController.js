@@ -7,18 +7,19 @@ import {
   asyncHandler,
   sendSuccess,
   AppError,
-  ValidationError,
   paginate,
 } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
 import {
   validateRecordData,
-  runObjectValidationRules,
+  evaluateValidationRules,
+  buildValidationFailure,
 } from '../services/validationService.js';
 import {
   getEditableFields,
   getVisibleFields,
   buildDataAccessFilter,
+  buildDataWriteFilter,
 } from '../middleware/permissions.js';
 import { buildSearchText } from '../services/searchService.js';
 import { fireAutomations, runAutomation } from '../services/automationService.js';
@@ -27,7 +28,6 @@ import {
   refreshRollupOnParent,
 } from '../services/rollupService.js';
 import { injectFormulaValuesMultiple, injectFormulaValues, computeAndSetFormulaValues, computeFormulaValues } from '../services/formulaService.js';
-import { convertDealToOrder } from '../services/dealConversionService.js';
 import { applyAutoNumbers } from '../services/autoNumberService.js';
 import ListView from '../models/ListView.js';
 import RecentlyViewed from '../models/RecentlyViewed.js';
@@ -98,7 +98,7 @@ const listRecords = asyncHandler(async (req, res) => {
   const fieldTypes = Object.fromEntries(fields.map((f) => [f.apiName, f.type]));
 
   // Data access filter — scopes results to what the user is allowed to see
-  const dataFilter = await buildDataAccessFilter(req.user);
+  const dataFilter = await buildDataAccessFilter(req.user, objectApiName);
   const query = {
     tenantId: req.tenantId,
     objectApiName,
@@ -274,7 +274,7 @@ const getRecord = asyncHandler(async (req, res) => {
   const { objectApiName, id } = req.params;
 
   // Data access filter — prevents reading records outside the user's scope
-  const dataFilter = await buildDataAccessFilter(req.user);
+  const dataFilter = await buildDataAccessFilter(req.user, objectApiName);
 
   const record = await DynamicRecord.findOne({
     _id: id,
@@ -433,28 +433,17 @@ const createRecord = asyncHandler(async (req, res) => {
     // are computed into the context first — they don't exist on the record yet
     // (that happens further down), so without this a rule referencing a formula
     // field would silently compare against null and never fire.
-    // FORM-006: On create every field is "changed" from nothing, so pass an empty
-    // __prev so ISCHANGED() returns true for fields that have a value and false
-    // for fields that are blank — matching Salesforce's create-path semantics.
-    const ruleErrors = runObjectValidationRules(obj.validationRules || [], {
-      ...validatedData,
-      ...computeFormulaValues(validatedData, fields),
-      __prev: {},
+    // BRD 6.1: ISCHANGED() is true only on update, so no saved values (prev)
+    // are passed on create and it evaluates to false.
+    const ruleErrors = await evaluateValidationRules({
+      tenantId: req.tenantId,
+      rules: obj.validationRules || [],
+      data: { ...validatedData, ...computeFormulaValues(validatedData, fields) },
     });
-    // Split: rules with an errorField go into fieldErrors (inline); others go
-    // into the banner errors array.
-    for (const re of ruleErrors) {
-      if (re.errorField) fieldErrors[re.errorField] = re.message;
-      else errors.push(re.message);
-    }
-
-    if (errors.length > 0 || Object.keys(fieldErrors).length > 0) {
-      throw new ValidationError(errors, 400, {
-        fieldErrors,
-        validationErrors: ruleErrors,
-        message: errors.join('; ') || 'Validation failed.',
-      });
-    }
+    // BRD 6.2: every failing check and rule is reported together — rules with
+    // an errorField inline on that field, the rest at the top of the record.
+    const failure = buildValidationFailure({ errors, fieldErrors }, ruleErrors);
+    if (failure) throw failure;
 
     const record = new DynamicRecord({
       tenantId: req.tenantId,
@@ -589,11 +578,13 @@ const updateRecord = asyncHandler(async (req, res) => {
   session.startTransaction();
 
   try {
+    const writeFilter = await buildDataWriteFilter(req.user, objectApiName);
     const record = await DynamicRecord.findOne({
       _id: id,
       tenantId: req.tenantId,
       objectApiName,
       isDeleted: false,
+      ...writeFilter,
     }).session(session);
     if (!record) throw new AppError('Record not found.', 404);
 
@@ -643,25 +634,16 @@ const updateRecord = asyncHandler(async (req, res) => {
       // Recompute formula values from the merged data. `toDataObject()` carries
       // the values stored before this edit, so a rule referencing a formula
       // field would otherwise be checked against a stale figure.
-      // FORM-006: Pass __prev so ISCHANGED() can compare old vs new values.
-      const prevData = record.toDataObject();
-      const ruleErrors = runObjectValidationRules(objMeta?.validationRules || [], {
-        ...mergedData,
-        ...computeFormulaValues(mergedData, fields),
-        __prev: prevData,
+      // FORM-006: pass the stored values so ISCHANGED() can compare old vs new.
+      const ruleErrors = await evaluateValidationRules({
+        tenantId: req.tenantId,
+        rules: objMeta?.validationRules || [],
+        data: { ...mergedData, ...computeFormulaValues(mergedData, fields) },
+        prev: record.toDataObject(),
       });
-      for (const re of ruleErrors) {
-        if (re.errorField) fieldErrors[re.errorField] = re.message;
-        else errors.push(re.message);
-      }
-    }
-
-    if (errors.length > 0 || Object.keys(fieldErrors).length > 0) {
-      throw new ValidationError(errors, 400, {
-        fieldErrors,
-        validationErrors: [...(errors.map((m) => ({ message: m, errorField: '' }))), ...Object.entries(fieldErrors).map(([f, m]) => ({ message: m, errorField: f }))],
-        message: errors.join('; ') || 'Validation failed.',
-      });
+      // BRD 6.2: report every failing check and rule together.
+      const failure = buildValidationFailure({ errors, fieldErrors }, ruleErrors);
+      if (failure) throw failure;
     }
 
     // Snapshot the parent links before the write. When a lookup is repointed
@@ -711,20 +693,8 @@ const updateRecord = asyncHandler(async (req, res) => {
       }
     }
 
-    // ── Deal to Order conversion: trigger when deal stage changes to 'closed_won' ──
-    let convertedOrder = null;
-    if (
-      objectApiName === 'deal' &&
-      validatedData.stage === 'closed_won' &&
-      !record.getField('is_converted')
-    ) {
-      convertedOrder = await convertDealToOrder(
-        record,
-        req.tenantId,
-        req.user._id,
-        session,
-      );
-    }
+    // Deal → Order is not automatic on Closed Won (BRD 4.4): it runs from the
+    // configured "Convert to Order" action (services/actionService.js).
 
     await audit({
       tenantId: req.tenantId,
@@ -741,7 +711,8 @@ const updateRecord = asyncHandler(async (req, res) => {
     // Commit transaction
     await session.commitTransaction();
 
-    fireAutomations('update', objectApiName, record, req.tenantId).catch(
+    // prevSnapshot (values before this save) lets flow entry conditions use ISCHANGED().
+    fireAutomations('update', objectApiName, record, req.tenantId, prevSnapshot).catch(
       () => {},
     );
     // Refresh from the record as saved, not from `validatedData`. A PATCH that
@@ -756,20 +727,11 @@ const updateRecord = asyncHandler(async (req, res) => {
     );
 
     const responseData = { data: record.toDataObject() };
-    if (convertedOrder) {
-      responseData.convertedOrder = convertedOrder.toDataObject();
-    }
     if (duplicateCheck.action === 'warn' && duplicateCheck.matches.length) {
       responseData.duplicateMatches = duplicateCheck.matches;
     }
 
-    sendSuccess(
-      res,
-      responseData,
-      convertedOrder
-        ? 'Deal converted to order successfully'
-        : 'Record updated successfully',
-    );
+    sendSuccess(res, responseData, 'Record updated successfully');
   } catch (err) {
     // Abort the transaction on any error
     await session.abortTransaction();
@@ -789,11 +751,13 @@ const deleteRecord = asyncHandler(async (req, res) => {
   session.startTransaction();
 
   try {
+    const writeFilter = await buildDataWriteFilter(req.user, objectApiName);
     const record = await DynamicRecord.findOne({
       _id: id,
       tenantId: req.tenantId,
       objectApiName,
       isDeleted: false,
+      ...writeFilter,
     }).session(session);
     if (!record) throw new AppError('Record not found.', 404);
 
@@ -806,44 +770,7 @@ const deleteRecord = asyncHandler(async (req, res) => {
       );
     }
 
-    // REL-003: enforce block/nullify deletion behaviours on child objects.
-    {
-      const childLookupFields = await FieldMeta.find({
-        tenantId: req.tenantId,
-        lookupObjectApiName: objectApiName,
-        deleteBehavior: { $in: ['block', 'nullify'] },
-      }).select('objectApiName apiName deleteBehavior').session(session);
-
-      for (const lf of childLookupFields) {
-        const childCount = await DynamicRecord.countDocuments({
-          tenantId: req.tenantId,
-          objectApiName: lf.objectApiName,
-          isDeleted: false,
-          [`data.${lf.apiName}`]: id,
-        }).session(session);
-
-        if (childCount === 0) continue;
-
-        if (lf.deleteBehavior === 'block') {
-          throw new AppError(
-            `Cannot delete this record: ${childCount} child record(s) in "${lf.objectApiName}" are linked via "${lf.apiName}". Reassign or delete them first.`,
-            409,
-          );
-        }
-        if (lf.deleteBehavior === 'nullify') {
-          await DynamicRecord.updateMany(
-            {
-              tenantId: req.tenantId,
-              objectApiName: lf.objectApiName,
-              isDeleted: false,
-              [`data.${lf.apiName}`]: id,
-            },
-            { $unset: { [`data.${lf.apiName}`]: '' } },
-            { session },
-          );
-        }
-      }
-    }
+    await _applyChildDeleteBehaviours(req.tenantId, objectApiName, [id], session);
 
     record.isDeleted = true;
     record.deletedAt = new Date();
@@ -904,6 +831,22 @@ const deleteRecord = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/records/:objectApiName/delete-check
+ * Lets the UI refuse a blocked delete before showing the confirm dialog.
+ */
+const deleteCheck = asyncHandler(async (req, res) => {
+  const { objectApiName } = req.params;
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0)
+    throw new AppError('ids array is required.', 400);
+  if (ids.length > 200)
+    throw new AppError('Max 200 records per bulk operation.', 400);
+
+  await _applyChildDeleteBehaviours(req.tenantId, objectApiName, ids, null, { dryRun: true });
+  sendSuccess(res, { data: { blocked: false } });
+});
+
+/**
  * POST /api/records/:objectApiName/bulk-delete
  */
 const bulkDelete = asyncHandler(async (req, res) => {
@@ -922,14 +865,18 @@ const bulkDelete = asyncHandler(async (req, res) => {
     // runs for records this call really deleted. `data` comes along so the
     // parent links can be snapshotted for the rollup refresh below — once these
     // are soft-deleted the lookup values are no longer reachable.
+    const writeFilter = await buildDataWriteFilter(req.user, objectApiName);
     const targets = await DynamicRecord.find({
       _id: { $in: ids },
       tenantId: req.tenantId,
       objectApiName,
       isDeleted: false,
+      ...writeFilter,
     }).session(session);
     const targetIds = targets.map((t) => t._id);
     const deletedSnapshots = targets.map((t) => t.toDataObject());
+
+    await _applyChildDeleteBehaviours(req.tenantId, objectApiName, targetIds, session);
 
     const result = await DynamicRecord.updateMany(
       { _id: { $in: targetIds }, tenantId: req.tenantId },
@@ -1100,6 +1047,52 @@ const mergeRecords = asyncHandler(async (req, res) => {
  * @returns {Promise<number>} how many child records were soft-deleted, so the
  *   caller can keep the tenant's record usage count accurate.
  */
+// REL-003: enforce block/nullify deletion behaviours on child objects before
+// the parents are deleted. Throws 409 if any child blocks the deletion.
+// With dryRun, only the block check runs and nothing is written.
+async function _applyChildDeleteBehaviours(tenantId, parentObjectApiName, parentIds, session = null, { dryRun = false } = {}) {
+  if (!parentIds.length) return;
+
+  const childLookupFields = await FieldMeta.find({
+    tenantId,
+    lookupObjectApiName: parentObjectApiName,
+    deleteBehavior: dryRun ? 'block' : { $in: ['block', 'nullify'] },
+  }).select('objectApiName apiName deleteBehavior').session(session);
+  if (!childLookupFields.length) return;
+
+  // Lookup values are stored as strings; match the ObjectId form too.
+  const parentIdMatches = [];
+  for (const pid of parentIds) {
+    parentIdMatches.push(String(pid));
+    if (mongoose.isValidObjectId(pid)) {
+      parentIdMatches.push(new mongoose.Types.ObjectId(String(pid)));
+    }
+  }
+
+  for (const lf of childLookupFields) {
+    const childFilter = {
+      tenantId,
+      objectApiName: lf.objectApiName,
+      isDeleted: false,
+      [`data.${lf.apiName}`]: { $in: parentIdMatches },
+    };
+    const childCount = await DynamicRecord.countDocuments(childFilter).session(session);
+    if (childCount === 0) continue;
+
+    if (lf.deleteBehavior === 'block') {
+      throw new AppError(
+        `Cannot delete this record: ${childCount} child record(s) in "${lf.objectApiName}" are linked via "${lf.apiName}". Reassign or delete them first.`,
+        409,
+      );
+    }
+    await DynamicRecord.updateMany(
+      childFilter,
+      { $unset: { [`data.${lf.apiName}`]: '' } },
+      { session },
+    );
+  }
+}
+
 async function _cascadeDelete(
   tenantId,
   parentObjectApiName,
@@ -1187,11 +1180,13 @@ const restoreRecord = asyncHandler(async (req, res) => {
   });
   if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
 
+  const writeFilter = await buildDataWriteFilter(req.user, objectApiName);
   const record = await DynamicRecord.findOne({
     _id: id,
     tenantId: req.tenantId,
     objectApiName,
     isDeleted: true,
+    ...writeFilter,
   });
   if (!record) throw new AppError('Deleted record not found.', 404);
 
@@ -1249,6 +1244,7 @@ export {
   updateRecord,
   deleteRecord,
   bulkDelete,
+  deleteCheck,
   mergeRecords,
   restoreRecord,
   listDeletedRecords,

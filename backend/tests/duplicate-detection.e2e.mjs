@@ -22,6 +22,8 @@ import FieldMeta from '../models/FieldMeta.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import DuplicateRule from '../models/DuplicateRule.js';
 import { seedDefaultRoles } from '../services/roleService.js';
+import Workspace from '../models/Workspace.js';
+import { seedWorkspace } from './helpers/workspace.mjs';
 
 const RUN = Date.now().toString(36);
 const PASSWORD = 'DupTest123!';
@@ -98,6 +100,7 @@ try {
     });
   }
 
+  await seedWorkspace(tenantId, [adminUser._id, stdUser._id], ['contact']);
   const cookieAdmin = await loginCookie(adminUser.username);
   const cookieStd = await loginCookie(stdUser.username);
   check('users can log in', Boolean(cookieAdmin && cookieStd));
@@ -232,6 +235,7 @@ try {
     tenantId: tenantBId, firstName: 'Other', lastName: 'Tenant', email: `otherdup-${RUN}@example.com`,
     username: `otherdup_${RUN}`, password: PASSWORD, role: roleB._id, status: 'active', emailVerified: true,
   });
+  await seedWorkspace(tenantBId, [userB._id], ['contact']);
   const cookieOther = await loginCookie(userB.username);
 
   const listOther = await req('/api/v1/duplicate-rules', { cookie: cookieOther });
@@ -264,7 +268,7 @@ try {
     const ids = [tenantId, tenantBId].filter(Boolean);
     await Tenant.deleteMany({ _id: { $in: ids } });
     await Promise.all([
-      User, Role, Session, ObjectMeta, FieldMeta, DynamicRecord, DuplicateRule,
+      User, Role, Session, ObjectMeta, FieldMeta, DynamicRecord, DuplicateRule, Workspace,
     ].map((M) => M.deleteMany({ tenantId: { $in: ids } }).catch(() => {})));
   }
   server.close();

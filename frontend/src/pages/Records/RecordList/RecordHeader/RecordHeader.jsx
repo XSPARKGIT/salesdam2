@@ -35,10 +35,21 @@ const RecordHeader = ({
   const objectColor = objMeta?.color || 'var(--color-primary)';
   const Icon = LucideIcons[objMeta?.icon] || LucideIcons.Box;
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (!perms.canDelete) {
       toast.error('You do not have permission to delete records.');
       return;
+    }
+
+    // A "Block" lookup on a child object refuses the delete up front.
+    try {
+      await api.post(`/records/${objectApiName}/delete-check`, { ids: selected });
+    } catch (err) {
+      // The api client rejects with { status, message }, not an axios error.
+      if (err.status === 409) {
+        toast.error(err.message || 'This record cannot be deleted.');
+        return;
+      }
     }
 
     setDeleteModalOpen(true);

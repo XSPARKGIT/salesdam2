@@ -49,6 +49,10 @@ const roleSchema = new mongoose.Schema({
     canManageWebhooks: { type: Boolean, default: false },
   },
 
+  // Apps (Workspaces) this Role sees in its App Switcher (BRD 5.3). Separate
+  // from objectPermissions — see services/appAccessService.js.
+  appIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Workspace' }],
+
   // Data visibility
   dataAccess: {
     type: String,

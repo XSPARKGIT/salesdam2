@@ -2,10 +2,23 @@ import * as LucideIcons from 'lucide-react';
 import styles from './DetailsTab.module.css';
 import ColorPicker from '../../../components/common/ColorPicker/ColorPicker';
 import IconPicker from '../IconPicker/IconPicker';
+import { useEffect, useState } from 'react';
+import { listGlobalValueSets } from '../../../services/api/globalValueSets';
 
 const DetailsTab = ({ objForm, onChange, isEdit, onIconChange, fields = [] }) => {
   // Get all picklist fields for kanban selection
   const picklistFields = fields.filter(f => f.type === 'picklist' && !f.isReadOnly);
+
+  // Global Value Sets, so the kanban picker can show where each field's columns come from.
+  const [globalValueSets, setGlobalValueSets] = useState([]);
+  useEffect(() => {
+    listGlobalValueSets().then((s) => setGlobalValueSets(Array.isArray(s) ? s : [])).catch(() => {});
+  }, []);
+  const gvsLabel = (field) =>
+    field?.globalValueSetId
+      ? globalValueSets.find((s) => String(s._id) === String(field.globalValueSetId))?.label || 'Global Value Set'
+      : null;
+  const kanbanField = picklistFields.find((f) => f.apiName === objForm.kanbanConfig?.fieldApiName);
 
   // Resolve the object's configured name field when editing. Falls back to
   // 'name' for objects created before the API name was configurable.
@@ -572,11 +585,14 @@ const DetailsTab = ({ objForm, onChange, isEdit, onIconChange, fields = [] }) =>
                   {picklistFields.map(field => (
                     <option key={field.apiName} value={field.apiName}>
                       {field.label}
+                      {gvsLabel(field) ? ` — Global Value Set: ${gvsLabel(field)}` : ''}
                     </option>
                   ))}
                 </select>
                 <p style={{ fontSize: '11px', color: 'var(--color-gray-500)', marginTop: '4px' }}>
-                  Choose which picklist field to use for organizing cards into columns
+                  {kanbanField && gvsLabel(kanbanField)
+                    ? `Columns come from the "${gvsLabel(kanbanField)}" Global Value Set. Updating the set updates the board.`
+                    : 'Choose which picklist field to use for organizing cards into columns. To build the board from a Global Value Set, link the field to the set in Fields.'}
                 </p>
               </div>
             )}

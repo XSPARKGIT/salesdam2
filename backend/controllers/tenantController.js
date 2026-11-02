@@ -5,6 +5,9 @@ import Workspace from '../models/Workspace.js';
 import FieldMeta from '../models/FieldMeta.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import Layout from '../models/Layout.js';
+import LayoutAssignment from '../models/LayoutAssignment.js';
+import PermissionSet from '../models/PermissionSet.js';
+import ApproverGroup from '../models/ApproverGroup.js';
 import Role from '../models/Role.js';
 import Automation from '../models/Automation.js';
 import Dashboard from '../models/Dashboard.js';
@@ -280,6 +283,9 @@ const permanentlyDeleteTenant = asyncHandler(async (req, res) => {
     FieldMeta.deleteMany({ tenantId }),
     DynamicRecord.deleteMany({ tenantId }),
     Layout.deleteMany({ tenantId }),
+    LayoutAssignment.deleteMany({ tenantId }),
+    PermissionSet.deleteMany({ tenantId }),
+    ApproverGroup.deleteMany({ tenantId }),
     Role.deleteMany({ tenantId }),
     Automation.deleteMany({ tenantId }),
     Dashboard.deleteMany({ tenantId }),

@@ -1,6 +1,6 @@
 import styles from './RecordForm.module.css';
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { getFormBundle } from '../../../services/api/objects';
@@ -11,16 +11,19 @@ import {
 } from '../../../services/api/records';
 import { checkDuplicates } from '../../../services/api/duplicateRules';
 import DuplicateWarningModal from '../../../components/records/DuplicateWarningModal/DuplicateWarningModal';
+import ValidationSummary from '../../../components/records/ValidationSummary/ValidationSummary';
 import { MAX_MERGE_RECORDS } from '../RecordMerge/mergeConstants';
 import { useTenantContext } from '../../../context/TenantContext';
 import { useAuthContext } from '../../../context/AuthContext';
 import { useObjectPermissions } from '../../../hooks/useObjectPermissions';
+import notFoundStyles from '../../NotFound.module.css';
 import Layout from '../../../layout/Layout';
 import RecordFormHeader from './RecordFormHeader/RecordFormHeader';
 import RecordFormContent from './RecordFormContent/RecordFormContent';
 import { buildFormSections } from './utils/buildFormSections';
 import {
   initializeFormData,
+  cloneableValues,
   validateFormData,
   clearFieldError,
   extractServerErrors,
@@ -36,16 +39,21 @@ const RecordForm = () => {
   const objMeta = getObject(objectApiName);
   const perms = useObjectPermissions(objectApiName);
   const isEdit = !!id;
+  // "Clone" action: /o/:object/new?cloneFrom=<id> starts from a copy.
+  const [searchParams] = useSearchParams();
+  const cloneFrom = !isEdit ? searchParams.get('cloneFrom') : null;
 
   const [errors, setErrors] = useState({});
+  // Every problem from the last failed save, listed above the form (BRD 6.2)
+  const [saveIssues, setSaveIssues] = useState([]);
   const [saving, setSaving] = useState(false);
   // { action: 'warn'|'block', matches, data } while the duplicate dialog is open
   const [duplicates, setDuplicates] = useState(null);
 
   // Fetch form bundle (fields and layout)
   const { data: bundle, isLoading: bundleLoading } = useQuery({
-    queryKey: ['form-bundle', objectApiName],
-    queryFn: () => getFormBundle(objectApiName),
+    queryKey: ['form-bundle', objectApiName, id || 'new'],
+    queryFn: () => getFormBundle(objectApiName, id),
     enabled: !!objectApiName,
   });
 
@@ -59,11 +67,19 @@ const RecordForm = () => {
     enabled: !!objectApiName && !!id && isEdit,
   });
 
+  const { data: cloneSource, isLoading: cloneLoading } = useQuery({
+    queryKey: ['record', objectApiName, cloneFrom],
+    queryFn: () => getRecord(objectApiName, cloneFrom),
+    enabled: !!objectApiName && !!cloneFrom,
+  });
+
   // Compute initial form data
   const initialFormData = useMemo(() => {
     if (!bundle || (isEdit && !record)) return {};
-    return initializeFormData(fields, record, user, isEdit);
-  }, [bundle, record, isEdit, fields, user]);
+    if (cloneFrom && !cloneSource) return {};
+    const base = initializeFormData(fields, record, user, isEdit);
+    return cloneFrom ? { ...base, ...cloneableValues(fields, cloneSource) } : base;
+  }, [bundle, record, isEdit, fields, user, cloneFrom, cloneSource]);
 
   const [formData, setFormData] = useState(initialFormData);
   const isInitialMount = useRef(true);
@@ -77,7 +93,7 @@ const RecordForm = () => {
     setFormData(initialFormData);
   }, [initialFormData]);
 
-  const loading = bundleLoading || (isEdit && recordLoading);
+  const loading = bundleLoading || (isEdit && recordLoading) || (!!cloneFrom && cloneLoading);
 
   const handleFieldChange = (apiName, value) => {
     setFormData((prev) => ({ ...prev, [apiName]: value }));
@@ -143,6 +159,7 @@ const RecordForm = () => {
 
   const saveRecord = async (dataToSubmit) => {
     setSaving(true);
+    setSaveIssues([]);
     try {
       if (isEdit) {
         const updatedRecord = await updateRecord(objectApiName, id, dataToSubmit);
@@ -152,6 +169,10 @@ const RecordForm = () => {
         });
         queryClient.invalidateQueries({
           queryKey: ['record-detail', objectApiName, id],
+        });
+        // A changed value may now match a different conditional layout.
+        queryClient.invalidateQueries({
+          queryKey: ['form-bundle', objectApiName, id],
         });
         queryClient.invalidateQueries({ queryKey: ['records', objectApiName] });
         navigate(`/o/${objectApiName}/${updatedRecord.id}`);
@@ -173,12 +194,13 @@ const RecordForm = () => {
       // Anything the server could pin to a specific input (a duplicate value on
       // a unique field, a bad email, a failed regex) is highlighted on that
       // field, the same as a client-side validation failure.
-      const { fieldErrors, message } = extractServerErrors(err, fields);
+      const { fieldErrors, message, issues } = extractServerErrors(err, fields);
       if (Object.keys(fieldErrors).length > 0) {
         setErrors(fieldErrors);
         focusFirstError(fieldErrors);
       }
-      toast.error(message);
+      setSaveIssues(issues);
+      toast.error(issues.length > 1 ? `${issues.length} problems need fixing — see the list above the form.` : message);
     } finally {
       setSaving(false);
     }
@@ -193,6 +215,27 @@ const RecordForm = () => {
       <Layout title={pageTitle} description="Edit record details">
         <div className={styles.loading}>
           <div className={styles.spinner} />
+        </div>
+      </Layout>
+    );
+  }
+
+  // Guard: block access to the form when the user lacks the required permission
+  const lacksPermission = isEdit ? !perms.canUpdate : !perms.canCreate;
+  if (lacksPermission && !perms.loading) {
+    return (
+      <Layout title="Access denied" description="You don't have permission to access this page.">
+        <div className={notFoundStyles.container}>
+          <div className={notFoundStyles.content}>
+            <h1 className={notFoundStyles.code}>403</h1>
+            <h2 className={notFoundStyles.title}>Access denied</h2>
+            <p className={notFoundStyles.message}>
+              You don't have permission to {isEdit ? 'edit' : 'create'} records for this object.
+            </p>
+            <button type="button" className={notFoundStyles.homeLink} onClick={() => navigate(-1)}>
+              Go back
+            </button>
+          </div>
         </div>
       </Layout>
     );
@@ -214,6 +257,8 @@ const RecordForm = () => {
           saving={saving}
           onCancel={() => navigate(-1)}
         />
+
+        <ValidationSummary issues={saveIssues} fields={fields} />
 
         <RecordFormContent
           sections={sections}

@@ -101,11 +101,24 @@ const automationSchema = new mongoose.Schema(
         enum: ['always', 'conditions_met'],
         default: 'always',
       },
-      conditions: [{ type: mongoose.Schema.Types.Mixed }], // trigger conditions
+      conditions: [{ type: mongoose.Schema.Types.Mixed }], // older list-style conditions
+      // BRD 7.1: Entry Condition — a true/false formula, same builder as
+      // Validation Rules (ISCHANGED, CONFIG, AND/OR/NOT). The flow only runs
+      // for a record when it is true. Empty = always.
+      entryCondition: { type: String, trim: true, default: '' },
       schedule: {
         // for scheduled flows
+        // 'relative_date': once per record, N days before/after/on a date
+        //   field (e.g. 3 days before Due Date), at `time` (UTC) each day.
+        // 'cron': on a cron schedule, for every matching record (or once with
+        //   no record when no object is set).
+        mode: { type: String, enum: ['cron', 'relative_date'], default: 'cron' },
         cron: { type: String },
         timezone: { type: String, default: 'UTC' },
+        dateField: { type: String },
+        days: { type: Number, default: 0, min: 0, max: 3650 },
+        when: { type: String, enum: ['before', 'after', 'on'], default: 'before' },
+        time: { type: String, default: '08:00' }, // HH:MM, UTC
       },
     },
 
@@ -143,6 +156,24 @@ const automationSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+/**
+ * BRD 7.1 Trigger Type, as the admin sees it, derived from the flow's type and
+ * events: record_created | record_updated | record_created_or_updated |
+ * record_deleted | scheduled | manual.
+ */
+automationSchema.virtual('triggerType').get(function triggerType() {
+  if (this.type === 'scheduled') return 'scheduled';
+  if (this.type !== 'record_triggered') return 'manual';
+  const ev = new Set(this.trigger?.events || []);
+  if (ev.has('all') || (ev.has('create') && ev.has('update'))) return 'record_created_or_updated';
+  if (ev.has('create')) return 'record_created';
+  if (ev.has('update')) return 'record_updated';
+  if (ev.has('delete')) return 'record_deleted';
+  return 'record_created';
+});
+automationSchema.set('toJSON', { virtuals: true });
+automationSchema.set('toObject', { virtuals: true });
 
 automationSchema.index({ tenantId: 1, apiName: 1 }, { unique: true });
 automationSchema.index({ tenantId: 1, isActive: 1, type: 1 });

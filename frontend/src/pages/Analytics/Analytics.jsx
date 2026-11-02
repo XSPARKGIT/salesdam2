@@ -15,7 +15,7 @@ import {
 } from 'recharts';
 import { BarChart2, TrendingUp, RefreshCw } from 'lucide-react';
 import api from '../../services/api';
-import { useTenantContext } from '../../context/TenantContext';
+import { useQuery } from '@tanstack/react-query';
 import Button from '../../components/common/Button/Button';
 import Layout from '../../layout/Layout';
 import styles from './Analytics.module.css';
@@ -30,7 +30,15 @@ const COLORS = [
 ];
 
 export default function Analytics() {
-  const { objects } = useTenantContext();
+  // Reports follow object permissions, not the open App (BRD 5.3): offer every
+  // object the user's Role can read.
+  const { data: objects = [] } = useQuery({
+    queryKey: ['objects', 'readable'],
+    queryFn: () =>
+      api
+        .get('/objects', { params: { scope: 'readable', includeFields: true } })
+        .then((res) => res.data?.data || []),
+  });
   const [overview, setOverview] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [selectedObject, setSelectedObject] = useState('');
@@ -71,7 +79,17 @@ export default function Analytics() {
         payload.relatedLookup = { field: relatedLookupField, object: relatedObject };
         payload.relatedGroupBy = relatedGroupBy;
       } else {
-        payload.groupBy = 'status';
+        // Pick a sensible group-by field: prefer 'status', then 'stage', then first picklist field
+        const obj = objects.find((o) => o.apiName === objectApiName);
+        const fields = obj?.fields || [];
+        const picklistFields = fields.filter((f) => f.type === 'picklist');
+        const preferred = ['status', 'stage', 'type', 'priority', 'category'];
+        let groupBy = null;
+        for (const name of preferred) {
+          if (fields.some((f) => f.apiName === name)) { groupBy = name; break; }
+        }
+        if (!groupBy && picklistFields.length > 0) groupBy = picklistFields[0].apiName;
+        if (groupBy) payload.groupBy = groupBy;
       }
       const res = await api.post('/analytics/report', payload);
       setReportData(res.data.data.results || []);

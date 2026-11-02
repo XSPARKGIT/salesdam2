@@ -16,6 +16,7 @@
  *   MulExpr    := UnaryExpr( ('*'|'/') UnaryExpr)*
  *   UnaryExpr  := '-' UnaryExpr | Primary
  *   Primary    := Number | String | Bool | null
+ *              | ('AND'|'OR') '(' ArgList ')' (function form, ≥ 2 conditions)
  *              | IDENT '(' ArgList ')' (function call)
  *              | IDENT '.' IDENT '(' ArgList ')' (method call — whitelist only)
  *              | IDENT (field reference)
@@ -277,6 +278,27 @@ class Parser {
       return e;
     }
 
+    // Function forms of the boolean operators, so conditions can be nested the
+    // same way as other functions: AND(a, OR(b, c), NOT(d)). NOT(x) already
+    // parses as the prefix operator applied to a parenthesised expression.
+    if ((t.t === TT.AND || t.t === TT.OR) && this.tok[this.pos + 1]?.t === TT.LPAREN) {
+      const word = t.t === TT.AND ? 'AND' : 'OR';
+      this.eat();
+      this.eat();
+      this.enterDepth();
+      const args = [];
+      if (this.peek() !== TT.RPAREN) {
+        args.push(this.parseOr());
+        while (this.peek() === TT.COMMA) { this.eat(); args.push(this.parseOr()); }
+      }
+      this.leaveDepth();
+      this.expect(TT.RPAREN);
+      if (args.length < 2) throw new Error(`${word}() needs at least two conditions`);
+      const k = word === 'AND' ? '&&' : '||';
+      // Each argument is tested as true/false, as with the operator forms.
+      return args.slice(1).reduce((l, r) => ({ k, l, r }), args[0]);
+    }
+
     if (t.t === TT.IDENT) {
       const name = this.eat().v;
 
@@ -319,7 +341,7 @@ class Parser {
 // ─── Built-in functions ───────────────────────────────────────────────────────
 const BUILTINS = {
   LENGTH([a], ctx)   { const v = run(a, ctx); return v == null ? 0 : String(v).length; },
-  ISBLANK([a], ctx)  { const v = run(a, ctx); return v == null || v === ''; },
+  ISBLANK([a], ctx)  { const v = run(a, ctx); return v == null || v === '' || (Array.isArray(v) && v.length === 0); },
   ISNULL([a], ctx)   { const v = run(a, ctx); return v == null; },
   REGEX([a, b], ctx) {
     const val = String(run(a, ctx) ?? '');
@@ -380,18 +402,82 @@ const BUILTINS = {
     return args.map((a) => { const v = run(a, ctx); return v == null ? '' : String(v); }).join('');
   },
 
-  // FORM-006: ISCHANGED(fieldName) — true when the field's current value differs
-  // from its previous value. Previous state is injected into ctx as __prev.
-  // Returns false when no previous state is available (create operations).
+  // BRD 6.2: CONFIG("key") — a TenantConfiguration value (the tenant's
+  // override, else the platform default), so a rule's threshold can differ by
+  // tenant. The caller resolves the keys into ctx.__config before evaluating.
+  CONFIG([a], ctx) {
+    if (!a || a.k !== 'lit' || typeof a.v !== 'string') {
+      throw new Error('CONFIG() takes a configuration key in quotes, e.g. CONFIG("deals.minimum_value")');
+    }
+    const v = ctx?.__config?.[a.v];
+    return v === undefined ? null : v;
+  },
+
+  // FORM-006 / BRD 6.1: ISCHANGED(field) — true only on update, when the
+  // field's value differs from the value stored before this save. The saved
+  // values are passed in ctx.__prev; on create there is none, so it is false.
   ISCHANGED([a], ctx) {
-    if (!a || a.k !== 'ref') return false;
+    if (!a || a.k !== 'ref') throw new Error('ISCHANGED() takes a field name, e.g. ISCHANGED(stage)');
     if (!ctx?.__prev) return false;
     const fieldName = a.name;
-    const prev = ctx.__prev[fieldName];
-    const curr = ctx[fieldName];
-    return prev !== curr;
+    return comparable(ctx.__prev[fieldName]) !== comparable(ctx[fieldName]);
   },
 };
+
+// Functions only validation rules may use, and why.
+const RULE_ONLY_FUNCTIONS = {
+  ISCHANGED: 'ISCHANGED() compares a record with its saved values, so it can only be used in validation rules and flow entry conditions.',
+  CONFIG: 'CONFIG() reads tenant configuration when a record is saved, so it can only be used in validation rules, flow entry conditions and approval entry criteria.',
+};
+const RECORD_STATE_FUNCTIONS = new Set(Object.keys(RULE_ONLY_FUNCTIONS));
+
+/** Every node in the AST, depth first. */
+function walk(node, visit) {
+  if (!node || typeof node !== 'object') return;
+  visit(node);
+  Object.values(node).forEach((v) => {
+    if (Array.isArray(v)) v.forEach((x) => walk(x, visit));
+    else if (v && typeof v === 'object') walk(v, visit);
+  });
+}
+
+/**
+ * Configuration keys a formula reads with CONFIG("key"). Empty for a formula
+ * that doesn't parse — it is reported as invalid elsewhere.
+ */
+function configKeysIn(expression) {
+  const keys = new Set();
+  try {
+    walk(parseFormula(String(expression || '').trim()), (n) => {
+      if (n.k === 'fn' && n.name === 'CONFIG' && n.args?.[0]?.k === 'lit' && typeof n.args[0].v === 'string') {
+        keys.add(n.args[0].v);
+      }
+    });
+  } catch {
+    /* unparseable */
+  }
+  return [...keys];
+}
+
+// A value reduced to a string for ISCHANGED, so a stored value and the same
+// value from the form compare equal: blank/null/[] alike, dates by instant,
+// record links by id, numbers by value.
+function comparable(v) {
+  if (v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)) return '';
+  if (v instanceof Date) return `d:${v.getTime()}`;
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+    const t = Date.parse(v);
+    if (!Number.isNaN(t)) return `d:${t}`;
+  }
+  if (Array.isArray(v)) return `a:${JSON.stringify(v.map(comparable))}`;
+  if (typeof v === 'object') {
+    if (typeof v.toHexString === 'function') return String(v.toHexString());
+    if (v._id !== undefined) return String(v._id);
+    return `o:${JSON.stringify(v)}`;
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return String(v);
+}
 
 // Whitelist of allowed string methods
 const ALLOWED_METHODS = new Set(['includes', 'startsWith', 'endsWith', 'toLowerCase', 'toUpperCase', 'trim']);
@@ -531,8 +617,9 @@ const FN_RETURN_KINDS = Object.freeze({
   LENGTH: KINDS.NUMBER, ABS: KINDS.NUMBER, ROUND: KINDS.NUMBER,
   YEAR: KINDS.NUMBER, MONTH: KINDS.NUMBER, DAY: KINDS.NUMBER,
   DAYS_BETWEEN: KINDS.NUMBER, DAYS_UNTIL: KINDS.NUMBER,
-  ISBLANK: KINDS.BOOLEAN, ISNULL: KINDS.BOOLEAN,
+  ISBLANK: KINDS.BOOLEAN, ISNULL: KINDS.BOOLEAN, ISCHANGED: KINDS.BOOLEAN,
   REGEX: KINDS.BOOLEAN, CONTAINS: KINDS.BOOLEAN,
+  TEXT: KINDS.TEXT, CONCATENATE: KINDS.TEXT,
   UPPER: KINDS.TEXT, LOWER: KINDS.TEXT, TRIM: KINDS.TEXT,
   TODAY: KINDS.DATE, NOW: KINDS.DATE, DATEVALUE: KINDS.DATE,
   IF: 'branch',
@@ -697,12 +784,40 @@ function evaluateFormula(expression, context) {
  * @param  {string} [options.expectedType] - Declared `formulaReturnType`. When
  *         given, a definite kind mismatch makes the formula invalid.
  * @param  {object} [options.fieldKinds]   - { fieldApiName: kind }, for inference
+ * @param  {boolean} [options.asCondition] - A validation rule: the formula
+ *         must be true/false (worded for rules rather than return types).
+ * @param  {boolean} [options.allowRecordState=true] - Whether ISCHANGED may be
+ *         used. It compares against the value stored before a save, so only
+ *         places that have one (validation rules, flow entry conditions) can.
+ * @param  {boolean} [options.allowConfig=allowRecordState] - Whether
+ *         CONFIG("key") may be used. Rules, flow entry conditions and approval
+ *         entry criteria read tenant configuration at run time; formula
+ *         fields don't.
  * @returns {{ valid: boolean, error?: string, returnType?: string }}
  */
 function validateFormula(expression, sampleContext = {}, options = {}) {
-  const { expectedType, fieldKinds = {} } = options;
+  const { fieldKinds = {}, allowRecordState = true, asCondition = false } = options;
+  const allowConfig = options.allowConfig ?? allowRecordState;
+  const expectedType = asCondition ? 'boolean' : options.expectedType;
   try {
     const ast = parseFormula(expression.trim());
+    if (!allowRecordState || !allowConfig) {
+      let ruleOnly = null;
+      walk(ast, (n) => {
+        if (ruleOnly || n.k !== 'fn') return;
+        if (n.name === 'ISCHANGED' && !allowRecordState) ruleOnly = n.name;
+        if (n.name === 'CONFIG' && !allowConfig) ruleOnly = n.name;
+      });
+      if (ruleOnly) return { valid: false, error: RULE_ONLY_FUNCTIONS[ruleOnly] };
+    }
+    // CONFIG must name its key literally so the key can be checked and loaded.
+    let badConfig = false;
+    walk(ast, (n) => {
+      if (n.k === 'fn' && n.name === 'CONFIG' && !(n.args?.length === 1 && n.args[0].k === 'lit' && typeof n.args[0].v === 'string')) badConfig = true;
+    });
+    if (badConfig) {
+      return { valid: false, error: 'CONFIG() takes one configuration key in quotes, e.g. CONFIG("deals.minimum_value")' };
+    }
     run(ast, sampleContext); // dry-run with sample (may be null refs, that's fine)
 
     const returnType = inferNode(ast, fieldKinds);
@@ -719,6 +834,13 @@ function validateFormula(expression, sampleContext = {}, options = {}) {
       // `unknown` means inference couldn't pin the kind down — an unrecognised
       // field reference, or IF branches of differing kinds. Rejecting on a guess
       // would block legitimate formulas, so only a definite mismatch fails.
+      if (asCondition && returnType !== KINDS.UNKNOWN && returnType !== want) {
+        return {
+          valid: false,
+          error: `This must be a true/false condition, but the formula returns ${returnType}. Compare it with something, e.g. amount <= 0.`,
+          returnType,
+        };
+      }
       if (returnType !== KINDS.UNKNOWN && returnType !== want) {
         const alternatives = declaredTypesForKind(returnType);
         const list =
@@ -749,6 +871,7 @@ export {
   parseFormula,
   evaluateFormula,
   validateFormula,
+  configKeysIn,
   inferReturnType,
   coerceToReturnType,
   declaredTypesForKind,

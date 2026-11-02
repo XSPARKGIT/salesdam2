@@ -122,7 +122,7 @@ export default function SchemaBuilder() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const objs = (await getObjects({ limit: 200 })) || [];
+      const objs = (await getObjects({ limit: 200, scope: 'all' })) || [];
 
       const fMap = {};
       await Promise.all(

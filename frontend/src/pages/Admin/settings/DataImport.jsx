@@ -59,7 +59,7 @@ export default function DataImport() {
   // Load all objects on mount
   useEffect(() => {
     api
-      .get('/objects', { params: { includeFields: false } })
+      .get('/objects', { params: { includeFields: false, scope: 'all' } })
       .then((res) => {
         const list = res.data?.data?.objects || res.data?.data || [];
         setObjects(list);
@@ -70,8 +70,11 @@ export default function DataImport() {
   }, []);
 
   // Load fields whenever selected object changes
-  useEffect(() => {
-    if (!objectApiName) return;
+  const loadFields = () => {
+    if (!objectApiName) {
+      toast.error('No object selected.');
+      return;
+    }
     setFields([]);
     setLoadingFields(true);
     api
@@ -82,9 +85,28 @@ export default function DataImport() {
           (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0),
         );
         setFields(f);
+        if (f.length === 0) {
+          toast.error('No fields returned from server.');
+        } else {
+          toast.success(`Loaded ${f.length} fields.`);
+        }
       })
-      .catch(() => toast.error('Failed to load fields.'))
+      .catch((err) => {
+        console.error('loadFields error:', err);
+        toast.error('Failed to load fields: ' + (err?.message || 'unknown error'));
+      })
       .finally(() => setLoadingFields(false));
+  };
+
+  useEffect(() => {
+    loadFields();
+  }, [objectApiName]);
+
+  // Refresh fields when window regains focus (catches fields created in another tab)
+  useEffect(() => {
+    const onFocus = () => loadFields();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [objectApiName]);
 
   // Re-run auto-mapping when fields change (object switched mid-upload)
@@ -184,6 +206,16 @@ export default function DataImport() {
 
   const mappedCount = Object.values(mapping).filter((v) => v !== SKIP).length;
 
+  // Required fields no column is mapped to — every row would be rejected.
+  // Calculated fields are filled in by the system, so they never need a column.
+  const mappedApiNames = new Set(Object.values(mapping));
+  const missingRequired = fields.filter(
+    (f) =>
+      f.isRequired &&
+      !['auto_number', 'formula', 'rollup_summary'].includes(f.type) &&
+      !mappedApiNames.has(f.apiName),
+  );
+
   const handleImport = async () => {
     setImporting(true);
     try {
@@ -247,6 +279,32 @@ export default function DataImport() {
                 </select>
               )}
             </div>
+            <div className={s.objectBadge} style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {loadingFields && (
+                <span className={s.loadingInline}> · loading fields…</span>
+              )}
+              <button
+                type="button"
+                className={s.clearBtn}
+                onClick={loadFields}
+                title="Refresh fields from server"
+              >
+                ↻ Refresh fields
+              </button>
+              <span className={s.loadingInline}>
+                ({fields.length} field{fields.length !== 1 ? 's' : ''} loaded)
+              </span>
+            </div>
+            {fields.length > 0 && (
+              <div className={s.loadingInline} style={{ marginTop: 4 }}>
+                <strong>Available fields:</strong> {fields.map((f) => f.apiName).join(', ')}
+              </div>
+            )}
+            {fields.length === 0 && !loadingFields && (
+              <div style={{ marginTop: 4, color: 'var(--color-danger)', fontSize: 'var(--font-size-xs)' }}>
+                ⚠ No fields loaded. Click "Refresh fields".
+              </div>
+            )}
 
             <div
               className={s.dropZone}
@@ -294,7 +352,29 @@ export default function DataImport() {
                 {loadingFields && (
                   <span className={s.loadingInline}> · loading fields…</span>
                 )}
+                <button
+                  type="button"
+                  className={s.clearBtn}
+                  onClick={loadFields}
+                  title="Refresh fields from server"
+                  style={{ marginLeft: 8 }}
+                >
+                  ↻ Refresh fields
+                </button>
+                <span className={s.loadingInline}>
+                  {' '}({fields.length} field{fields.length !== 1 ? 's' : ''} loaded)
+                </span>
               </div>
+              {fields.length > 0 && (
+                <div className={s.loadingInline} style={{ marginTop: 6, fontSize: 12 }}>
+                  Available fields: {fields.map((f) => f.apiName).join(', ')}
+                </div>
+              )}
+              {fields.length === 0 && !loadingFields && (
+                <div style={{ marginTop: 6, color: 'red', fontSize: 12 }}>
+                  ⚠ No fields loaded. Click "Refresh fields" or check the object.
+                </div>
+              )}
             </div>
 
             <div className={s.mappingWrap}>
@@ -352,6 +432,19 @@ export default function DataImport() {
               {mappedCount} of {headers.length} columns mapped ·{' '}
               {headers.length - mappedCount} will be skipped
             </div>
+
+            {missingRequired.length > 0 && (
+              <div className={s.requiredWarning} role="alert" data-testid="import-missing-required">
+                <AlertCircle size={14} />
+                <span>
+                  Required {missingRequired.length === 1 ? 'field' : 'fields'}{' '}
+                  <strong>{missingRequired.map((f) => f.label || f.apiName).join(', ')}</strong>{' '}
+                  {missingRequired.length === 1 ? 'has' : 'have'} no column. Every row will be
+                  rejected unless you add {missingRequired.length === 1 ? 'that column' : 'those columns'} to
+                  the file or map an existing column to {missingRequired.length === 1 ? 'it' : 'them'}.
+                </span>
+              </div>
+            )}
 
             {/* Preview table — only mapped columns */}
             {rows.length > 0 &&
@@ -455,8 +548,17 @@ export default function DataImport() {
         {/* ── Step: done ── */}
         {step === 'done' && (
           <div className={s.centerPanel}>
-            <CheckCircle size={40} className={s.successIcon} />
-            <h3>Import Complete</h3>
+            {result && !result.created && result.failed > 0 ? (
+              <>
+                <AlertCircle size={40} className={s.warnIcon} />
+                <h3>No records were imported</h3>
+              </>
+            ) : (
+              <>
+                <CheckCircle size={40} className={s.successIcon} />
+                <h3>Import Complete</h3>
+              </>
+            )}
             {result && (
               <div className={s.stats}>
                 <div className={s.stat}>
@@ -471,6 +573,21 @@ export default function DataImport() {
                   <span>{result.failed ?? '—'}</span>
                   <label>Failed</label>
                 </div>
+              </div>
+            )}
+            {result?.errors?.length > 0 && (
+              <div className={s.rowErrors} data-testid="import-row-errors">
+                <p className={s.rowErrorsTitle}>Why rows failed</p>
+                <ul>
+                  {result.errors.map((e, i) => (
+                    <li key={i}>
+                      <strong>Row {e.row ?? i + 1}:</strong>{' '}
+                      {(Array.isArray(e.errors) ? e.errors : [e.error || 'Unknown error'])
+                        .map((m) => (typeof m === 'string' ? m : m?.message || String(m)))
+                        .join(' ')}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             <Button variant="secondary" onClick={reset}>

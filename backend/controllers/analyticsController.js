@@ -3,6 +3,7 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import User from '../models/User.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { hasObjectPermission, buildDataAccessFilter } from '../middleware/permissions.js';
 
 /**
  * GET /api/analytics/overview
@@ -63,6 +64,17 @@ const runReport = asyncHandler(async (req, res) => {
   });
   if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
 
+  // Reports follow object permissions, not the App Switcher (BRD 5.3): a
+  // Role with Read on an object can report on it from any App, and only on
+  // the records it is allowed to see.
+  if (!(await hasObjectPermission(req.user, 'read', objectApiName))) {
+    throw new AppError(`You do not have permission to read ${objectApiName}.`, 403);
+  }
+  if (relatedLookup?.object && !(await hasObjectPermission(req.user, 'read', relatedLookup.object))) {
+    throw new AppError(`You do not have permission to read ${relatedLookup.object}.`, 403);
+  }
+  const dataFilter = await buildDataAccessFilter(req.user, objectApiName);
+
   const tenantObjId = mongoose.Types.ObjectId.createFromHexString(req.tenantId);
 
   // Build $match stage
@@ -70,6 +82,7 @@ const runReport = asyncHandler(async (req, res) => {
     tenantId: tenantObjId,
     objectApiName,
     isDeleted: false,
+    ...dataFilter,
   };
 
   // Apply field filters
@@ -103,6 +116,7 @@ const runReport = asyncHandler(async (req, res) => {
               tenantId: tenantObjId,
               objectApiName: relatedLookup.object,
               isDeleted: false,
+              ...dataFilter,
             },
           },
           { $project: { data: 1 } },

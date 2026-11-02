@@ -5,6 +5,9 @@ import { GripVertical } from 'lucide-react';
 import api from '../../../../services/api';
 import styles from './RecordKanban.module.css';
 
+// Column key for records whose value matches none of the picklist values.
+const UNMATCHED = '__unmatched__';
+
 const SYSTEM_KEYS = new Set(['id', 'objectApiName', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy', 'ownerId', '_id', '__v', 'tenantId', 'isDeleted']);
 
 function getRecordTitle(record, objectMeta, fields) {
@@ -38,7 +41,7 @@ function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
   }, [objectMeta, fields]);
 
   // Group records by kanban field value
-  const groupedRecords = useMemo(() => {
+  const board = useMemo(() => {
     if (!kanbanField) return {};
 
     const grouped = {};
@@ -46,15 +49,28 @@ function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
       grouped[pv.value] = [];
     });
 
+    // Records whose value isn't one of the columns (blank, or a value from
+    // before the field was switched to a Global Value Set) are collected here
+    // instead of disappearing from the board.
+    const unmatched = [];
     (records || []).forEach((record) => {
       const value = record[kanbanField.apiName];
       if (value && Object.hasOwn(grouped, value)) {
         grouped[value].push(record);
+      } else {
+        unmatched.push(record);
       }
     });
 
-    return grouped;
+    return { grouped, unmatched };
   }, [records, kanbanField]);
+
+  const { grouped: groupedRecords = {}, unmatched: unmatchedRecords = [] } = board;
+  const columns = [
+    ...(kanbanField?.picklistValues || []),
+    ...(unmatchedRecords.length ? [{ value: UNMATCHED, label: 'No matching value' }] : []),
+  ];
+  const recordsFor = (value) => (value === UNMATCHED ? unmatchedRecords : groupedRecords[value] || []);
 
   const handleDragStart = (e, record) => {
     setDraggedRecord(record);
@@ -76,6 +92,11 @@ function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
     e.preventDefault();
     setDragOverColumn(null);
     if (!draggedRecord || !kanbanField) return;
+    // "No matching value" isn't a real value — records can only be moved out of it.
+    if (columnValue === UNMATCHED) {
+      setDraggedRecord(null);
+      return;
+    }
 
     if (draggedRecord[kanbanField.apiName] === columnValue) {
       setDraggedRecord(null);
@@ -113,7 +134,7 @@ function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
   return (
     <div className={styles.kanban}>
       <div className={styles.columns}>
-        {(kanbanField.picklistValues || []).map((picklistValue) => (
+        {columns.map((picklistValue) => (
           <div
             key={picklistValue.value}
             className={`${styles.column} ${
@@ -126,12 +147,12 @@ function RecordKanban({ records, objectMeta, onRecordUpdate, fields = [] }) {
             <div className={styles.columnHeader}>
               <h3 className={styles.columnTitle}>{picklistValue.label}</h3>
               <span className={styles.columnCount}>
-                {(groupedRecords[picklistValue.value] || []).length}
+                {recordsFor(picklistValue.value).length}
               </span>
             </div>
 
             <div className={styles.cardList}>
-              {(groupedRecords[picklistValue.value] || []).map((record) => (
+              {recordsFor(picklistValue.value).map((record) => (
                 <div
                   key={record._id || record.id}
                   className={`${styles.card} ${

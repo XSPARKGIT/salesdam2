@@ -3,11 +3,8 @@ import * as LucideIcons from 'lucide-react';
 import { ArrowLeft, Edit2, Trash2, Lock } from 'lucide-react';
 import Button from '../../../../components/common/Button/Button';
 import ApprovalStatusBadge from '../../../../components/records/ApprovalStatusBadge';
-import SubmitForApprovalButton from '../../../../components/records/SubmitForApprovalButton';
 import ApprovalActionsButtons from '../../../../components/records/ApprovalActionsButtons';
-import ConvertToDealButton from '../../../../components/records/ConvertToDealButton';
-import ActionFlowRunner from '../../../../components/records/ActionFlowRunner';
-import NewPolicyButton from '../../../../components/insurance/NewPolicyButton';
+import RecordActionButtons from '../../../../components/records/RecordActionButtons';
 import styles from '../RecordDetail.module.css';
 
 const RecordHeader = ({
@@ -112,102 +109,33 @@ const RecordHeader = ({
         </div>
       </div>
       <div className={styles.actions}>
-        {/* Action buttons — record_detail or both */}
-        {(objMeta?.actionButtons || [])
-          .filter(
-            (btn) =>
-              btn.automationId &&
-              (btn.location === 'record_detail' ||
-                btn.location === 'both' ||
-                !btn.location),
-          )
-          .sort((a, b) => (a.order || 0) - (b.order || 0))
-          .map((btn) => (
-            <ActionFlowRunner
-              key={btn.id || btn.label}
-              button={btn}
-              record={record}
-              objectApiName={objectApiName}
-              fields={fields}
-              onDone={onActionFlowDone}
-            />
-          ))}
-        {/* Approval buttons for leads */}
-        {objectApiName === 'lead' && approvalInfo && leadApprovalSettings && (
-          <>
-            {leadApprovalSettings.leadApprovalsRequired ? (
-              <>
-                {approvalInfo.canSubmitForApproval && (
-                  <SubmitForApprovalButton
-                    leadId={id}
-                    approvalStatus={approvalInfo.approvalStatus}
-                    onSuccess={onActionFlowDone}
-                  />
-                )}
-                <ApprovalActionsButtons
-                  leadId={id}
-                  lead={record}
-                  approvalStatus={approvalInfo.approvalStatus}
-                  isCurrentUserApprover={approvalInfo.isCurrentUserApprover}
-                  onSuccess={onActionFlowDone}
-                />
-              </>
-            ) : !record?.is_converted ? (
-              <ConvertToDealButton
-                leadId={id}
-                lead={record}
-                onSuccess={onActionFlowDone}
-              />
-            ) : null}
-          </>
-        )}
-        {/* Generate Quote button for Deal */}
-        {objectApiName === 'deal' && (
-          <Button
-            variant="primary"
-            size="sm"
-            loading={generatingQuote}
-            onClick={onGenerateQuote}
-          >
-            Generate Quote
-          </Button>
-        )}
-        {/* View Quote PDF button */}
-        {objectApiName === 'quote' && (
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={generatingQuote}
-            onClick={onGenerateQuote}
-          >
-            View PDF
-          </Button>
-        )}
-        {/* Generate Invoice button for Order */}
-        {objectApiName === 'order' && (
-          <Button
-            variant="primary"
-            size="sm"
-            loading={generatingInvoice}
-            onClick={onGenerateInvoice}
-          >
-            Generate Invoice
-          </Button>
-        )}
-        {/* View Invoice PDF button */}
-        {objectApiName === 'invoice' && (
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={generatingInvoice}
-            onClick={onGenerateInvoice}
-          >
-            View PDF
-          </Button>
-        )}
-        {(objectApiName === 'client' || objectApiName === 'lead') && (
-          <NewPolicyButton
-            params={objectApiName === 'client' ? { client: id } : { lead: id }}
+        {/* Configured action buttons (BRD 4.4): Flows, screen flows and
+            platform actions such as Convert to Deal or Generate Quote,
+            each optionally shown only when the record matches conditions. */}
+        <RecordActionButtons
+          objectApiName={objectApiName}
+          objMeta={objMeta}
+          id={id}
+          record={record}
+          fields={fields}
+          perms={perms}
+          approvalInfo={approvalInfo}
+          leadApprovalSettings={leadApprovalSettings}
+          generatingQuote={generatingQuote}
+          generatingInvoice={generatingInvoice}
+          onGenerateQuote={onGenerateQuote}
+          onGenerateInvoice={onGenerateInvoice}
+          onDone={onActionFlowDone}
+        />
+        {/* Approve / Reject for the lead's approver — approval controls, not
+            configurable actions. */}
+        {objectApiName === 'lead' && approvalInfo && leadApprovalSettings?.leadApprovalsRequired && (
+          <ApprovalActionsButtons
+            leadId={id}
+            lead={record}
+            approvalStatus={approvalInfo.approvalStatus}
+            isCurrentUserApprover={approvalInfo.isCurrentUserApprover}
+            onSuccess={onActionFlowDone}
           />
         )}
         {perms.canUpdate && (

@@ -12,13 +12,14 @@ const stepStateSchema = new mongoose.Schema(
     name: { type: String, default: '' },
     approverType: {
       type: String,
-      enum: ['user', 'manager', 'field', 'queue'],
+      enum: ['user', 'manager', 'field', 'queue', 'group'],
       required: true,
     },
     // Set only on the active step; waiting steps are resolved when reached so
     // "my pending approvals" queries cannot match a future step.
     approverUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     approverRoleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Role' },
+    approverGroupId: { type: mongoose.Schema.Types.ObjectId, ref: 'ApproverGroup' },
     status: {
       type: String,
       enum: ['waiting', 'pending', 'approved', 'rejected'],

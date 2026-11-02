@@ -2,8 +2,8 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import Activity from '../models/Activity.js';
-import { AppError, ValidationError } from '../utils/errors.js';
-import { validateRecordData, runObjectValidationRules } from './validationService.js';
+import { AppError } from '../utils/errors.js';
+import { validateRecordData, evaluateValidationRules, buildValidationFailure } from './validationService.js';
 import { buildSearchText } from './searchService.js';
 import { computeAndSetFormulaValues } from './formulaService.js';
 import { refreshRollupOnParent } from './rollupService.js';
@@ -101,15 +101,15 @@ const mergeRecords = async ({
     Object.assign(mergedData, fieldValues);
 
     const result = await validateRecordData(mergedData, fields, tenantId, master._id);
-    if (result.errors.length === 0) {
-      result.errors.push(...runObjectValidationRules(obj.validationRules || [], result.data));
-    }
-    if (result.errors.length > 0) {
-      throw new ValidationError(result.errors, 400, {
-        fieldErrors: result.fieldErrors,
-        message: result.errors.join('; '),
-      });
-    }
+    // A merge updates the master, so ISCHANGED() compares with its stored values.
+    const ruleErrors = await evaluateValidationRules({
+      tenantId,
+      rules: obj.validationRules || [],
+      data: result.data,
+      prev: master.toDataObject(),
+    });
+    const failure = buildValidationFailure(result, ruleErrors);
+    if (failure) throw failure;
     validated = result.data;
   } catch (err) {
     await DynamicRecord.updateMany(

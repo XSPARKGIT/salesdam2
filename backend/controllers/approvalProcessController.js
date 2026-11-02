@@ -3,6 +3,7 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import User from '../models/User.js';
 import approvalProcessService from '../services/approvalProcessService.js';
+import { validateApprovalDefinition } from '../services/approvalDefinitionService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 
 /* ── Process configuration (admin) ──────────────────────────────────────── */
@@ -32,8 +33,11 @@ const createProcess = asyncHandler(async (req, res) => {
   if (!Array.isArray(steps) || steps.length === 0) {
     throw new AppError('At least one approval step is required.', 400);
   }
+  await validateApprovalDefinition(req.tenantId, req.body);
+  // eslint-disable-next-line no-unused-vars
+  const { systemKey, ...definition } = req.body; // only the platform sets this
   const process = await ApprovalProcess.create({
-    ...req.body,
+    ...definition,
     tenantId: req.tenantId,
     createdBy: req.user._id,
   });
@@ -43,7 +47,11 @@ const createProcess = asyncHandler(async (req, res) => {
 const updateProcess = asyncHandler(async (req, res) => {
   // Never let the body move a process to another tenant or rewrite its author.
   // eslint-disable-next-line no-unused-vars
-  const { tenantId, createdBy, _id, ...updates } = req.body || {};
+  // eslint-disable-next-line no-unused-vars
+  const { tenantId, createdBy, _id, systemKey, ...updates } = req.body || {};
+  const existing = await ApprovalProcess.findOne({ _id: req.params.id, tenantId: req.tenantId }).lean();
+  if (!existing) throw new AppError('Approval process not found.', 404);
+  await validateApprovalDefinition(req.tenantId, { ...existing, ...updates });
   const process = await ApprovalProcess.findOneAndUpdate(
     { _id: req.params.id, tenantId: req.tenantId },
     { $set: updates },
@@ -54,6 +62,10 @@ const updateProcess = asyncHandler(async (req, res) => {
 });
 
 const deleteProcess = asyncHandler(async (req, res) => {
+  const current = await ApprovalProcess.findOne({ _id: req.params.id, tenantId: req.tenantId }).select('systemKey name').lean();
+  if (current?.systemKey) {
+    throw new AppError(`"${current.name}" is built in and can't be deleted. Switch it off instead.`, 409);
+  }
   const process = await ApprovalProcess.findOneAndDelete({
     _id: req.params.id,
     tenantId: req.tenantId,
@@ -89,6 +101,7 @@ const approveRequest = asyncHandler(async (req, res) => {
     user: req.user,
     decision: 'approve',
     comment: req.body?.comment,
+    options: { clientId: req.body?.clientId || null },
   });
   sendSuccess(res, { data: request }, 'Approval recorded');
 });

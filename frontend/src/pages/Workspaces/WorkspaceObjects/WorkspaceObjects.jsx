@@ -29,7 +29,7 @@ const WorkspaceObjects = () => {
   /* ── Fetch available objects ───────────────────── */
   const { data: objects = [], isLoading: objLoading } = useQuery({
     queryKey: ['objects'],
-    queryFn: getObjects,
+    queryFn: () => getObjects({ scope: 'all' }),
   });
 
   /* ── Sync selected objects ─────────────────────── */

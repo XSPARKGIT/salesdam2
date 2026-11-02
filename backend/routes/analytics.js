@@ -20,7 +20,7 @@ import { checkAppPermission } from '../middleware/permissions.js';
 
 const router = express.Router();
 
-router.use(requireAuth, enforceTenant, checkAppPermission('canViewAnalytics'));
+router.use(requireAuth, enforceTenant);
 
 router.get('/overview', getOverview);
 router.post('/report', runReport);

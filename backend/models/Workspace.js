@@ -51,7 +51,8 @@ const workspaceSchema = new mongoose.Schema(
       },
     ],
 
-    // Restrict which CRM objects are visible in this workspace (empty = all)
+    // The CRM objects available in this workspace (empty = none). Enforced for
+    // every role by services/objectAccessService.js.
     allowedObjects: [{ type: String, trim: true }],
 
     // Default object to land on when switching to this workspace (e.g. 'policy')

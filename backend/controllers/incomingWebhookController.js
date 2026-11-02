@@ -3,11 +3,23 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import IncomingWebhookLog from '../models/IncomingWebhookLog.js';
-import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { asyncHandler, sendSuccess, AppError, ValidationError } from '../utils/errors.js';
+import { checkRecordRules } from '../services/validationService.js';
 import { fireAutomations } from '../services/automationService.js';
 import { buildSearchText } from '../services/searchService.js';
 import customCodeService from '../services/customCodeService.js';
 import logger from '../utils/logger.js';
+
+// BRD 6.2: data arriving by webhook is held to the object's validation rules
+// like any other create or update; every failing message is returned.
+const assertRulesPass = async (tenantId, objectApiName, data, prev) => {
+  const failures = await checkRecordRules({ tenantId, objectApiName, data, prev });
+  if (failures.length) {
+    throw new ValidationError(failures, 400, {
+      message: failures.length === 1 ? failures[0] : `${failures.length} problems need fixing: ${failures.join('; ')}`,
+    });
+  }
+};
 
 const handleIncoming = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId;
@@ -37,6 +49,7 @@ const handleIncoming = asyncHandler(async (req, res) => {
       if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
 
       if (action === 'create') {
+        await assertRulesPass(tenantId, objectApiName, data, null);
         const record = new DynamicRecord({ tenantId, objectId: obj._id, objectApiName, ownerId: req.user?._id || null, createdBy: req.user?._id || null, lastModifiedBy: req.user?._id || null });
         Object.entries(data).forEach(([k, v]) => record.setField(k, v));
         record._searchText = await buildSearchText(record, fields);
@@ -50,6 +63,8 @@ const handleIncoming = asyncHandler(async (req, res) => {
       } else if (action === 'update' && recordId) {
         const record = await DynamicRecord.findOne({ _id: recordId, tenantId, objectApiName, isDeleted: false });
         if (!record) throw new AppError('Record not found.', 404);
+        const prev = record.toDataObject();
+        await assertRulesPass(tenantId, objectApiName, { ...prev, ...data }, prev);
         Object.entries(data).forEach(([k, v]) => record.setField(k, v));
         record._searchText = await buildSearchText(record, fields);
         record.lastModifiedBy = req.user?._id || record.lastModifiedBy;
@@ -58,7 +73,7 @@ const handleIncoming = asyncHandler(async (req, res) => {
         log.recordId = record._id;
 
         if (triggerFlow) {
-          try { await fireAutomations('update', objectApiName, record.toObject(), tenantId); } catch (e) { logger.warn(`Flow trigger failed: ${e.message}`); }
+          try { await fireAutomations('update', objectApiName, record.toObject(), tenantId, prev); } catch (e) { logger.warn(`Flow trigger failed: ${e.message}`); }
         }
       }
     }

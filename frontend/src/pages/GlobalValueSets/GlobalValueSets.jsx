@@ -12,6 +12,7 @@ import {
   deleteGlobalValueSet,
 } from '../../services/api/globalValueSets';
 import styles from '../Approvals/Approvals.module.css';
+import local from './GlobalValueSets.module.css';
 
 const BLANK_GVS = { label: '', name: '', description: '', values: [] };
 const BLANK_VAL = { label: '', value: '', isDefault: false, isActive: true };
@@ -118,72 +119,102 @@ export default function GlobalValueSets() {
               Shared picklist catalogues — editing a set updates every linked field automatically.
             </p>
           </div>
-          <Button onClick={openNew}>
-            <Plus size={16} /> New Value Set
+          <Button icon={<Plus size={15} />} onClick={openNew}>
+            New Value Set
           </Button>
         </div>
 
         {isLoading ? (
-          <p style={{ color: 'var(--color-gray-500)', padding: '24px 0' }}>Loading…</p>
+          <div className={styles.loading}>Loading value sets…</div>
         ) : sets.length === 0 ? (
           <div className={styles.empty}>
-            <List size={32} style={{ opacity: 0.3 }} />
-            <p>No global value sets yet. Create one to share picklist values across fields.</p>
+            <List size={28} />
+            <h3>No global value sets yet</h3>
+            <p>Create one to share the same picklist values across fields and objects.</p>
+            <Button icon={<Plus size={15} />} onClick={openNew}>
+              New Value Set
+            </Button>
           </div>
         ) : (
-          <div className={styles.ruleList}>
-            {sets.map((gvs) => (
-              <div key={gvs._id} className={styles.ruleCard}>
-                <div className={styles.ruleCardMain}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{gvs.label}</span>
-                      <code style={{ fontSize: 11, color: 'var(--color-gray-400)', background: 'var(--color-gray-100)', padding: '1px 6px', borderRadius: 4 }}>{gvs.name}</code>
-                    </div>
-                    {gvs.description && (
-                      <p style={{ fontSize: 13, color: 'var(--color-gray-500)', margin: '2px 0 0' }}>{gvs.description}</p>
-                    )}
-                    <p style={{ fontSize: 12, color: 'var(--color-gray-400)', margin: '2px 0 0' }}>
-                      {(gvs.values || []).length} value{(gvs.values || []).length !== 1 ? 's' : ''} ·{' '}
-                      {(gvs.values || []).filter((v) => v.isActive).length} active
-                    </p>
-                  </div>
-                  <div className={styles.ruleActions}>
-                    <button className={styles.iconBtn} onClick={() => openEdit(gvs)} title="Edit">
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      className={`${styles.iconBtn} ${styles.danger}`}
-                      onClick={() => setConfirmDel({ id: gvs._id, label: gvs.label })}
-                      title="Delete"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-
-                {(gvs.values || []).length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                    {gvs.values.map((v, i) => (
-                      <span
-                        key={i}
-                        style={{
-                          fontSize: 12,
-                          padding: '2px 10px',
-                          borderRadius: 999,
-                          background: v.isActive ? 'var(--color-primary-50, #eff6ff)' : 'var(--color-gray-100)',
-                          color: v.isActive ? 'var(--color-primary-700, #1d4ed8)' : 'var(--color-gray-400)',
-                          border: `1px solid ${v.isActive ? 'var(--color-primary-200, #bfdbfe)' : 'var(--color-gray-200)'}`,
-                          textDecoration: v.isActive ? 'none' : 'line-through',
-                        }}
-                      >
-                        {v.label}{v.isDefault ? ' ★' : ''}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Values</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {sets.map((gvs) => {
+                  const values = gvs.values || [];
+                  const activeCount = values.filter((v) => v.isActive).length;
+                  return (
+                    <tr key={gvs._id}>
+                      <td>
+                        <div className={styles.nameCell}>
+                          <button
+                            type="button"
+                            className={styles.nameLink}
+                            style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', textAlign: 'left' }}
+                            onClick={() => openEdit(gvs)}
+                          >
+                            {gvs.label}
+                          </button>
+                          <code className={local.code}>{gvs.name}</code>
+                          {gvs.description && <span className={styles.muted}>{gvs.description}</span>}
+                        </div>
+                      </td>
+                      <td>
+                        {values.length === 0 ? (
+                          <span className={styles.muted}>No values</span>
+                        ) : (
+                          <div className={local.chips}>
+                            {values.map((v, i) => (
+                              <span
+                                key={i}
+                                className={`${styles.badge} ${v.isActive ? '' : local.chipInactive}`}
+                                title={v.isDefault ? 'Default value' : undefined}
+                              >
+                                {v.label}{v.isDefault ? ' ★' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`${styles.badge} ${activeCount > 0 ? styles.badgeActive : ''}`}>
+                          {activeCount} of {values.length} active
+                        </span>
+                      </td>
+                      <td>
+                        <div className={styles.rowActions}>
+                          <button
+                            type="button"
+                            className={styles.iconBtn}
+                            onClick={() => openEdit(gvs)}
+                            title="Edit"
+                            aria-label={`Edit ${gvs.label}`}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                            onClick={() => setConfirmDel({ id: gvs._id, label: gvs.label })}
+                            title="Delete"
+                            aria-label={`Delete ${gvs.label}`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -204,110 +235,128 @@ export default function GlobalValueSets() {
             </>
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className={styles.rows} style={{ gap: 'var(--spacing-4)' }}>
+            <section className={styles.card}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Label *</label>
+                <h3 className={styles.cardTitle}>Details</h3>
+                <p className={styles.cardHint}>How this value set is named and identified.</p>
+              </div>
+              <div className={`${styles.grid2} ${local.stack}`}>
+                <label className={styles.field}>
+                  <span className={styles.label}>Label *</span>
+                  <input
+                    className={styles.input}
+                    value={editing.label}
+                    onChange={(e) => setField('label', e.target.value)}
+                    placeholder="e.g. SA Provinces"
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>API Name *</span>
+                  <input
+                    className={styles.input}
+                    value={editing.name}
+                    onChange={(e) => setField('name', e.target.value)}
+                    disabled={!!editing._id}
+                    placeholder="auto-generated"
+                  />
+                  {editing._id && <span className={styles.help}>The API name can't be changed after creation.</span>}
+                </label>
+              </div>
+              <label className={styles.field}>
+                <span className={styles.label}>Description</span>
                 <input
                   className={styles.input}
-                  value={editing.label}
-                  onChange={(e) => setField('label', e.target.value)}
-                  placeholder="e.g. SA Provinces"
+                  value={editing.description || ''}
+                  onChange={(e) => setField('description', e.target.value)}
+                  placeholder="Optional note for other admins"
                 />
-              </div>
+              </label>
+            </section>
+
+            <section className={styles.card}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>API Name *</label>
-                <input
-                  className={styles.input}
-                  value={editing.name}
-                  onChange={(e) => setField('name', e.target.value)}
-                  disabled={!!editing._id}
-                  style={editing._id ? { background: 'var(--color-gray-50)', color: 'var(--color-gray-400)', cursor: 'default' } : {}}
-                  placeholder="auto-generated"
-                />
+                <h3 className={styles.cardTitle}>Values</h3>
+                <p className={styles.cardHint}>
+                  ★ marks the default. Deactivating a value hides it from new records but keeps it on existing ones.
+                </p>
               </div>
-            </div>
 
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input
-                className={styles.input}
-                value={editing.description || ''}
-                onChange={(e) => setField('description', e.target.value)}
-                placeholder="Optional note for other admins"
-              />
-            </div>
-
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 8 }}>Values</label>
-
-              {/* Add new value */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <div className={local.addRow}>
                 <input
-                  className={styles.input}
+                  className={`${styles.input} ${local.grow}`}
                   value={newVal}
                   onChange={(e) => setNewVal(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addValue())}
                   placeholder="New value label…"
-                  style={{ flex: 1 }}
+                  aria-label="New value label"
                 />
-                <Button size="sm" onClick={addValue}>Add</Button>
+                <Button size="sm" icon={<Plus size={14} />} onClick={addValue}>Add</Button>
               </div>
 
-              {/* Value list */}
               {(editing.values || []).length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--color-gray-400)', textAlign: 'center', padding: '12px 0' }}>
-                  No values yet. Add one above.
-                </p>
+                <div className={styles.empty} style={{ padding: 'var(--spacing-6)' }}>
+                  <p>No values yet. Add one above.</p>
+                </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 280, overflowY: 'auto' }}>
-                  {editing.values.map((v, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '6px 10px',
-                        borderRadius: 6,
-                        border: '1px solid var(--color-gray-200)',
-                        background: v.isActive ? 'var(--color-gray-50)' : 'transparent',
-                        opacity: v.isActive ? 1 : 0.5,
-                      }}
-                    >
-                      <span style={{ flex: 1, fontSize: 14 }}>{v.label}</span>
-                      <code style={{ fontSize: 11, color: 'var(--color-gray-400)' }}>{v.value}</code>
-
-                      {/* Default star */}
-                      <button
-                        title={v.isDefault ? 'Remove default' : 'Set as default'}
-                        onClick={() => toggleDefault(i)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: v.isDefault ? '#f59e0b' : 'var(--color-gray-300)', padding: '0 2px' }}
-                      >★</button>
-
-                      {/* Active toggle */}
-                      <button
-                        title={v.isActive ? 'Deactivate' : 'Activate'}
-                        onClick={() => toggleActive(i)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', color: v.isActive ? 'var(--color-primary-600, #2563eb)' : 'var(--color-gray-300)' }}
-                      >
-                        {v.isActive ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                      </button>
-
-                      <button
-                        onClick={() => removeValue(i)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', color: 'var(--color-gray-400)', padding: '0 2px' }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
+                <div className={`${styles.tableWrap} ${local.valuesWrap}`}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Label</th>
+                        <th>API Value</th>
+                        <th className={local.center}>Default</th>
+                        <th className={local.center}>Active</th>
+                        <th aria-label="Remove" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editing.values.map((v, i) => (
+                        <tr key={i} className={v.isActive ? '' : local.inactiveRow}>
+                          <td>{v.label}</td>
+                          <td><code className={local.code}>{v.value}</code></td>
+                          <td className={local.center}>
+                            <button
+                              type="button"
+                              className={styles.iconBtn}
+                              title={v.isDefault ? 'Remove default' : 'Set as default'}
+                              aria-label={v.isDefault ? `Remove default from ${v.label}` : `Set ${v.label} as default`}
+                              onClick={() => toggleDefault(i)}
+                            >
+                              <span className={`${local.star} ${v.isDefault ? local.starOn : ''}`}>★</span>
+                            </button>
+                          </td>
+                          <td className={local.center}>
+                            <button
+                              type="button"
+                              className={`${styles.iconBtn} ${v.isActive ? local.toggleOn : ''}`}
+                              title={v.isActive ? 'Deactivate' : 'Activate'}
+                              aria-label={v.isActive ? `Deactivate ${v.label}` : `Activate ${v.label}`}
+                              onClick={() => toggleActive(i)}
+                            >
+                              {v.isActive ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                            </button>
+                          </td>
+                          <td>
+                            <div className={styles.rowActions}>
+                              <button
+                                type="button"
+                                className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                                title="Remove value"
+                                aria-label={`Remove ${v.label}`}
+                                onClick={() => removeValue(i)}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
-              <p style={{ fontSize: 12, color: 'var(--color-gray-400)', marginTop: 6 }}>
-                ★ = default · Toggle to deactivate (hides from new records, keeps on existing)
-              </p>
-            </div>
+            </section>
           </div>
         </Modal>
       )}

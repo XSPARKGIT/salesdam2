@@ -27,6 +27,16 @@ const FUNCTIONS = [
   { name: 'TODAY',        sig: 'TODAY()',                            returns: 'date',    desc: 'Current date (no time)' },
   { name: 'NOW',          sig: 'NOW()',                              returns: 'date',    desc: 'Current date and time' },
   { name: 'DATEVALUE',    sig: 'DATEVALUE(field)',                   returns: 'date',    desc: 'Convert a text or number value to a date' },
+  { name: 'TEXT',         sig: 'TEXT(value)',                        returns: 'text',    desc: 'Any value as text' },
+  { name: 'CONCATENATE',  sig: 'CONCATENATE(a, b, …)',               returns: 'text',    desc: 'Join values into one piece of text' },
+  { name: 'AND',          sig: 'AND(cond1, cond2, …)',               returns: 'boolean', desc: 'True when every condition is true — nest freely, e.g. AND(a, OR(b, c))' },
+  { name: 'OR',           sig: 'OR(cond1, cond2, …)',                returns: 'boolean', desc: 'True when any condition is true' },
+  { name: 'NOT',          sig: 'NOT(condition)',                     returns: 'boolean', desc: 'True when the condition is false' },
+  // Record-state: compares with the value saved before this edit, so it is
+  // only offered for validation rules (BRD 6.1).
+  { name: 'ISCHANGED',    sig: 'ISCHANGED(field)',                   returns: 'boolean', desc: 'True only when editing a record and this field’s value changed', recordState: true },
+  // Tenant-configurable thresholds (BRD 6.2): the tenant's own value, else the platform default.
+  { name: 'CONFIG',       sig: 'CONFIG("setting.key")',              returns: 'any',     desc: 'A configuration setting for this company, e.g. CONFIG("deals.minimum_value")', recordState: true },
 ];
 
 // Declared `formulaReturnType` → primitive kind. Mirrors DECLARED_TYPE_KINDS in
@@ -141,6 +151,11 @@ const VALIDATION_EXAMPLES = [
   { expr: 'status == "Active" AND probability < 50',        desc: 'Active deals need a probability of 50 or more' },
   { expr: 'stage != "won" AND stage != "closed"',           desc: 'Stage must be won or closed' },
   { expr: 'ISBLANK(owner_id) OR ISBLANK(client_id)',        desc: 'Owner and client must both be set' },
+  { expr: 'AND(amount > 10000, OR(ISBLANK(approver), NOT(approved)))', desc: 'Large amounts need an approver who has approved' },
+  { expr: 'ISCHANGED(stage) AND stage == "closed_won" AND ISBLANK(close_date)', desc: 'Moving to Closed Won needs a close date' },
+  { expr: 'ISCHANGED(owner_id) AND NOT(ISBLANK(locked_reason))', desc: 'The owner of a locked record can’t be changed' },
+  { expr: 'amount < CONFIG("deals.minimum_value")',          desc: 'Amount must meet this company’s minimum deal value' },
+  { expr: 'payment_method == "debit_order" AND ISBLANK(debit_order_day)', desc: 'Debit Order Day is required for debit orders' },
 ];
 
 // ─── Local syntax pre-check ───────────────────────────────────────────────────
@@ -181,6 +196,10 @@ export default function FormulaEditor({
   // Defaults match VALIDATION_RULE_LIMITS in backend/models/ObjectMeta.js.
   maxExpressionLength = 1000,
   maxErrorMessageLength = 255,
+  // Where the condition is used. 'approval' = approval entry criteria: a
+  // true/false condition like a validation rule that can read CONFIG() but has
+  // no "before" value, so ISCHANGED isn't offered.
+  entryContext = '',
 }) {
   const [activePanel, setActivePanel] = useState(null); // 'fields' | 'functions' | 'examples' | null
   const [showAllFunctions, setShowAllFunctions] = useState(false);
@@ -191,15 +210,21 @@ export default function FormulaEditor({
 
   const localError = quickCheck(expression);
   const kind = RETURN_TYPE_KINDS[returnType] || null;
+  // Validation rules pass no return type; formula fields always declare one.
+  const isRule = !returnType;
+  // ISCHANGED and other record-state functions only make sense in rules.
+  const library = isRule
+    ? FUNCTIONS.filter(fn => entryContext !== 'approval' || fn.name !== 'ISCHANGED')
+    : FUNCTIONS.filter(fn => !fn.recordState);
 
   // With a return type declared, lead with the functions that can produce it —
   // IF included, since its kind comes from its branches. Without one (validation
   // rules) the whole set is shown flat, as before.
   const primaryFunctions = kind
-    ? FUNCTIONS.filter(fn => fn.returns === kind || fn.returns === 'any')
-    : FUNCTIONS;
+    ? library.filter(fn => fn.returns === kind || fn.returns === 'any')
+    : library;
   const otherFunctions = kind
-    ? FUNCTIONS.filter(fn => fn.returns !== kind && fn.returns !== 'any')
+    ? library.filter(fn => fn.returns !== kind && fn.returns !== 'any')
     : [];
   const examples = kind
     ? EXAMPLES_BY_KIND[kind] || VALIDATION_EXAMPLES
@@ -217,13 +242,16 @@ export default function FormulaEditor({
         expression: expr,
         returnType: returnType || undefined,
         excludeFieldApiName: excludeFieldApiName || undefined,
+        // A rule must be true/false and may use ISCHANGED; a formula field may not.
+        // Approval entry criteria are true/false too, but have no previous values.
+        context: isRule ? (entryContext === 'approval' ? 'approval' : 'rule') : 'formula',
       });
       const { valid, error, returnType: inferred } = res.data.data;
       setServerStatus(valid ? { ok: true, inferred } : { error });
     } catch {
       setServerStatus(null);
     }
-  }, [objectApiName, returnType, excludeFieldApiName]);
+  }, [objectApiName, returnType, excludeFieldApiName, isRule, entryContext]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

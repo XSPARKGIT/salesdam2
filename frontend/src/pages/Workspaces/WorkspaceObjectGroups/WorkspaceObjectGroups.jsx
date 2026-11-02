@@ -35,7 +35,7 @@ const WorkspaceObjectGroups = () => {
   /* ── Fetch available objects ───────────────────── */
   const { data: objects = [], isLoading: objLoading } = useQuery({
     queryKey: ['objects'],
-    queryFn: getObjects,
+    queryFn: () => getObjects({ scope: 'all' }),
   });
 
   /* ── Sync groups on initial load only ──────────── */

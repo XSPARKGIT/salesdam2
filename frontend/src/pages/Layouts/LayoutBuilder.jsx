@@ -15,6 +15,7 @@ import {
   Zap,
   Filter,
   X,
+  Users,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -36,6 +37,12 @@ export default function LayoutBuilder() {
   const [objectMeta, setObjectMeta] = useState(null);
   const [allFields, setAllFields] = useState([]);
   const [layout, setLayout] = useState(null);
+  // Every layout of this object; one is the object default, others can be
+  // assigned to Roles (Setup → Layout Assignment).
+  const [layouts, setLayouts] = useState([]);
+  const [layoutName, setLayoutName] = useState('Default Layout');
+  const [makeDefault, setMakeDefault] = useState(true);
+  const [newLayoutName, setNewLayoutName] = useState(null); // null = not creating
   const [sections, setSections] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -65,19 +72,22 @@ export default function LayoutBuilder() {
         );
         setAllFields(fields);
 
-        const layouts = layoutRes.data.data;
-        const defaultLayout = layouts.find((l) => l.isDefault) || layouts[0];
-
-        if (defaultLayout) {
-          setLayout(defaultLayout);
-          setSections(
-            defaultLayout.sections?.length > 0
-              ? defaultLayout.sections
-              : buildDefaultSections(fields),
-          );
-        } else {
-          setSections(buildDefaultSections(fields));
-        }
+        const list = layoutRes.data.data || [];
+        setLayouts(list);
+        // ?layout=<id> opens a specific layout (e.g. from Layout Assignment).
+        const wanted = new URLSearchParams(location.search).get('layout');
+        const initial =
+          list.find((l) => l._id === wanted) ||
+          list.find((l) => l.isDefault) ||
+          list[0];
+        setLayout(initial || null);
+        setLayoutName(initial?.name || 'Default Layout');
+        setMakeDefault(initial ? !!initial.isDefault : true);
+        setSections(
+          initial?.sections?.length > 0
+            ? initial.sections
+            : buildDefaultSections(fields),
+        );
       } catch (err) {
         toast.error('Failed to load layout.');
         navigate(`/setup/objects`);
@@ -87,6 +97,60 @@ export default function LayoutBuilder() {
     };
     fetchAll();
   }, [apiName, navigate]);
+
+  // Show a layout in the builder (or a fresh default when there is none yet).
+  const openLayout = (target, fields = allFields) => {
+    setLayout(target || null);
+    setLayoutName(target?.name || 'Default Layout');
+    setMakeDefault(target ? !!target.isDefault : true);
+    setSections(
+      target?.sections?.length > 0 ? target.sections : buildDefaultSections(fields),
+    );
+    setConditionEditorIdx(null);
+  };
+
+  const nameTaken = (name, exceptId) =>
+    layouts.some(
+      (l) => l._id !== exceptId && l.name.trim().toLowerCase() === name.trim().toLowerCase(),
+    );
+
+  // New layouts start as a copy of the one on screen.
+  const handleCreateLayout = async () => {
+    const name = (newLayoutName || '').trim();
+    if (!name) return toast.error('Give the new layout a name.');
+    if (nameTaken(name)) return toast.error(`A layout named "${name}" already exists.`);
+    try {
+      const res = await api.post('/layouts', {
+        objectApiName: apiName,
+        name,
+        isDefault: layouts.length === 0,
+        type: 'detail',
+        useTabs: false,
+        sections,
+      });
+      const created = res.data.data;
+      setLayouts((prev) => [...prev, created]);
+      setNewLayoutName(null);
+      openLayout(created);
+      toast.success(`Layout "${name}" created.`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not create the layout.');
+    }
+  };
+
+  const handleDeleteLayout = async () => {
+    if (!layout?._id || layout.isDefault) return;
+    if (!window.confirm(`Delete the layout "${layout.name}"? Roles assigned to it will see the object's default layout instead.`)) return;
+    try {
+      await api.delete(`/layouts/${layout._id}`);
+      const remaining = layouts.filter((l) => l._id !== layout._id);
+      setLayouts(remaining);
+      openLayout(remaining.find((l) => l.isDefault) || remaining[0]);
+      toast.success('Layout deleted.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not delete the layout.');
+    }
+  };
 
   const buildDefaultSections = (fields) => {
     const grouped = {};
@@ -265,23 +329,34 @@ export default function LayoutBuilder() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const name = layoutName.trim() || 'Default Layout';
+      if (nameTaken(name, layout?._id)) {
+        toast.error(`A layout named "${name}" already exists.`);
+        return;
+      }
       const layoutData = {
         objectApiName: apiName,
-        name: 'Default Layout',
-        isDefault: true,
+        name,
+        // The first layout is always the object default.
+        isDefault: layout?._id ? makeDefault : true,
         type: 'detail',
         useTabs: false,
         sections,
       };
-      if (layout?._id) {
-        await api.put(`/layouts/${layout._id}`, layoutData);
-      } else {
-        const res = await api.post('/layouts', layoutData);
-        setLayout(res.data.data);
-      }
+      const res = layout?._id
+        ? await api.put(`/layouts/${layout._id}`, layoutData)
+        : await api.post('/layouts', layoutData);
+      const saved = res.data.data;
+      setLayout(saved);
+      setLayouts((prev) => {
+        const others = prev
+          .filter((l) => l._id !== saved._id)
+          .map((l) => (saved.isDefault ? { ...l, isDefault: false } : l));
+        return [...others, saved];
+      });
       toast.success('Layout saved.');
     } catch (err) {
-      toast.error(err.message || 'Save failed.');
+      toast.error(err.response?.data?.message || err.message || 'Save failed.');
     } finally {
       setSaving(false);
     }
@@ -359,6 +434,96 @@ export default function LayoutBuilder() {
                   <Maximize2 size={16} />
                 )}
               </button>
+            </div>
+          </div>
+
+          <div className={styles.layoutBar} data-testid="layout-bar">
+            <label className={styles.layoutBarField}>
+              <span>Layout</span>
+              <select
+                value={layout?._id || ''}
+                onChange={(e) => openLayout(layouts.find((l) => l._id === e.target.value))}
+                disabled={layouts.length === 0}
+              >
+                {layouts.length === 0 && <option value="">Default Layout (not saved yet)</option>}
+                {[...layouts]
+                  .sort((a, b) => (b.isDefault - a.isDefault) || a.name.localeCompare(b.name))
+                  .map((l) => (
+                    <option key={l._id} value={l._id}>
+                      {l.name}{l.isDefault ? ' (object default)' : ''}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className={styles.layoutBarField}>
+              <span>Name</span>
+              <input
+                value={layoutName}
+                onChange={(e) => setLayoutName(e.target.value)}
+                maxLength={80}
+              />
+            </label>
+            <label
+              className={styles.layoutBarCheck}
+              title={layout?.isDefault ? 'To change the object default, open another layout and make it the default.' : undefined}
+            >
+              <input
+                type="checkbox"
+                checked={makeDefault}
+                disabled={!layout?._id || layout.isDefault}
+                onChange={(e) => setMakeDefault(e.target.checked)}
+              />
+              Object default
+            </label>
+
+            <div className={styles.layoutBarActions}>
+              {newLayoutName === null ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Plus size={14} />}
+                  onClick={() => setNewLayoutName('')}
+                  disabled={!layout?._id}
+                  title={!layout?._id ? 'Save this layout first' : 'Create a new layout from a copy of this one'}
+                >
+                  New Layout
+                </Button>
+              ) : (
+                <>
+                  <input
+                    className={styles.newLayoutInput}
+                    autoFocus
+                    placeholder="New layout name"
+                    value={newLayoutName}
+                    maxLength={80}
+                    onChange={(e) => setNewLayoutName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreateLayout();
+                      if (e.key === 'Escape') setNewLayoutName(null);
+                    }}
+                  />
+                  <Button size="sm" onClick={handleCreateLayout}>Create</Button>
+                  <Button variant="secondary" size="sm" onClick={() => setNewLayoutName(null)}>Cancel</Button>
+                </>
+              )}
+              {layout?._id && !layout.isDefault && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Trash2 size={14} />}
+                  onClick={handleDeleteLayout}
+                >
+                  Delete
+                </Button>
+              )}
+              <Link
+                to={`/setup/objects/${apiName}/layout-assignment`}
+                state={{ from: `${location.pathname}${location.search}` }}
+              >
+                <Button variant="secondary" size="sm" icon={<Users size={14} />}>
+                  Layout Assignment
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

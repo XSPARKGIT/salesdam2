@@ -2,8 +2,9 @@ import express from 'express';
 import {
   listWorkspaces, myWorkspaces, getWorkspace,
   createWorkspace, updateWorkspace, deleteWorkspace,
-  addMember, removeMember, updateObjectGroups, switchWorkspace,
+  addMember, removeMember, updateObjectGroups, switchWorkspace, appCatalogue,
 } from '../controllers/workspaceController.js';
+import { checkAppPermission } from '../middleware/permissions.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 import { requireAdmin } from '../middleware/auth.js';
@@ -14,6 +15,9 @@ router.use(requireAuth, enforceTenant);
 // Any authenticated user
 router.get('/mine',           myWorkspaces);
 router.post('/switch',        switchWorkspace);   // set active workspace in session
+
+// Apps to choose from when granting app access on a Role or Permission Set
+router.get('/catalogue',      checkAppPermission('canManageRoles'), appCatalogue);
 
 // Admin — manage workspaces within their tenant
 router.get('/',                              requireAdmin, listWorkspaces);

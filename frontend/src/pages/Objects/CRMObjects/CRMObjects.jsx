@@ -20,7 +20,7 @@ const CRMObjects = () => {
     isLoading,
   } = useQuery({
     queryKey: ['objects', 'includeInactive'],
-    queryFn: () => getObjects({ includeInactive: true }),
+    queryFn: () => getObjects({ includeInactive: true, scope: 'all' }),
     onError: () => {
       toast.error('Failed to load objects.');
     },

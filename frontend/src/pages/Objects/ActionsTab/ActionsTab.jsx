@@ -6,6 +6,14 @@ import * as LucideIcons from 'lucide-react';
 import Button from '../../../components/common/Button/Button';
 import { getActionButtons } from '../../../services/api/actionButtons';
 import { deleteActionButton } from '../../../services/api/actionButtons';
+import { getAutomations } from '../../../services/api/automations';
+import { getFields } from '../../../services/api/objects';
+import {
+  ACTION_TYPE_LABELS,
+  NATIVE_ACTIONS,
+  actionTypeOf,
+  describeConditions,
+} from '../../../utils/recordActions';
 import toast from 'react-hot-toast';
 
 const BTN_VARIANT_COLORS = {
@@ -32,6 +40,28 @@ const ActionsTab = ({ objectApiName, onAddButton, onEditButton }) => {
     enabled: !!objectApiName,
   });
 
+  const { data: automations = [] } = useQuery({
+    queryKey: ['button-automations-all'],
+    queryFn: () => getAutomations({ limit: 500 }),
+    enabled: !!objectApiName,
+  });
+  const { data: fields = [] } = useQuery({
+    queryKey: ['fields', objectApiName],
+    queryFn: () => getFields(objectApiName),
+    enabled: !!objectApiName,
+  });
+
+  // "Platform action: Convert deal to order" / "Screen flow: Collect details"
+  const runsLabel = (btn) => {
+    const type = actionTypeOf(btn);
+    const target =
+      type === 'native'
+        ? NATIVE_ACTIONS[btn.nativeAction]?.label || btn.nativeAction
+        : automations.find((a) => String(a._id) === String(btn.automationId))?.name || 'missing flow';
+    return `${ACTION_TYPE_LABELS[type]}: ${target}`;
+  };
+  const shownWhen = (btn) => describeConditions(btn.conditions, fields) || 'Always';
+
   const handleDelete = async (btn) => {
     if (window.confirm(`Delete button "${btn?.label}"?`)) {
       try {
@@ -57,8 +87,9 @@ const ActionsTab = ({ objectApiName, onAddButton, onEditButton }) => {
         <div>
           <h3 className={styles.fieldsTitle}>Action Buttons</h3>
           <p className={styles.subtitle}>
-            Buttons shown on record pages that trigger screen flows or
-            automations
+            Buttons on record pages. Each runs a flow, a screen flow or a
+            platform action, and can be shown only when the record matches
+            conditions.
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -79,7 +110,7 @@ const ActionsTab = ({ objectApiName, onAddButton, onEditButton }) => {
             <table className={styles.table}>
               <thead>
                 <tr className={styles.tableHead}>
-                  {['Label', 'Icon', 'Variant', 'Location', 'Actions'].map(
+                  {['Label', 'Runs', 'Shown when', 'Location', 'Actions'].map(
                     (h) => (
                       <th key={h} className={styles.th}>
                         {h}
@@ -96,7 +127,7 @@ const ActionsTab = ({ objectApiName, onAddButton, onEditButton }) => {
                     BTN_VARIANT_COLORS[btn?.variant] ||
                     'var(--color-gray-600)';
                   return (
-                    <tr key={btn.id || i} className={styles.tableRow}>
+                    <tr key={btn._id || btn.id || i} className={styles.tableRow}>
                       <td className={styles.td} style={{ fontWeight: 500 }}>
                         <div className={styles.labelCell}>
                           <span
@@ -114,18 +145,10 @@ const ActionsTab = ({ objectApiName, onAddButton, onEditButton }) => {
                         </div>
                       </td>
                       <td className={`${styles.td} ${styles.muted}`}>
-                        {btn?.icon || 'Zap'}
+                        {runsLabel(btn)}
                       </td>
-                      <td className={styles.td}>
-                        <span
-                          className={styles.variantBadge}
-                          style={{
-                            background: `${variantColor}18`,
-                            color: variantColor,
-                          }}
-                        >
-                          {btn.variant || 'secondary'}
-                        </span>
+                      <td className={`${styles.td} ${styles.muted}`}>
+                        {shownWhen(btn)}
                       </td>
                       <td className={`${styles.td} ${styles.muted2}`}>
                         {LOCATION_LABELS[btn?.location] || btn?.location}
@@ -212,10 +235,12 @@ const ActionsTab = ({ objectApiName, onAddButton, onEditButton }) => {
                   </div>
                   <div className={styles.cardMeta}>
                     <div className={styles.metaItem}>
-                      <span className={styles.metaLabel}>Icon</span>
-                      <span className={styles.metaValue}>
-                        {btn?.icon || 'Zap'}
-                      </span>
+                      <span className={styles.metaLabel}>Runs</span>
+                      <span className={styles.metaValue}>{runsLabel(btn)}</span>
+                    </div>
+                    <div className={styles.metaItem}>
+                      <span className={styles.metaLabel}>Shown when</span>
+                      <span className={styles.metaValue}>{shownWhen(btn)}</span>
                     </div>
                     <div className={styles.metaItem}>
                       <span className={styles.metaLabel}>Location</span>

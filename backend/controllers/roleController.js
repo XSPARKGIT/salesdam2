@@ -1,5 +1,8 @@
 import Role from '../models/Role.js';
 import User from '../models/User.js';
+import LayoutAssignment from '../models/LayoutAssignment.js';
+import ApproverGroup from '../models/ApproverGroup.js';
+import { validateAppIds } from '../services/appAccessService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
 
@@ -18,11 +21,13 @@ const createRole = asyncHandler(async (req, res) => {
   const { name } = req.body;
   const existing = await Role.findOne({ tenantId: req.tenantId, name });
   if (existing) throw new AppError(`Role "${name}" already exists.`, 409);
+  const appIds = await validateAppIds(req.tenantId, req.body.appIds);
 
   const role = await Role.create({
     tenantId: req.tenantId,
     createdBy: req.user._id,
     ...req.body,
+    appIds: appIds || [],
     isSystem: false, // user-created roles are never system roles
   });
 
@@ -51,6 +56,8 @@ const updateRole = asyncHandler(async (req, res) => {
   allowed.forEach(key => {
     if (req.body[key] !== undefined) role[key] = req.body[key];
   });
+  const appIds = await validateAppIds(req.tenantId, req.body.appIds);
+  if (appIds !== undefined) role.appIds = appIds;
   await role.save();
 
   await audit({
@@ -81,6 +88,8 @@ const deleteRole = asyncHandler(async (req, res) => {
   }
 
   await Role.deleteOne({ _id: role._id });
+  await LayoutAssignment.deleteMany({ tenantId: req.tenantId, roleId: role._id });
+  await ApproverGroup.updateMany({ tenantId: req.tenantId }, { $pull: { roleIds: role._id } });
 
   sendSuccess(res, {}, 'Role deleted');
 });

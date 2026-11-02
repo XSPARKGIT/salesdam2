@@ -20,10 +20,15 @@ import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 import { checkAppPermission } from '../middleware/permissions.js';
 import { validate, schemas } from '../utils/validators.js';
+import { requireObjectMetadataAccess } from '../services/objectAccessService.js';
 
 const router = express.Router();
 
 router.use(requireAuth, enforceTenant);
+
+// Workspace isolation for object definitions (setup users excepted — see service).
+router.param('apiName', requireObjectMetadataAccess);
+router.param('objectApiName', requireObjectMetadataAccess);
 
 // Objects
 router.get('/', listObjects);

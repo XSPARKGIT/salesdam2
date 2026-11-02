@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import Layout from './layout/Layout';
+import WorkspaceObjectGuard from './components/common/WorkspaceObjectGuard/WorkspaceObjectGuard';
 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -28,11 +29,14 @@ import UserDetail from './pages/Admin/UserDetail';
 import UserForm from './pages/Admin/UserForm';
 import RoleManagement from './pages/Admin/RoleManagement';
 import RoleForm from './pages/Admin/RoleForm';
+import PermissionSets from './pages/Admin/PermissionSets';
+import ApproverGroups from './pages/Approvals/ApproverGroups';
 import EmailSenders from './pages/Admin/EmailSenders';
 import WorkspaceManager from './pages/Workspaces/WorkspaceManager';
 import WorkspaceDetail from './pages/Workspaces/WorkspaceDetail';
 import AIOnboarding from './pages/Onboarding/AIOnboarding';
 import LayoutBuilder from './pages/Layouts/LayoutBuilder';
+import LayoutAssignment from './pages/Layouts/LayoutAssignment';
 import EmailTemplateList from './pages/EmailTemplates/EmailTemplateList';
 import EmailTemplateEditor from './pages/EmailTemplates/EmailTemplateEditor';
 import IntegrationsPage from './pages/Integrations/IntegrationsPage';
@@ -49,12 +53,14 @@ import SalesTargets from './pages/Admin/settings/SalesTargets';
 import InvoiceQuote from './pages/Admin/settings/InvoiceQuote';
 import EmailConfiguration from './pages/Admin/settings/EmailConfiguration';
 import DataImport from './pages/Admin/settings/DataImport';
+import Configuration from './pages/Admin/settings/Configuration';
 import DataExport from './pages/Admin/settings/DataExport';
 import Billing from './pages/Admin/settings/Billing';
 import Integrations from './pages/Admin/settings/Integrations';
 import OtherSettings from './pages/Admin/settings/OtherSettings';
 import TendersConfig from './pages/Admin/settings/TendersConfig';
 import LeadApprovalSettings from './pages/Admin/settings/LeadApprovalSettings';
+import SharingSettings from './pages/Admin/settings/SharingSettings';
 import ApprovalProcessList from './pages/Approvals/ApprovalProcessList';
 import ApprovalProcessEditor from './pages/Approvals/ApprovalProcessEditor';
 import MyApprovals from './pages/Approvals/MyApprovals';
@@ -181,7 +187,9 @@ export default function App() {
         path="/o/:objectApiName"
         element={
           <Guard>
-            <RecordList />
+            <WorkspaceObjectGuard>
+              <RecordList />
+            </WorkspaceObjectGuard>
           </Guard>
         }
       />
@@ -189,7 +197,9 @@ export default function App() {
         path="/o/:objectApiName/new"
         element={
           <Guard>
-            <RecordForm />
+            <WorkspaceObjectGuard>
+              <RecordForm />
+            </WorkspaceObjectGuard>
           </Guard>
         }
       />
@@ -197,7 +207,9 @@ export default function App() {
         path="/o/:objectApiName/merge"
         element={
           <Guard>
-            <RecordMerge />
+            <WorkspaceObjectGuard>
+              <RecordMerge />
+            </WorkspaceObjectGuard>
           </Guard>
         }
       />
@@ -205,7 +217,9 @@ export default function App() {
         path="/o/:objectApiName/deleted"
         element={
           <Guard>
-            <RecycleBin />
+            <WorkspaceObjectGuard>
+              <RecycleBin />
+            </WorkspaceObjectGuard>
           </Guard>
         }
       />
@@ -239,7 +253,9 @@ export default function App() {
         path="/o/:objectApiName/kanban"
         element={
           <Guard>
-            <RecordList />
+            <WorkspaceObjectGuard>
+              <RecordList />
+            </WorkspaceObjectGuard>
           </Guard>
         }
       />
@@ -273,6 +289,14 @@ export default function App() {
         element={
           <Guard requireAdmin>
             <LayoutBuilder />
+          </Guard>
+        }
+      />
+      <Route
+        path="/setup/objects/:apiName/layout-assignment"
+        element={
+          <Guard requireAdmin>
+            <LayoutAssignment />
           </Guard>
         }
       />
@@ -434,11 +458,7 @@ export default function App() {
 
       <Route
         path="/analytics"
-        element={
-          <Guard requirePermission="canViewAnalytics">
-            <Analytics />
-          </Guard>
-        }
+        element={<Analytics />}
       />
       <Route
         path="/search"
@@ -592,6 +612,14 @@ export default function App() {
         }
       />
       <Route
+        path="/admin/settings/configuration"
+        element={
+          <Guard requireAdmin>
+            <Configuration />
+          </Guard>
+        }
+      />
+      <Route
         path="/admin/settings/data-import"
         element={
           <Guard requireAdmin>
@@ -655,6 +683,14 @@ export default function App() {
           </Guard>
         }
       />
+      <Route
+        path="/admin/settings/sharing"
+        element={
+          <Guard requireAdmin>
+            <SharingSettings />
+          </Guard>
+        }
+      />
 
       <Route
         path="/admin/users"
@@ -685,6 +721,24 @@ export default function App() {
         element={
           <Guard requireAdmin>
             <RoleManagement />
+          </Guard>
+        }
+      />
+
+      <Route
+        path="/setup/approver-groups"
+        element={
+          <Guard requireAdmin>
+            <ApproverGroups />
+          </Guard>
+        }
+      />
+
+      <Route
+        path="/admin/permission-sets"
+        element={
+          <Guard requirePermission="canManageRoles">
+            <PermissionSets />
           </Guard>
         }
       />

@@ -2,7 +2,7 @@ import styles from './Sidebar.module.css';
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
-import { LayoutDashboard, ScrollText, AlertTriangle, Inbox } from 'lucide-react';
+import { LayoutDashboard, ScrollText, AlertTriangle, Inbox, PieChart } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getMyPendingApprovals } from '../../services/api/approvals';
 import { useAuth } from '../../hooks/useAuth';
@@ -22,9 +22,12 @@ const Sidebar = () => {
     tenant,
     logout,
     isAdmin,
+    isSuperuser,
     workspaces,
     activeWorkspace,
     switchWorkspace,
+    tenants,
+    switchTenant,
     hasPermission,
   } = useAuth();
   const tenantFeatures = tenant?.features || {};
@@ -84,7 +87,7 @@ const Sidebar = () => {
       // No default set — stay put unless we're on an object not in this workspace
       const objectApiName = location.pathname.match(/^\/o\/([^/]+)/)?.[1];
       const allowed = ws?.allowedObjects || [];
-      if (objectApiName && allowed.length > 0 && !allowed.includes(objectApiName)) {
+      if (objectApiName && !allowed.includes(objectApiName)) {
         navigate('/');
       }
     } finally {
@@ -98,14 +101,13 @@ const Sidebar = () => {
     }
   };
 
+  // The server already scopes `objects` to the active workspace and the role's
+  // read access; this mirrors the workspace check so a switch never shows
+  // another workspace's objects while the new list is loading. A workspace
+  // with no objects (or no workspace at all) shows none.
+  const workspaceObjects = new Set(activeWorkspace?.allowedObjects || []);
   const navObjects = objects
-    .filter((o) => {
-      if (!o.showInNav) return false;
-      if (!activeWorkspace) return true;
-      const allowed = activeWorkspace.allowedObjects;
-      if (!allowed || allowed.length === 0) return true;
-      return allowed.includes(o.apiName);
-    })
+    .filter((o) => o.showInNav && o.isActive && workspaceObjects.has(o.apiName))
     .sort((a, b) => a.navOrder - b.navOrder);
 
   // Restore the persisted nav scroll offset before the first paint, so the
@@ -175,6 +177,28 @@ const Sidebar = () => {
           ref={navRef}
           onScroll={handleNavScroll}
         >
+          {isSuperuser && tenants.length > 1 && !sidebarCollapsed && (
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-color)' }}>
+              <label style={{ fontSize: 11, color: 'var(--color-gray-500)', display: 'block', marginBottom: 4 }}>Tenant</label>
+              <select
+                style={{ width: '100%', padding: '6px 8px', borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)', fontSize: 13 }}
+                value={tenant?._id || ''}
+                onChange={async (e) => {
+                  try {
+                    await switchTenant(e.target.value);
+                    window.location.reload();
+                  } catch (err) {
+                    alert(err.message);
+                  }
+                }}
+              >
+                {tenants.map((t) => (
+                  <option key={t._id} value={t._id}>{t.name}{t.isSandbox ? ' (Sandbox)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <SidebarNavItem
             to="/"
             icon={<LayoutDashboard size={17} />}
@@ -183,6 +207,16 @@ const Sidebar = () => {
             onNavigate={handleMobileNav}
             dataTour="home"
           />
+
+          {hasPermission('canViewAnalytics') && (
+            <SidebarNavItem
+              to="/analytics"
+              icon={<PieChart size={17} />}
+              label="Analytics"
+              collapsed={sidebarCollapsed}
+              onNavigate={handleMobileNav}
+            />
+          )}
 
           <SidebarNavItem
             to="/approvals"

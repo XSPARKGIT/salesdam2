@@ -36,6 +36,15 @@ export const SYSTEM_DEFAULTS = {
     description: 'ISO 4217 currency code used when none is specified.',
     editableByTenant: true,
   },
+  'deals.minimum_value': {
+    value: 0,
+    dataType: 'number',
+    category: 'deals',
+    label: 'Minimum Deal Value',
+    description:
+      'Smallest deal amount a tenant accepts. Validation rules can read it with CONFIG("deals.minimum_value"); 0 means no minimum.',
+    editableByTenant: true,
+  },
   'consent.enforcement': {
     value: false,
     dataType: 'boolean',

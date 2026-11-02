@@ -8,14 +8,14 @@ import FieldMeta from '../models/FieldMeta.js';
 import consentService from './consentService.js';
 import channelProviders from './channelProviders.js';
 import duplicateDetectionService from './duplicateDetectionService.js';
-import { validateRecordData, runObjectValidationRules } from './validationService.js';
+import { validateRecordData, evaluateValidationRules, buildValidationFailure } from './validationService.js';
 import { buildSearchText } from './searchService.js';
 import { computeFormulaValues, computeAndSetFormulaValues } from './formulaService.js';
 import { applyAutoNumbers } from './autoNumberService.js';
 import { setRollupValuesOnRecord } from './rollupService.js';
 import { fireAutomations } from './automationService.js';
 import { getEditableFields, hasObjectPermission } from '../middleware/permissions.js';
-import { AppError, ValidationError } from '../utils/errors.js';
+import { AppError } from '../utils/errors.js';
 
 /**
  * Omnichannel inbox service (Core BRD §16.2, §16.3, §16.4).
@@ -292,18 +292,14 @@ const createRecordFromConversation = async ({
     tenantId,
     null,
   );
-  errors.push(
-    ...runObjectValidationRules(obj.validationRules || [], {
-      ...validated,
-      ...computeFormulaValues(validated, fields),
-    }),
-  );
-  if (errors.length > 0) {
-    throw new ValidationError(errors, 400, {
-      fieldErrors,
-      message: errors.join('; '),
-    });
-  }
+  const ruleErrors = await evaluateValidationRules({
+    tenantId,
+    rules: obj.validationRules || [],
+    data: { ...validated, ...computeFormulaValues(validated, fields) },
+  });
+  // BRD 6.2: every failing check and rule together.
+  const failure = buildValidationFailure({ errors, fieldErrors }, ruleErrors);
+  if (failure) throw failure;
 
   const record = new DynamicRecord({
     tenantId,

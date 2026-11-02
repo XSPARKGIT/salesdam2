@@ -153,7 +153,17 @@ const RecordDetail = () => {
     resolveLookups();
   }, [record, fields]);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
+    // A "Block" lookup on a child object refuses the delete up front.
+    try {
+      await api.post(`/records/${objectApiName}/delete-check`, { ids: [id] });
+    } catch (err) {
+      // The api client rejects with { status, message }, not an axios error.
+      if (err.status === 409) {
+        toast.error(err.message || 'This record cannot be deleted.');
+        return;
+      }
+    }
     setDeleteModalOpen(true);
   };
 
@@ -452,6 +462,7 @@ const RecordDetail = () => {
           customScreens={customScreens}
           embeddedFlows={embeddedFlows}
           showHistory={!!objMeta?.enableHistory}
+          showActivities={objMeta?.enableActivities !== false}
         />
 
         <RecordContent
@@ -464,6 +475,7 @@ const RecordDetail = () => {
           lookupLabels={lookupLabels}
           perms={perms}
           objectApiName={objectApiName}
+          enableActivities={objMeta?.enableActivities !== false}
         />
 
         {activeTab === 'field_history' && objMeta?.enableHistory && (

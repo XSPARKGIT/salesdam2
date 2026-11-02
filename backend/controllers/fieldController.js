@@ -149,6 +149,7 @@ async function assertValidFormula(
   const result = validateFormula(expression.trim(), buildSampleContext(siblingFields), {
     expectedType,
     fieldKinds: buildFieldKindMap(siblingFields),
+    allowRecordState: false, // ISCHANGED is for validation rules only
   });
   if (!result.valid) {
     throw new AppError(`${label} has an invalid formula: ${result.error}`, 400);
@@ -386,11 +387,12 @@ const updateField = asyncHandler(async (req, res) => {
 
   // System fields have limited editability. Picklist system fields (e.g. the
   // auto-provisioned Record Type field) also allow picklistValues so record
-  // types can be configured after the field is provisioned (RTYPE-003).
+  // types can be configured after the field is provisioned (RTYPE-003). The
+  // values may also come from a Global Value Set (e.g. Lead Status).
   if (field.isSystem) {
     const systemFieldAllowedUpdates = ['label', 'helpText'];
     if (field.type === 'picklist' || field.type === 'multipicklist') {
-      systemFieldAllowedUpdates.push('picklistValues');
+      systemFieldAllowedUpdates.push('picklistValues', 'globalValueSetId');
     }
     for (const [key] of Object.entries(req.body)) {
       if (!systemFieldAllowedUpdates.includes(key)) {
@@ -505,7 +507,10 @@ const updateField = asyncHandler(async (req, res) => {
   }
 
   // PICK-002 (update): sync GVS values when a global value set is being linked or is already linked.
-  const incomingGvsId = req.body.globalValueSetId ?? field.globalValueSetId;
+  // An explicit null unlinks the set; the field keeps its current values as inline values.
+  const unlinkingGvs = 'globalValueSetId' in req.body && !req.body.globalValueSetId;
+  if (unlinkingGvs) req.body.globalValueSetId = null;
+  const incomingGvsId = unlinkingGvs ? null : (req.body.globalValueSetId ?? field.globalValueSetId);
   if (incomingGvsId && ['picklist', 'multipicklist'].includes(field.type)) {
     const gvs = await GlobalValueSet.findOne({ _id: incomingGvsId, tenantId: req.tenantId });
     if (!gvs) throw new AppError('Global value set not found.', 404);

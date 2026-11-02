@@ -3,8 +3,10 @@ import DeploymentLog from '../models/DeploymentLog.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import Layout from '../models/Layout.js';
+import LayoutAssignment from '../models/LayoutAssignment.js';
 import Automation from '../models/Automation.js';
 import ApprovalProcess from '../models/ApprovalProcess.js';
+import ApproverGroup from '../models/ApproverGroup.js';
 import DuplicateRule from '../models/DuplicateRule.js';
 import TenantConfiguration from '../models/TenantConfiguration.js';
 import Role from '../models/Role.js';
@@ -27,7 +29,9 @@ const COMPONENT_ORDER = [
   'object',
   'field',
   'layout',
+  'layout_assignment',
   'flow',
+  'approver_group',
   'approval_process',
   'duplicate_rule',
   'tenant_config',
@@ -122,6 +126,34 @@ const SNAPSHOTTERS = {
     return snapshot;
   },
 
+  // Key: "<objectApiName>:<role name>". Role and layout ids belong to the
+  // source tenant, so the snapshot carries the role name and layout names and
+  // the persister maps them back to ids in the target.
+  layout_assignment: async (tenantId, key) => {
+    const parts = _splitKey(key, ':');
+    if (!parts) return null;
+    const [objectApiName, roleName] = parts;
+    const role = await Role.findOne({ tenantId, name: roleName }).select('_id').lean();
+    if (!role) return null;
+    const doc = await LayoutAssignment.findOne({ tenantId, objectApiName, roleId: role._id }).lean();
+    if (!doc) return null;
+    const layouts = await Layout.find({ tenantId, objectApiName }).select('name').lean();
+    const nameOf = new Map(layouts.map((l) => [String(l._id), l.name]));
+    return {
+      objectApiName,
+      roleName,
+      defaultLayout: doc.defaultLayoutId ? nameOf.get(String(doc.defaultLayoutId)) || null : null,
+      rules: (doc.rules || [])
+        .filter((r) => nameOf.has(String(r.layoutId)))
+        .map((r) => ({
+          field: r.field,
+          operator: r.operator,
+          value: r.value,
+          layout: nameOf.get(String(r.layoutId)),
+        })),
+    };
+  },
+
   flow: async (tenantId, apiName) => {
     const doc = await Automation.findOne({ tenantId, apiName });
     if (!doc) return null;
@@ -129,6 +161,23 @@ const SNAPSHOTTERS = {
     delete snapshot.externalObjectId; // integration-specific, not portable
     delete snapshot.stats; // per-tenant runtime counters
     return snapshot;
+  },
+
+  // Key: the group's name. Members travel as emails and roles as names.
+  approver_group: async (tenantId, name) => {
+    const doc = await ApproverGroup.findOne({ tenantId, name }).lean();
+    if (!doc) return null;
+    const [users, roles] = await Promise.all([
+      User.find({ tenantId, _id: { $in: doc.memberIds || [] } }).select('email').lean(),
+      Role.find({ tenantId, _id: { $in: doc.roleIds || [] } }).select('name').lean(),
+    ]);
+    return {
+      name: doc.name,
+      label: doc.label,
+      description: doc.description || '',
+      memberEmails: users.map((u) => u.email).filter(Boolean),
+      roleNames: roles.map((r) => r.name),
+    };
   },
 
   approval_process: async (tenantId, key) => {
@@ -155,6 +204,20 @@ const SNAPSHOTTERS = {
           .lean();
         step.approverUserEmail = user?.email;
         delete step.approverUserId;
+      }
+      // Group ids belong to the source tenant; carry the name and re-resolve on deploy.
+      if (step.approverGroupId) {
+        const group = await ApproverGroup.findById(step.approverGroupId).select('name').lean();
+        step.approverGroupName = group?.name;
+        delete step.approverGroupId;
+      }
+    }
+    // The flow a stage launches is carried by API name, for the same reason.
+    for (const stage of Object.values(snapshot.actions || {})) {
+      if (stage?.flowId) {
+        const flow = await Automation.findById(stage.flowId).select('apiName').lean();
+        stage.flowApiName = flow?.apiName;
+        stage.flowId = null;
       }
     }
     return snapshot;
@@ -202,13 +265,12 @@ const SNAPSHOTTERS = {
 
 const build = async ({ tenantId, name, description, components, user }) => {
   if (!name) throw new AppError('A change set name is required.', 400);
-  if (!Array.isArray(components) || components.length === 0) {
-    throw new AppError('At least one component is required.', 400);
-  }
+  const comps = Array.isArray(components) ? components : [];
+  // Allow empty change sets (shell) so admins can assemble components incrementally.
 
   const built = [];
   const notFound = [];
-  for (const component of components) {
+  for (const component of comps) {
     const { componentType, componentKey } = component || {};
     if (!COMPONENT_TYPES.includes(componentType)) {
       throw new AppError(`Unknown component type '${componentType}'.`, 400);
@@ -329,6 +391,81 @@ const validate = async ({ changeSet, targetTenantId }) => {
     }
   }
 
+  // Layout assignments need their role in the target, and the layouts and
+  // rule fields they name in the target or in the package.
+  const packagedLayouts = new Set(
+    components
+      .filter((c) => c.componentType === 'layout')
+      .map((c) => c.componentKey),
+  );
+  for (const component of components) {
+    if (component.componentType !== 'layout_assignment') continue;
+    const snapshot = component.snapshot || {};
+    const { objectApiName, roleName } = snapshot;
+    const via = `layout_assignment:${component.componentKey}`;
+    if (!objectApiName) continue;
+    if (!packaged.has(objectApiName) && !targetObjectSet.has(objectApiName)) {
+      continue; // reported as a missing object already
+    }
+
+    const role = await Role.findOne({ tenantId: targetTenantId, name: roleName }).select('_id').lean();
+    if (!role) missing.push({ dependency: 'role', key: roleName, via });
+
+    const layoutNames = new Set(
+      [snapshot.defaultLayout, ...(snapshot.rules || []).map((r) => r.layout)].filter(Boolean),
+    );
+    if (layoutNames.size > 0) {
+      const targetLayouts = await Layout.find({
+        tenantId: targetTenantId,
+        objectApiName,
+        name: { $in: [...layoutNames] },
+      })
+        .select('name')
+        .lean();
+      const available = new Set(targetLayouts.map((l) => l.name));
+      for (const name of layoutNames) {
+        const key = `${objectApiName}:${name}`;
+        if (available.has(name) || packagedLayouts.has(key)) continue;
+        missing.push({ dependency: 'layout', key, via });
+      }
+    }
+
+    const ruleFields = new Set((snapshot.rules || []).map((r) => r.field).filter(Boolean));
+    if (ruleFields.size > 0) {
+      const targetFields = await FieldMeta.find({
+        tenantId: targetTenantId,
+        objectApiName,
+        apiName: { $in: [...ruleFields] },
+      })
+        .select('apiName')
+        .lean();
+      const available = new Set(targetFields.map((f) => f.apiName));
+      for (const field of ruleFields) {
+        const key = `${objectApiName}.${field}`;
+        if (available.has(field) || packagedFields.has(key)) continue;
+        missing.push({ dependency: 'field', key, via });
+      }
+    }
+  }
+
+  // Approval processes whose steps name a public group need it in the target
+  // or in the package.
+  const packagedGroups = new Set(
+    components.filter((c) => c.componentType === 'approver_group').map((c) => c.componentKey),
+  );
+  for (const component of components) {
+    if (component.componentType !== 'approval_process') continue;
+    const names = (component.snapshot?.steps || []).map((st) => st.approverGroupName).filter(Boolean);
+    if (!names.length) continue;
+    const existing = await ApproverGroup.find({ tenantId: targetTenantId, name: { $in: names } }).select('name').lean();
+    const have = new Set(existing.map((g) => g.name));
+    for (const name of new Set(names)) {
+      if (!have.has(name) && !packagedGroups.has(name)) {
+        missing.push({ dependency: 'approver_group', key: name, via: `approval_process:${component.componentKey}` });
+      }
+    }
+  }
+
   return { valid: missing.length === 0, missing };
 };
 
@@ -403,6 +540,48 @@ const PERSISTERS = {
     );
   },
 
+  layout_assignment: async (tenantId, snapshot, warnings) => {
+    const { objectApiName, roleName } = snapshot;
+    const role = await Role.findOne({ tenantId, name: roleName }).select('_id').lean();
+    // Deploy validation blocks a missing role; a sandbox clone (which only
+    // seeds the default roles) skips the assignment rather than failing.
+    if (!role) {
+      warnings.push(
+        `layout assignment '${objectApiName}:${roleName}' skipped: role '${roleName}' does not exist in the target tenant`,
+      );
+      return;
+    }
+    const layouts = await Layout.find({ tenantId, objectApiName }).select('name').lean();
+    const idOf = new Map(layouts.map((l) => [l.name, l._id]));
+
+    let defaultLayoutId = null;
+    if (snapshot.defaultLayout) {
+      defaultLayoutId = idOf.get(snapshot.defaultLayout) || null;
+      if (!defaultLayoutId) {
+        warnings.push(
+          `layout assignment '${objectApiName}:${roleName}': default layout '${snapshot.defaultLayout}' does not exist in the target tenant`,
+        );
+      }
+    }
+    const rules = [];
+    for (const rule of snapshot.rules || []) {
+      const layoutId = idOf.get(rule.layout);
+      if (!layoutId) {
+        warnings.push(
+          `layout assignment '${objectApiName}:${roleName}': rule skipped, layout '${rule.layout}' does not exist in the target tenant`,
+        );
+        continue;
+      }
+      rules.push({ field: rule.field, operator: rule.operator, value: rule.value, layoutId });
+    }
+
+    await LayoutAssignment.findOneAndUpdate(
+      { tenantId, objectApiName, roleId: role._id },
+      { $set: { defaultLayoutId, rules } },
+      { upsert: true, runValidators: true },
+    );
+  },
+
   flow: async (tenantId, snapshot) => {
     const data = { ...snapshot };
     delete data.externalObjectId;
@@ -410,6 +589,33 @@ const PERSISTERS = {
     await Automation.findOneAndUpdate(
       { tenantId, apiName: data.apiName },
       { $set: { ...data, tenantId } },
+      { upsert: true },
+    );
+  },
+
+  approver_group: async (tenantId, snapshot, warnings) => {
+    const [users, roles] = await Promise.all([
+      User.find({ tenantId, email: { $in: snapshot.memberEmails || [] } }).select('_id email').lean(),
+      Role.find({ tenantId, name: { $in: snapshot.roleNames || [] } }).select('_id name').lean(),
+    ]);
+    const foundEmails = new Set(users.map((u) => u.email));
+    (snapshot.memberEmails || []).filter((e) => !foundEmails.has(e)).forEach((e) => warnings.push(
+      `approver_group '${snapshot.name}': member '${e}' not found in the target tenant`,
+    ));
+    const foundRoles = new Set(roles.map((r) => r.name));
+    (snapshot.roleNames || []).filter((n) => !foundRoles.has(n)).forEach((n) => warnings.push(
+      `approver_group '${snapshot.name}': role '${n}' not found in the target tenant`,
+    ));
+    await ApproverGroup.findOneAndUpdate(
+      { tenantId, name: snapshot.name },
+      {
+        $set: {
+          label: snapshot.label,
+          description: snapshot.description || '',
+          memberIds: users.map((u) => u._id),
+          roleIds: roles.map((r) => r._id),
+        },
+      },
       { upsert: true },
     );
   },
@@ -445,7 +651,29 @@ const PERSISTERS = {
         }
         delete next.approverUserEmail;
       }
+      if (next.approverGroupName) {
+        const group = await ApproverGroup.findOne({ tenantId, name: next.approverGroupName }).select('_id').lean();
+        if (group) next.approverGroupId = group._id;
+        else {
+          warnings.push(
+            `approval_process '${snapshot.name}': step ${index + 1} approver group '${next.approverGroupName}' not found in the target tenant`,
+          );
+        }
+        delete next.approverGroupName;
+      }
       steps.push(next);
+    }
+    const actions = JSON.parse(JSON.stringify(snapshot.actions || {}));
+    for (const stage of Object.values(actions)) {
+      if (!stage?.flowApiName) continue;
+      const flow = await Automation.findOne({ tenantId, apiName: stage.flowApiName }).select('_id').lean();
+      if (flow) stage.flowId = flow._id;
+      else {
+        warnings.push(
+          `approval_process '${snapshot.name}': flow '${stage.flowApiName}' not found in the target tenant`,
+        );
+      }
+      delete stage.flowApiName;
     }
     await ApprovalProcess.findOneAndUpdate(
       {
@@ -453,7 +681,7 @@ const PERSISTERS = {
         objectApiName: snapshot.objectApiName,
         name: snapshot.name,
       },
-      { $set: { ...snapshot, tenantId, steps } },
+      { $set: { ...snapshot, tenantId, steps, actions } },
       { upsert: true },
     );
   },
@@ -498,7 +726,16 @@ const _DELETE_BY_KEY = {
       ? Layout.deleteOne({ tenantId, objectApiName: parts[0], name: parts[1] })
       : null;
   },
+  layout_assignment: async (tenantId, key) => {
+    const parts = _splitKey(key, ':');
+    if (!parts) return null;
+    const role = await Role.findOne({ tenantId, name: parts[1] }).select('_id').lean();
+    return role
+      ? LayoutAssignment.deleteOne({ tenantId, objectApiName: parts[0], roleId: role._id })
+      : null;
+  },
   flow: (tenantId, key) => Automation.deleteOne({ tenantId, apiName: key }),
+  approver_group: (tenantId, key) => ApproverGroup.deleteOne({ tenantId, name: key }),
   approval_process: (tenantId, key) => {
     const parts = _splitKey(key, ':');
     return parts
@@ -558,15 +795,18 @@ const persistComponents = async (targetTenantId, components, warnings = []) => {
 
 /** Every metadata component a tenant currently owns (for cloning). */
 const collectAll = async (tenantId) => {
-  const [objects, fields, layouts, flows, approvals, duplicateRules, configs] =
+  const [objects, fields, layouts, assignments, roles, flows, approvals, duplicateRules, configs, groups] =
     await Promise.all([
       ObjectMeta.find({ tenantId }).select('apiName').lean(),
       FieldMeta.find({ tenantId }).select('objectApiName apiName').lean(),
       Layout.find({ tenantId }).select('objectApiName name').lean(),
+      LayoutAssignment.find({ tenantId }).select('objectApiName roleId').lean(),
+      Role.find({ tenantId }).select('name').lean(),
       Automation.find({ tenantId }).select('apiName').lean(),
       ApprovalProcess.find({ tenantId }).select('objectApiName name').lean(),
       DuplicateRule.find({ tenantId }).select('objectApiName name').lean(),
       TenantConfiguration.find({ tenantId }).select('key').lean(),
+      ApproverGroup.find({ tenantId }).select('name').lean(),
     ]);
 
   const seen = new Set();
@@ -584,7 +824,13 @@ const collectAll = async (tenantId) => {
     await push('field', `${doc.objectApiName}.${doc.apiName}`);
   for (const doc of layouts)
     await push('layout', `${doc.objectApiName}:${doc.name}`);
+  const roleName = new Map(roles.map((r) => [String(r._id), r.name]));
+  for (const doc of assignments) {
+    const name = roleName.get(String(doc.roleId));
+    if (name) await push('layout_assignment', `${doc.objectApiName}:${name}`);
+  }
   for (const doc of flows) await push('flow', doc.apiName);
+  for (const doc of groups) await push('approver_group', doc.name);
   for (const doc of approvals)
     await push('approval_process', `${doc.objectApiName}:${doc.name}`);
   for (const doc of duplicateRules)

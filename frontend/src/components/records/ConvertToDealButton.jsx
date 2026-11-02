@@ -12,6 +12,10 @@ const ConvertToDealButton = ({
   tender,
   source = 'lead',
   onSuccess,
+  // Configured button appearance (BRD 4.4 action buttons)
+  label = 'Convert to Deal',
+  variant = 'primary',
+  icon = <FileText size={14} />,
 }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -58,12 +62,12 @@ const ConvertToDealButton = ({
   return (
     <>
       <Button
-        variant="primary"
+        variant={variant}
         size="sm"
-        icon={<FileText size={14} />}
+        icon={icon}
         onClick={() => setShowModal(true)}
       >
-        Convert to Deal
+        {label}
       </Button>
 
       <ConvertLeadToDealModal

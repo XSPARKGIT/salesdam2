@@ -56,6 +56,55 @@
   flex-shrink: 0;
 }
 
+/* ─── Layout picker bar ───────────────────────────────────────── */
+.layoutBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-3);
+  padding: var(--spacing-3);
+  background: var(--color-gray-50);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+}
+.layoutBarField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+}
+.layoutBarField select,
+.layoutBarField input,
+.newLayoutInput {
+  height: 32px;
+  min-width: 180px;
+  padding: 0 var(--spacing-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: var(--color-white);
+  color: var(--color-gray-900);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+}
+.layoutBarCheck {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-700);
+  white-space: nowrap;
+}
+.layoutBarActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-left: auto;
+}
+
 /* ─── Fullscreen button ────────────────────────────────────────── */
 .fsBtn {
   display: flex;

@@ -33,6 +33,7 @@ export const AuthProvider = ({ children }) => {
   const [tenant, setTenant] = useState(null);
   const [workspaces, setWorkspaces] = useState([]); // workspaces user belongs to
   const [activeWorkspace, setActiveWorkspace] = useState(null); // currently selected
+  const [tenants, setTenants] = useState([]); // tenants this user can switch to (superuser)
   const [loading, setLoading] = useState(true);
   const [permissions, setPermissions] = useState({});
 
@@ -61,12 +62,26 @@ export const AuthProvider = ({ children }) => {
       const userWorkspaces = userData?.workspaces || [];
       setWorkspaces(userWorkspaces);
 
+      const isSuper = userData?.role?.name?.toLowerCase() === 'superuser';
+      if (isSuper) {
+        api.get('/admin/tenants').then((r) => {
+          setTenants(r.data?.data || []);
+        }).catch(() => setTenants([]));
+      } else {
+        setTenants([]);
+      }
+
       const storedId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
       const activeWs = pickActiveWorkspace(
         userWorkspaces,
         storedId,
         userData?.activeWorkspaceId,
       );
+      // The server scopes objects and records to the session's workspace, so
+      // record this device's choice there before anything is loaded for it.
+      if (activeWs && !sameId(activeWs._id, userData?.activeWorkspaceId)) {
+        await api.post('/workspaces/switch', { workspaceId: activeWs._id }).catch(() => {});
+      }
       setActiveWorkspace(activeWs);
       if (activeWs) localStorage.setItem(ACTIVE_WORKSPACE_KEY, String(activeWs._id));
       else localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
@@ -165,12 +180,21 @@ export const AuthProvider = ({ children }) => {
     const list = res.data.data || [];
     // localStorage always mirrors the current selection, so it stands in for it.
     const next = pickActiveWorkspace(list, preferredId, localStorage.getItem(ACTIVE_WORKSPACE_KEY));
+    if (next && !sameId(next._id, localStorage.getItem(ACTIVE_WORKSPACE_KEY))) {
+      await api.post('/workspaces/switch', { workspaceId: next._id }).catch(() => {});
+    }
     setWorkspaces(list);
     setActiveWorkspace(next);
     if (next) localStorage.setItem(ACTIVE_WORKSPACE_KEY, String(next._id));
     else localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
     return { list, active: next };
   }, []);
+
+  const switchTenant = async (tenantId) => {
+    await api.post('/auth/switch-tenant', { tenantId });
+    localStorage.setItem('tenantId', String(tenantId));
+    await fetchMe();
+  };
 
   /**
    * Switch the active workspace. The server validates membership and records
@@ -229,6 +253,8 @@ export const AuthProvider = ({ children }) => {
         permissions,
         workspaces,
         activeWorkspace,
+        tenants,
+        switchTenant,
         login,
         register,
         logout,

@@ -336,7 +336,7 @@ const RelatedList = ({
 
   const { data: editFormBundle, isLoading: editFormBundleLoading } = useQuery({
     queryKey: ['form-bundle', relatedObjectMeta?.apiName, 'edit', editRecord],
-    queryFn: () => getFormBundle(relatedObjectMeta?.apiName),
+    queryFn: () => getFormBundle(relatedObjectMeta?.apiName, editRecord?._id || editRecord?.id),
     enabled: !!editRecord && !!relatedObjectMeta?.apiName,
   });
 

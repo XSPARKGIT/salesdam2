@@ -4,11 +4,12 @@ import Button from '../../../components/common/Button/Button';
 import { useTenantContext } from '../../../context/TenantContext';
 
 const WorkspaceSettings = ({ form, setForm, saving, onSave, allowedObjects = [] }) => {
-  const { objects } = useTenantContext();
+  // The full catalogue: the workspace being edited may not be the active one.
+  const { allObjects: objects } = useTenantContext();
 
-  // Build options: all objects that are in the allowed list (or all if no restriction)
+  // Build options: the objects in this workspace (none when it has no objects)
   const landingOptions = objects
-    .filter((o) => allowedObjects.length === 0 || allowedObjects.includes(o.apiName))
+    .filter((o) => allowedObjects.includes(o.apiName))
     .sort((a, b) => (a.label || a.apiName).localeCompare(b.label || b.apiName));
 
   return (

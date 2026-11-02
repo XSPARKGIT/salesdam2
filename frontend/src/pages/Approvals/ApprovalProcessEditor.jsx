@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, Plus, X, ArrowUp, ArrowDown } from 'lucide-react';
 import Layout from '../../layout/Layout';
 import Button from '../../components/common/Button/Button';
+import FormulaEditor from '../../components/common/FormulaEditor/FormulaEditor';
+import { approvalConditionsToFormula } from '../../utils/conditionFormula';
 import { useTenantContext } from '../../context/TenantContext';
 import { getFields } from '../../services/api/objects';
 import { getUsers } from '../../services/api/users';
@@ -14,28 +16,26 @@ import {
   getApprovalProcess,
   createApprovalProcess,
   updateApprovalProcess,
+  getApproverGroups,
 } from '../../services/api/approvals';
 import styles from './Approvals.module.css';
 
-const OPERATORS = [
-  { value: 'equals', label: 'equals' },
-  { value: 'not_equals', label: 'does not equal' },
-  { value: 'greater_than', label: 'is greater than' },
-  { value: 'greater_or_equal', label: 'is at least' },
-  { value: 'less_than', label: 'is less than' },
-  { value: 'less_or_equal', label: 'is at most' },
-  { value: 'contains', label: 'contains' },
-  { value: 'is_empty', label: 'is empty' },
-  { value: 'is_not_empty', label: 'is not empty' },
-];
-const NO_VALUE_OPERATORS = new Set(['is_empty', 'is_not_empty']);
-
 const APPROVER_TYPES = [
   { value: 'user', label: 'A specific user' },
-  { value: 'manager', label: "The submitter's manager" },
+  { value: 'manager', label: 'A manager' },
   { value: 'field', label: 'A user field on the record' },
+  { value: 'group', label: 'A public group of approvers' },
   { value: 'queue', label: 'Anyone with a role' },
 ];
+const MANAGER_OF = [
+  { value: 'owner', label: "The record owner's manager" },
+  { value: 'submitter', label: "The submitter's manager" },
+];
+
+const emptyStep = (approverType = 'manager') => ({
+  name: '', approverType, approverUserId: '', approverFieldApiName: '', approverRoleId: '',
+  approverGroupId: '', managerOf: 'owner',
+});
 
 // Field types whose value is computed, so they can't be set by an action.
 const READ_ONLY_TYPES = new Set(['formula', 'rollup_summary', 'auto_number']);
@@ -58,15 +58,19 @@ const STAGES = [
   },
 ];
 
-const emptyStage = () => ({ fieldUpdates: [], flowId: '', lockRecord: false, unlockRecord: true });
+const emptyStage = () => ({
+  fieldUpdates: [], flowId: '', lockRecord: false, unlockRecord: true,
+  notifyByEmail: true, captureReason: true, reasonField: '', approverField: '', platformAction: 'none',
+});
 
 const EMPTY = {
   name: '',
   description: '',
   objectApiName: '',
   active: true,
-  entryCriteria: { logic: 'AND', conditions: [] },
-  steps: [{ name: '', approverType: 'manager', approverUserId: '', approverFieldApiName: '', approverRoleId: '' }],
+  entryCondition: '',
+  legacyConverted: false,
+  steps: [emptyStep('manager')],
   actions: { onSubmit: emptyStage(), onApprove: emptyStage(), onReject: emptyStage() },
 };
 
@@ -78,15 +82,13 @@ const toForm = (p) => ({
   description: p.description || '',
   objectApiName: p.objectApiName || '',
   active: p.active !== false,
-  entryCriteria: {
-    logic: p.entryCriteria?.logic || 'AND',
-    conditions: (p.entryCriteria?.conditions || []).map((c) => ({
-      field: c.field,
-      operator: c.operator || 'equals',
-      value: c.value ?? '',
-      valueType: c.valueType || 'literal',
-    })),
-  },
+  // Entry criteria is a formula. Older processes stored a list of conditions;
+  // they are converted here, and saved as a formula when the process is saved.
+  entryCondition:
+    p.entryCondition ||
+    approvalConditionsToFormula(p.entryCriteria?.conditions || [], p.entryCriteria?.logic),
+  legacyConverted: !p.entryCondition && (p.entryCriteria?.conditions || []).length > 0,
+  systemKey: p.systemKey || '',
   steps: [...(p.steps || [])]
     .sort((a, b) => a.order - b.order)
     .map((s) => ({
@@ -95,6 +97,8 @@ const toForm = (p) => ({
       approverUserId: idOf(s.approverUserId),
       approverFieldApiName: s.approverFieldApiName || '',
       approverRoleId: idOf(s.approverRoleId),
+      approverGroupId: idOf(s.approverGroupId),
+      managerOf: s.managerOf || 'owner',
     })),
   actions: Object.fromEntries(
     STAGES.map(({ key }) => {
@@ -106,6 +110,11 @@ const toForm = (p) => ({
           flowId: idOf(a.flowId),
           lockRecord: Boolean(a.lockRecord),
           unlockRecord: a.unlockRecord !== false,
+          notifyByEmail: a.notifyByEmail !== false,
+          captureReason: a.captureReason !== false,
+          reasonField: a.reasonField || '',
+          approverField: a.approverField || '',
+          platformAction: a.platformAction || 'none',
         },
       ];
     }),
@@ -118,24 +127,18 @@ const toPayload = (form) => ({
   description: form.description.trim(),
   objectApiName: form.objectApiName,
   active: form.active,
-  entryCriteria: {
-    logic: form.entryCriteria.logic,
-    conditions: form.entryCriteria.conditions
-      .filter((c) => c.field)
-      .map((c) => ({
-        field: c.field,
-        operator: c.operator,
-        value: NO_VALUE_OPERATORS.has(c.operator) ? null : c.value,
-        valueType: c.valueType || 'literal',
-      })),
-  },
+  entryCondition: form.entryCondition.trim(),
+  // The older condition list is replaced by the formula.
+  entryCriteria: { logic: 'AND', conditions: [] },
   steps: form.steps.map((s, i) => ({
     order: i + 1,
     name: s.name.trim(),
     approverType: s.approverType,
     ...(s.approverType === 'user' ? { approverUserId: s.approverUserId } : {}),
+    ...(s.approverType === 'manager' ? { managerOf: s.managerOf || 'owner' } : {}),
     ...(s.approverType === 'field' ? { approverFieldApiName: s.approverFieldApiName } : {}),
     ...(s.approverType === 'queue' ? { approverRoleId: s.approverRoleId } : {}),
+    ...(s.approverType === 'group' ? { approverGroupId: s.approverGroupId } : {}),
   })),
   actions: Object.fromEntries(
     STAGES.map(({ key }) => {
@@ -147,6 +150,11 @@ const toPayload = (form) => ({
           flowId: a.flowId || null,
           lockRecord: key === 'onSubmit' ? a.lockRecord : false,
           unlockRecord: a.unlockRecord,
+          notifyByEmail: a.notifyByEmail,
+          ...(key === 'onSubmit' ? { approverField: a.approverField || '' } : {}),
+          ...(key === 'onApprove' ? { platformAction: form.objectApiName === 'lead' ? a.platformAction : 'none' } : {}),
+          ...(key === 'onReject' ? { captureReason: a.captureReason } : {}),
+          ...(key !== 'onSubmit' ? { reasonField: a.reasonField || '' } : {}),
         },
       ];
     }),
@@ -162,6 +170,7 @@ const validate = (form) => {
     if (s.approverType === 'user' && !s.approverUserId) errors[`step_${i}`] = 'Choose the approver.';
     if (s.approverType === 'field' && !s.approverFieldApiName) errors[`step_${i}`] = 'Choose the user field.';
     if (s.approverType === 'queue' && !s.approverRoleId) errors[`step_${i}`] = 'Choose the role.';
+    if (s.approverType === 'group' && !s.approverGroupId) errors[`step_${i}`] = 'Choose the approver group.';
   });
   return errors;
 };
@@ -246,7 +255,7 @@ function ProcessForm({ id, initial }) {
   const isNew = !id;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { objects } = useTenantContext();
+  const { allObjects: objects } = useTenantContext();
 
   const [form, setForm] = useState(initial);
   const [errors, setErrors] = useState({});
@@ -265,6 +274,11 @@ function ProcessForm({ id, initial }) {
   const { data: roles = [] } = useQuery({
     queryKey: ['roles'],
     queryFn: () => getRoles().then((res) => res.data.data || []),
+  });
+  const { data: groups = [] } = useQuery({
+    queryKey: ['approver-groups'],
+    queryFn: getApproverGroups,
+    staleTime: 0,
   });
   const { data: flows = [] } = useQuery({
     // Its own key with no cache, so a flow built a moment ago is offered.
@@ -288,11 +302,6 @@ function ProcessForm({ id, initial }) {
 
   const set = (patch) => setForm((prev) => ({ ...prev, ...patch }));
   const clearError = (key) => setErrors((prev) => ({ ...prev, [key]: undefined }));
-
-  /* ── Entry criteria ─────────────────────────────────────────────────── */
-  const setConditions = (conditions) => set({ entryCriteria: { ...form.entryCriteria, conditions } });
-  const updateCondition = (i, patch) =>
-    setConditions(form.entryCriteria.conditions.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
   /* ── Steps ──────────────────────────────────────────────────────────── */
   const setSteps = (steps) => set({ steps });
@@ -389,7 +398,8 @@ function ProcessForm({ id, initial }) {
                   setForm((prev) => ({
                     ...prev,
                     objectApiName: e.target.value,
-                    entryCriteria: { ...prev.entryCriteria, conditions: [] },
+                    entryCondition: '',
+                    legacyConverted: false,
                     steps: prev.steps.map((s) => ({ ...s, approverFieldApiName: '' })),
                     actions: Object.fromEntries(
                       STAGES.map(({ key }) => [key, { ...prev.actions[key], fieldUpdates: [] }]),
@@ -426,103 +436,34 @@ function ProcessForm({ id, initial }) {
         </section>
 
         {/* ── Entry criteria ── */}
-        <section className={styles.card}>
-          <div className={styles.cardHeader}>
-            <div>
-              <h2 className={styles.cardTitle}>Entry criteria</h2>
-              <p className={styles.cardHint}>
-                Which records can be submitted. With no conditions, every record of the object can.
-                When several processes match, the user picks one.
-              </p>
-            </div>
-            {form.entryCriteria.conditions.length > 1 && (
-              <label className={styles.logic}>
-                Match
-                <select
-                  className={styles.select}
-                  style={{ width: 'auto' }}
-                  value={form.entryCriteria.logic}
-                  onChange={(e) => set({ entryCriteria: { ...form.entryCriteria, logic: e.target.value } })}
-                >
-                  <option value="AND">all conditions</option>
-                  <option value="OR">any condition</option>
-                </select>
-              </label>
-            )}
+        <section className={styles.card} data-testid="entry-criteria">
+          <div>
+            <h2 className={styles.cardTitle}>Entry criteria</h2>
+            <p className={styles.cardHint}>
+              A true/false formula — the same builder as validation rules. A record can be submitted
+              only when it is <strong>true</strong>; leave it empty to allow every record of the object.
+              Use <code>CONFIG("key")</code> for a company-specific threshold, e.g.{' '}
+              <code>amount &gt; CONFIG("approvals.threshold_amount")</code>. When several processes
+              match, the user picks one.
+            </p>
           </div>
-
+          {form.legacyConverted && (
+            <p className={styles.error} data-testid="entry-converted">
+              This process's earlier conditions were converted to the formula below. Check it, then
+              save to keep the change.
+            </p>
+          )}
           {!form.objectApiName ? (
             <p className={styles.help}>Choose an object first.</p>
           ) : (
-            <div className={styles.rows}>
-              {form.entryCriteria.conditions.map((c, i) => (
-                <div key={i} className={`${styles.row} ${styles.conditionRow}`}>
-                  <select
-                    className={styles.select}
-                    value={c.field}
-                    onChange={(e) => updateCondition(i, { field: e.target.value, value: '' })}
-                    aria-label={`Condition ${i + 1} field`}
-                  >
-                    <option value="">— Field —</option>
-                    {sortedFields.map((f) => (
-                      <option key={f.apiName} value={f.apiName}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className={styles.select}
-                    value={c.operator}
-                    onChange={(e) => updateCondition(i, { operator: e.target.value })}
-                    aria-label={`Condition ${i + 1} operator`}
-                  >
-                    {OPERATORS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  {NO_VALUE_OPERATORS.has(c.operator) ? (
-                    <span />
-                  ) : c.valueType === 'tenantConfig' ? (
-                    <input
-                      className={styles.input}
-                      value={c.value ?? ''}
-                      onChange={(e) => updateCondition(i, { value: e.target.value })}
-                      title="Compared against this tenant setting"
-                      aria-label={`Condition ${i + 1} tenant setting key`}
-                    />
-                  ) : (
-                    <FieldValueInput
-                      field={fieldByApi[c.field]}
-                      value={c.value}
-                      onChange={(value) => updateCondition(i, { value })}
-                      ariaLabel={`Condition ${i + 1} value`}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                    onClick={() => setConditions(form.entryCriteria.conditions.filter((_, j) => j !== i))}
-                    aria-label={`Remove condition ${i + 1}`}
-                  >
-                    <X size={15} />
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                className={styles.addBtn}
-                onClick={() =>
-                  setConditions([
-                    ...form.entryCriteria.conditions,
-                    { field: '', operator: 'equals', value: '', valueType: 'literal' },
-                  ])
-                }
-              >
-                <Plus size={14} /> Add condition
-              </button>
-            </div>
+            <FormulaEditor
+              objectApiName={form.objectApiName}
+              expression={form.entryCondition}
+              availableFields={fields}
+              onExpressionChange={(v) => set({ entryCondition: v })}
+              hideErrorMessage
+              entryContext="approval"
+            />
           )}
         </section>
 
@@ -617,9 +558,45 @@ function ProcessForm({ id, initial }) {
                       </label>
                     )}
                     {s.approverType === 'manager' && (
-                      <span className={styles.help} style={{ alignSelf: 'end', paddingBottom: 8 }}>
-                        Uses the Manager set on the submitter's user record.
-                      </span>
+                      <label className={styles.field}>
+                        <span className={styles.label}>Whose manager</span>
+                        <select
+                          className={styles.select}
+                          value={s.managerOf || 'owner'}
+                          onChange={(e) => updateStep(i, { managerOf: e.target.value })}
+                        >
+                          {MANAGER_OF.map((m) => (
+                            <option key={m.value} value={m.value}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className={styles.help}>
+                          The manager set on their user record, or failing that anyone holding the
+                          role above theirs in the role hierarchy.
+                        </span>
+                      </label>
+                    )}
+                    {s.approverType === 'group' && (
+                      <label className={styles.field}>
+                        <span className={styles.label}>Approver group</span>
+                        <select
+                          className={styles.select}
+                          value={s.approverGroupId}
+                          onChange={(e) => updateStep(i, { approverGroupId: e.target.value })}
+                        >
+                          <option value="">— Select a group —</option>
+                          {groups.map((g) => (
+                            <option key={g._id} value={g._id}>
+                              {g.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className={styles.help}>
+                          Anyone in the group can decide.{' '}
+                          <Link to="/setup/approver-groups">Manage groups</Link>
+                        </span>
+                      </label>
                     )}
                   </div>
                   {errors[`step_${i}`] && <span className={styles.error}>{errors[`step_${i}`]}</span>}
@@ -659,10 +636,7 @@ function ProcessForm({ id, initial }) {
               type="button"
               className={styles.addBtn}
               onClick={() => {
-                setSteps([
-                  ...form.steps,
-                  { name: '', approverType: 'user', approverUserId: '', approverFieldApiName: '', approverRoleId: '' },
-                ]);
+                setSteps([...form.steps, emptyStep('user')]);
                 clearError('steps');
               }}
             >
@@ -759,7 +733,78 @@ function ProcessForm({ id, initial }) {
                   </label>
                 </div>
 
+                <div className={styles.grid2}>
+                  {key === 'onSubmit' && (
+                    <label className={styles.field}>
+                      <span className={styles.label}>Record the approver in</span>
+                      <select
+                        className={styles.select}
+                        value={stage.approverField}
+                        onChange={(e) => updateStage(key, { approverField: e.target.value })}
+                        aria-label="Approver field"
+                      >
+                        <option value="">Don't record the approver</option>
+                        {userFields.map((f) => (
+                          <option key={f.apiName} value={f.apiName}>{f.label}</option>
+                        ))}
+                      </select>
+                      <span className={styles.help}>A user field that receives the person asked to approve.</span>
+                    </label>
+                  )}
+                  {key !== 'onSubmit' && (
+                    <label className={styles.field}>
+                      <span className={styles.label}>Store the {key === 'onReject' ? 'rejection reason' : 'approver comment'} in</span>
+                      <select
+                        className={styles.select}
+                        value={stage.reasonField}
+                        onChange={(e) => updateStage(key, { reasonField: e.target.value })}
+                        aria-label={`${stageTitle}: comment field`}
+                      >
+                        <option value="">Keep it in the approval history only</option>
+                        {writableFields.filter((f) => ['text', 'textarea'].includes(f.type)).map((f) => (
+                          <option key={f.apiName} value={f.apiName}>{f.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {key === 'onApprove' && form.objectApiName === 'lead' && (
+                    <label className={styles.field}>
+                      <span className={styles.label}>Platform action</span>
+                      <select
+                        className={styles.select}
+                        value={stage.platformAction}
+                        onChange={(e) => updateStage(key, { platformAction: e.target.value })}
+                        aria-label="Platform action on approval"
+                      >
+                        <option value="none">None</option>
+                        <option value="convert_lead_to_deal">Convert the lead to a deal</option>
+                      </select>
+                      <span className={styles.help}>Runs before the approval is saved; if it fails, the request stays pending.</span>
+                    </label>
+                  )}
+                </div>
+
                 <div className={styles.stageOptions}>
+                  <label className={styles.check}>
+                    <input
+                      type="checkbox"
+                      checked={stage.notifyByEmail}
+                      onChange={(e) => updateStage(key, { notifyByEmail: e.target.checked })}
+                    />
+                    {key === 'onSubmit'
+                      ? 'Email the approver(s), as well as notifying them in the app'
+                      : 'Email the submitter, as well as notifying them in the app'}
+                  </label>
+                  {key === 'onReject' && (
+                    <label className={styles.check}>
+                      <input
+                        type="checkbox"
+                        checked={stage.captureReason}
+                        onChange={(e) => updateStage(key, { captureReason: e.target.checked })}
+                      />
+                      Require a reason when rejecting
+                    </label>
+                  )}
                   {key === 'onSubmit' ? (
                     <label className={styles.check}>
                       <input

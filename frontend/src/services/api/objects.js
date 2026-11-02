@@ -113,14 +113,34 @@ export const reorderFields = (objectApiName, order) =>
   api.post(`/objects/${objectApiName}/fields/reorder`, { order });
 
 // ─────────────────────────────────────────────
+// Layout resolution (BRD 4.2 Layout Assignment)
+// ─────────────────────────────────────────────
+/**
+ * The layout the current user's Role sees for this object. With a record id
+ * the server also applies the Role's conditional rules to the saved record;
+ * without one (a new record) it returns the Role's default layout.
+ * Returns null when there is no layout with sections — callers then show
+ * every field.
+ */
+const resolveLayout = async (objectApiName, recordId) => {
+  const res = await api
+    .get(`/layouts/${objectApiName}/resolve`, {
+      params: { type: 'detail', ...(recordId ? { recordId } : {}), t: Date.now() },
+    })
+    .catch(() => null);
+  const layout = res?.data?.data;
+  return layout?.sections?.length > 0 ? layout : null;
+};
+
+// ─────────────────────────────────────────────
 // Record + Object + Layout (combined fetch)
 // ─────────────────────────────────────────────
 export const getRecordDetailBundle = async (objectApiName, id) => {
   try {
-    const [recordRes, objectRes, layoutRes] = await Promise.all([
+    const [recordRes, objectRes, layout] = await Promise.all([
       api.get(`/records/${objectApiName}/${id}`),
       api.get(`/objects/${objectApiName}`),
-      api.get(`/layouts/${objectApiName}?t=${Date.now()}`).catch(() => null),
+      resolveLayout(objectApiName, id),
     ]);
 
     const record = recordRes.data.data;
@@ -128,21 +148,6 @@ export const getRecordDetailBundle = async (objectApiName, id) => {
     const fields = (objectRes.data.data.fields || []).sort(
       (a, b) => a.displayOrder - b.displayOrder,
     );
-
-    let layout = null;
-
-    if (layoutRes) {
-      const layouts = layoutRes.data.data || [];
-
-      const defaultLayout =
-        layouts.find((l) => l.isDefault && l.type === 'detail') ||
-        layouts.find((l) => l.isDefault) ||
-        layouts[0];
-
-      if (defaultLayout?.sections?.length > 0) {
-        layout = defaultLayout;
-      }
-    }
 
     return { record, fields, layout };
   } catch (err) {
@@ -257,11 +262,12 @@ export const getRelatedObjects = async (objectApiName) => {
 };
 
 // objects.js
-export const getFormBundle = async (objectApiName) => {
+// Pass recordId when editing so the Role's conditional layout rules apply.
+export const getFormBundle = async (objectApiName, recordId) => {
   try {
-    const [objectRes, layoutRes] = await Promise.all([
+    const [objectRes, layout] = await Promise.all([
       api.get(`/objects/${objectApiName}`),
-      api.get(`/layouts/${objectApiName}?t=${Date.now()}`).catch(() => null),
+      resolveLayout(objectApiName, recordId),
     ]);
 
     const allFields = (objectRes.data.data.fields || [])
@@ -273,21 +279,6 @@ export const getFormBundle = async (objectApiName) => {
       //     f.type !== 'rollup_summary',
       // )
       .sort((a, b) => a.displayOrder - b.displayOrder);
-
-    let layout = null;
-
-    if (layoutRes) {
-      const layouts = layoutRes.data.data || [];
-
-      const best =
-        layouts.find((l) => l.isDefault && l.type === 'detail') ||
-        layouts.find((l) => l.isDefault) ||
-        layouts[0];
-
-      if (best?.sections?.length > 0) {
-        layout = best;
-      }
-    }
 
     return { fields: allFields, layout };
   } catch (err) {

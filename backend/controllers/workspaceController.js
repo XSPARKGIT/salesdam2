@@ -1,5 +1,8 @@
 import Workspace from '../models/Workspace.js';
 import User from '../models/User.js';
+import Role from '../models/Role.js';
+import PermissionSet from '../models/PermissionSet.js';
+import { accessibleWorkspaceFilter } from '../services/appAccessService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
 
@@ -15,16 +18,23 @@ const listWorkspaces = asyncHandler(async (req, res) => {
 });
 
 /* ── GET /api/workspaces/mine ──────────────────────────────────────────────
-   Returns only workspaces this user is a member of. */
+   The App Switcher: Apps granted by the user's Role, their Permission Sets or
+   direct membership, plus the default App (BRD 5.3). */
 const myWorkspaces = asyncHandler(async (req, res) => {
-  const workspaces = await Workspace.find({
-    tenantId: req.tenantId,
-    status: 'active',
-    $or: [
-      { memberIds: req.user._id },
-      { isDefault: true }, // default workspace is available to everyone
-    ],
-  }).sort({ isDefault: -1, name: 1 });
+  const workspaces = await Workspace.find(
+    await accessibleWorkspaceFilter(req.user, req.tenantId),
+  ).sort({ isDefault: -1, name: 1 });
+  sendSuccess(res, { data: workspaces });
+});
+
+/* ── GET /api/workspaces/catalogue ──────────────────────────────────────────
+   Every live App, without members — for granting App access on Roles and
+   Permission Sets (BRD 5.3). */
+const appCatalogue = asyncHandler(async (req, res) => {
+  const workspaces = await Workspace.find({ tenantId: req.tenantId, status: 'active' })
+    .select('name description color icon isDefault')
+    .sort({ isDefault: -1, name: 1 })
+    .lean();
   sendSuccess(res, { data: workspaces });
 });
 
@@ -166,11 +176,13 @@ const deleteWorkspace = asyncHandler(async (req, res) => {
   ws.status = 'deleted';
   await ws.save();
 
-  // Remove from all users
+  // Remove from all users, and from the Roles and Permission Sets granting it
   await User.updateMany(
     { tenantId: req.tenantId },
     { $pull: { workspaceIds: ws._id } },
   );
+  await Role.updateMany({ tenantId: req.tenantId }, { $pull: { appIds: ws._id } });
+  await PermissionSet.updateMany({ tenantId: req.tenantId }, { $pull: { appIds: ws._id } });
 
   await audit({
     tenantId: req.tenantId,
@@ -283,16 +295,14 @@ const switchWorkspace = asyncHandler(async (req, res) => {
   const { workspaceId } = req.body;
   if (!workspaceId) throw new AppError('workspaceId is required.', 400);
 
-  // Validate the workspace exists, belongs to this tenant, and the user is a member
+  // The workspace must be one of the user's Apps (Role, Permission Set or membership)
   const ws = await Workspace.findOne({
+    ...(await accessibleWorkspaceFilter(req.user, req.tenantId)),
     _id: workspaceId,
-    tenantId: req.tenantId,
-    status: 'active',
-    $or: [{ memberIds: req.user._id }, { isDefault: true }],
   });
 
   if (!ws)
-    throw new AppError('Workspace not found or you are not a member.', 403);
+    throw new AppError('Workspace not found or you do not have access to it.', 403);
 
   // Persist to session
   await req.updateSession({ workspaceId: ws._id.toString() });
@@ -323,4 +333,5 @@ export {
   removeMember,
   updateObjectGroups,
   switchWorkspace,
+  appCatalogue,
 };

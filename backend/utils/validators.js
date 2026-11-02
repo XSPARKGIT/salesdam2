@@ -153,6 +153,7 @@ const createFieldSchema = Joi.object({
   lookupObjectApiName: Joi.string().allow(''),
   lookupDisplayField: Joi.string().default('name'),
   cascadeDelete: Joi.boolean().default(false),
+  deleteBehavior: Joi.string().valid('cascade', 'block', 'nullify', 'none'),
   // Auto-number
   autoNumberPrefix: Joi.string().allow(''),
   autoNumberPadding: Joi.number().integer().min(1).max(10),

@@ -6,6 +6,9 @@ import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant, injectTenantId } from '../middleware/tenant.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import User from '../models/User.js';
+import ApprovalProcess from '../models/ApprovalProcess.js';
+import ApprovalRequest from '../models/ApprovalRequest.js';
+import approvalProcessService from '../services/approvalProcessService.js';
 
 const router = express.Router();
 
@@ -15,26 +18,52 @@ router.use(enforceTenant);
 router.use(injectTenantId);
 
 /**
+ * Lead approval runs on the generic Approval Process engine (BRD §8) through
+ * the built-in "Lead Approval" process. These endpoints keep their URLs and
+ * response shapes. A lead submitted under the old workflow (status "Submitted
+ * for Approval" with no engine request) is still decided by the old code, so
+ * nothing in flight is orphaned.
+ */
+const loadLead = async (tenantId, leadId) => {
+  if (!mongoose.isValidObjectId(leadId)) throw new AppError('Lead not found', 404);
+  const lead = await DynamicRecord.findOne({ _id: leadId, tenantId, objectApiName: 'lead', isDeleted: false });
+  if (!lead) throw new AppError('Lead not found', 404);
+  return lead;
+};
+
+const pendingRequest = (tenantId, leadId) =>
+  ApprovalRequest.findOne({ tenantId, objectApiName: 'lead', recordId: leadId, status: 'pending' });
+
+const isLegacyPending = (lead) =>
+  lead.getField('approval_status') === 'Submitted for Approval' && Boolean(lead.getField('assigned_approver'));
+
+/**
  * POST /api/leads/:leadId/submit-for-approval
  * Submit a lead for manager approval
  */
 router.post('/:leadId/submit-for-approval', asyncHandler(async (req, res) => {
   const { leadId } = req.params;
   const tenantId = req.tenantId;
-  const userId = req.user._id;
+  await loadLead(tenantId, leadId);
 
-  try {
-    const result = await leadApprovalService.submitForApproval(tenantId, leadId, userId);
-    sendSuccess(res, {
-      message: 'Lead submitted for approval',
-      data: result.toDataObject(),
-    });
-  } catch (err) {
-    if (err.message.includes('do not have a manager')) {
-      throw new AppError(err.message, 400);
-    }
-    throw err;
+  await approvalProcessService.ensureLeadApprovalProcess(tenantId);
+  const process = await ApprovalProcess.findOne({ tenantId, systemKey: 'lead_approval', active: true }).select('_id');
+  if (!process) {
+    throw new AppError('Lead approval is switched off. Ask your administrator to activate the "Lead Approval" process.', 400);
   }
+  await approvalProcessService.submit({
+    tenantId,
+    objectApiName: 'lead',
+    recordId: leadId,
+    processId: process._id,
+    user: req.user,
+  });
+
+  const lead = await loadLead(tenantId, leadId);
+  sendSuccess(res, {
+    message: 'Lead submitted for approval',
+    data: lead.toDataObject(),
+  });
 }));
 
 /**
@@ -44,28 +73,35 @@ router.post('/:leadId/submit-for-approval', asyncHandler(async (req, res) => {
 router.post('/:leadId/approve', asyncHandler(async (req, res) => {
   const { leadId } = req.params;
   const { clientId } = req.body;
-  const tenantId = req.user.tenantId;
+  const tenantId = req.tenantId;
   const userId = req.user._id;
 
-  // Verify the current user is the assigned approver
-  const lead = await DynamicRecord.findOne({
-    _id: leadId,
-    tenantId,
-    objectApiName: 'lead',
-    isDeleted: false,
-  });
+  const lead = await loadLead(tenantId, leadId);
+  const request = await pendingRequest(tenantId, leadId);
 
-  if (!lead) {
-    throw new AppError('Lead not found', 404);
+  if (request) {
+    await approvalProcessService.decide({
+      tenantId,
+      requestId: request._id,
+      user: req.user,
+      decision: 'approve',
+      options: { clientId },
+    });
+    const approved = await loadLead(tenantId, leadId);
+    const dealId = approved.getField('related_deal_id');
+    const deal = dealId ? await DynamicRecord.findOne({ _id: dealId, tenantId }) : null;
+    return sendSuccess(res, {
+      message: 'Lead approved and converted to deal',
+      data: { lead: approved.toDataObject(), deal: deal?.toDataObject() ?? null },
+    });
   }
 
+  if (!isLegacyPending(lead)) throw new AppError('This lead is not awaiting approval.', 400);
   const assignedApproverId = lead.getField('assigned_approver');
-  if (assignedApproverId && assignedApproverId.toString() !== userId.toString()) {
+  if (assignedApproverId.toString() !== userId.toString()) {
     throw new AppError('Only the assigned approver can approve this lead', 403);
   }
-
   const result = await leadApprovalService.approveLead(tenantId, leadId, userId, clientId);
-
   sendSuccess(res, {
     message: 'Lead approved and converted to deal',
     data: {
@@ -85,25 +121,29 @@ router.post('/:leadId/reject', asyncHandler(async (req, res) => {
   const tenantId = req.tenantId;
   const userId = req.user._id;
 
-  // Verify the current user is the assigned approver
-  const lead = await DynamicRecord.findOne({
-    _id: leadId,
-    tenantId,
-    objectApiName: 'lead',
-    isDeleted: false,
-  });
+  const lead = await loadLead(tenantId, leadId);
+  const request = await pendingRequest(tenantId, leadId);
 
-  if (!lead) {
-    throw new AppError('Lead not found', 404);
+  if (request) {
+    await approvalProcessService.decide({
+      tenantId,
+      requestId: request._id,
+      user: req.user,
+      decision: 'reject',
+      comment: reason || '',
+    });
+    return sendSuccess(res, {
+      message: 'Lead rejected',
+      data: (await loadLead(tenantId, leadId)).toDataObject(),
+    });
   }
 
+  if (!isLegacyPending(lead)) throw new AppError('This lead is not awaiting approval.', 400);
   const assignedApproverId = lead.getField('assigned_approver');
-  if (assignedApproverId && assignedApproverId.toString() !== userId.toString()) {
+  if (assignedApproverId.toString() !== userId.toString()) {
     throw new AppError('Only the assigned approver can reject this lead', 403);
   }
-
   const result = await leadApprovalService.rejectLead(tenantId, leadId, userId, reason);
-
   sendSuccess(res, {
     message: 'Lead rejected',
     data: result.toDataObject(),
@@ -230,28 +270,23 @@ router.get('/:leadId/approval-info', asyncHandler(async (req, res) => {
   const tenantId = req.tenantId;
   const userId = req.user._id;
 
-  const lead = await DynamicRecord.findOne({
-    _id: leadId,
-    tenantId,
-    objectApiName: 'lead',
-    isDeleted: false,
-  });
-
-  if (!lead) {
-    throw new AppError('Lead not found', 404);
-  }
+  const lead = await loadLead(tenantId, leadId);
+  const request = await pendingRequest(tenantId, leadId);
 
   const approvalStatus = lead.getField('approval_status');
   const assignedApproverId = lead.getField('assigned_approver');
-  const isCurrentUserApprover = assignedApproverId && assignedApproverId.toString() === userId.toString();
+  const isCurrentUserApprover = request
+    ? await approvalProcessService.userCanDecide(request.steps?.[request.currentStep], req.user)
+    : Boolean(assignedApproverId && assignedApproverId.toString() === userId.toString());
+  const awaiting = Boolean(request) || approvalStatus === 'Submitted for Approval';
 
   sendSuccess(res, {
     data: {
       approvalStatus,
       assignedApproverId,
       isCurrentUserApprover,
-      canApprove: isCurrentUserApprover && approvalStatus === 'Submitted for Approval',
-      canReject: isCurrentUserApprover && approvalStatus === 'Submitted for Approval',
+      canApprove: isCurrentUserApprover && awaiting,
+      canReject: isCurrentUserApprover && awaiting,
       canSubmitForApproval: approvalStatus !== 'Submitted for Approval' && approvalStatus !== 'Approved',
     },
   });

@@ -91,11 +91,26 @@ const objectMetaSchema = new mongoose.Schema({
     color:          { type: String },                 // custom hex color override
     size:           { type: String, enum: ['xs', 'sm', 'md', 'lg'], default: 'sm' },
     location:       { type: String, enum: ['record_detail', 'record_list', 'both'], default: 'record_detail' },
+    // BRD 4.4: what the button runs — a Flow, a screen flow (asks for input
+    // first) or a platform action (see services/actionService.js).
+    actionType:     { type: String, enum: ['flow', 'screen_flow', 'native'], default: 'flow' },
     automationId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Automation' },
+    nativeAction:   { type: String },
+    // Shown only when the record matches every condition (none = always).
+    conditions:     [{
+      _id: false,
+      field:    { type: String, required: true },
+      operator: { type: String, enum: ['eq', 'neq', 'is_set', 'is_blank'], default: 'eq' },
+      value:    { type: String },
+    }],
+    systemKey:      { type: String },                 // set on buttons seeded from the platform defaults
     confirmMessage: { type: String },                 // optional confirmation dialog text
     resultMode:     { type: String, enum: ['popup', 'inline', 'toast_only'], default: 'popup' },
     order:          { type: Number, default: 0 },
   }],
+  // Platform default buttons this object has already received, so one an
+  // admin deletes is not added back (services/actionService.js).
+  seededActionKeys: [{ type: String }],
 
   // Kanban view configuration
   kanbanConfig: {
@@ -131,6 +146,7 @@ objectMetaSchema.pre('deleteOne', { document: true, query: false }, async functi
     FieldMeta.deleteMany({ objectId: _id, tenantId }),
     DynamicRecord.deleteMany({ tenantId, objectApiName: apiName }),
     model('Layout').deleteMany({ tenantId, objectApiName: apiName }),
+    model('LayoutAssignment').deleteMany({ tenantId, objectApiName: apiName }),
     model('AutoNumberCounter').deleteMany({ tenantId, objectApiName: apiName }),
     model('CustomScreen').deleteMany({ tenantId, objectApiName: apiName }),
     model('ObjectTypeConfig').deleteMany({ tenantId, objectApiName: apiName }),

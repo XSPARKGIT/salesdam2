@@ -26,7 +26,15 @@ const SidebarObjects = ({
   }
 
   if (navObjects?.length === 0) {
-    return null;
+    if (sidebarCollapsed) return null;
+    return (
+      <p
+        style={{ padding: '10px 16px', margin: 0, fontSize: 12, color: 'var(--color-gray-500)' }}
+        data-testid="workspace-no-objects"
+      >
+        No objects available in this workspace.
+      </p>
+    );
   }
 
   const hasObjectGroups = objectGroups && objectGroups.length > 0;

@@ -23,6 +23,8 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import AuditLog from '../models/AuditLog.js';
 import Activity from '../models/Activity.js';
 import { seedDefaultRoles } from '../services/roleService.js';
+import Workspace from '../models/Workspace.js';
+import { seedWorkspace } from './helpers/workspace.mjs';
 
 const RUN = Date.now().toString(36);
 const PASSWORD = 'Merge123!';
@@ -63,7 +65,7 @@ const loginCookie = async (username) => {
 
 let tenantAId = null;
 let tenantBId = null;
-const models = [User, Role, Session, ObjectMeta, FieldMeta, DynamicRecord, AuditLog, Activity];
+const models = [User, Role, Session, ObjectMeta, FieldMeta, DynamicRecord, AuditLog, Activity, Workspace];
 
 try {
   await connectDB();
@@ -82,6 +84,8 @@ try {
     tenantId: tenantAId, firstName: 'Merge', lastName: 'Std', email: `mergestd-${RUN}@example.com`,
     username: `mergestd_${RUN}`, password: PASSWORD, role: roleStd._id, status: 'active', emailVerified: true,
   });
+  // widget stays in the workspace so its refusal below comes from role permissions.
+  await seedWorkspace(tenantAId, [admin._id, std._id], ['contact', 'deal', 'widget']);
   const cookieAdmin = await loginCookie(admin.username);
   const cookieStd = await loginCookie(std.username);
   check('users can log in', Boolean(cookieAdmin && cookieStd));
@@ -215,6 +219,7 @@ try {
     tenantId: tenantBId, firstName: 'Other', lastName: 'Admin', email: `mergeadminb-${RUN}@example.com`,
     username: `mergeadminb_${RUN}`, password: PASSWORD, role: roleAdminB._id, status: 'active', emailVerified: true,
   });
+  await seedWorkspace(tenantBId, [adminB._id], ['contact']);
   const cookieAdminB = await loginCookie(adminB.username);
   const crossTenant = await req('/api/v1/records/contact/merge', {
     method: 'POST', cookie: cookieAdminB, body: { masterId: aId, duplicateIds: [String(fId)] },

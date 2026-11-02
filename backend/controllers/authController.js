@@ -10,6 +10,9 @@ import { seedDefaultRoles } from '../services/roleService.js';
 import { seedSalesdamLayouts } from '../services/layoutService.js';
 import { createDefaultWorkspace } from '../services/workspaceService.js';
 import { seedSalesdamObjects } from '../services/salesdamObjectsService.js';
+import { ensureDefaultActions } from '../services/actionService.js';
+import { accessibleWorkspaceFilter } from '../services/appAccessService.js';
+import approvalProcessService from '../services/approvalProcessService.js';
 import passwordResetService from '../services/passwordResetService.js';
 import welcomeEmailService from '../services/welcomeEmailService.js';
 import { validateUserPermissions } from '../services/permissionValidationService.js';
@@ -144,6 +147,8 @@ const register = asyncHandler(async (req, res) => {
 
     // Seed Salesdam objects with fields
     await seedSalesdamObjects(tenantDoc._id, userDoc._id);
+    await ensureDefaultActions(tenantDoc._id);
+    await approvalProcessService.ensureLeadApprovalProcess(tenantDoc._id);
 
     // Update tenant with creator and allowedObjects
     const allowedObjectApiNames = [
@@ -373,6 +378,48 @@ const logout = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/auth/switch-tenant
+ * Switch the active tenant for a superuser.
+ */
+const switchTenant = asyncHandler(async (req, res) => {
+  const { tenantId } = req.body || {};
+  if (!tenantId) throw new AppError('tenantId is required.', 400);
+
+  const user = req.user;
+  if (user?.role?.name?.toLowerCase() !== 'superuser') {
+    throw new AppError('Only superusers can switch tenants.', 403);
+  }
+
+  const tenant = await Tenant.findById(tenantId);
+  if (!tenant || tenant.status !== 'active') {
+    throw new AppError('Tenant not found or inactive.', 404);
+  }
+
+  // Update session
+  await req.sessionData && (req.sessionData.tenantId = tenant._id);
+
+  // Re-create session with new tenant
+  await req.createSession({
+    userId: user._id.toString(),
+    tenantId: tenant._id.toString(),
+    userAgent: req.headers['user-agent'] || '',
+    ipAddress: req.ip,
+  });
+
+  sendSuccess(res, {
+    data: {
+      tenant: {
+        _id: tenant._id,
+        name: tenant.name,
+        slug: tenant.slug,
+        settings: tenant.settings,
+        features: tenant.features,
+      },
+    },
+  }, 'Tenant switched');
+});
+
+/**
  * GET /api/auth/me
  */
 const getMe = asyncHandler(async (req, res) => {
@@ -380,8 +427,12 @@ const getMe = asyncHandler(async (req, res) => {
     .populate('role', 'name label appPermissions objectPermissions')
     .populate('tenantId', 'name slug settings features');
 
+  // The session tenant, not the home tenant: a superuser may have switched
+  // (POST /auth/switch-tenant), and every data request is already scoped to it.
+  const activeTenantId = req.tenantId || user.tenantId;
+
   const tenant = await Tenant.findOne({
-    _id: user.tenantId,
+    _id: activeTenantId,
     status: 'active',
   }).select('_id name slug logo operatingCurrency features');
 
@@ -392,13 +443,11 @@ const getMe = asyncHandler(async (req, res) => {
     );
   }
 
-  // Same rule as GET /workspaces/mine and POST /workspaces/switch: the
-  // user's own workspaces plus the tenant default, which everyone may use.
-  const workspaces = await Workspace.find({
-    tenantId: user.tenantId,
-    status: 'active',
-    $or: [{ memberIds: user._id }, { isDefault: true }],
-  })
+  // Same rule as GET /workspaces/mine and POST /workspaces/switch: Apps from
+  // the user's Role, Permission Sets or membership, plus the default (BRD 5.3).
+  const workspaces = await Workspace.find(
+    await accessibleWorkspaceFilter(user, activeTenantId),
+  )
     .select('_id name slug color icon allowedObjects objectGroups isDefault')
     .sort({ isDefault: -1, name: 1 });
 
@@ -668,4 +717,5 @@ export {
   forgotPassword,
   verifyResetToken,
   resetPassword,
+  switchTenant,
 };

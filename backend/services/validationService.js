@@ -1,6 +1,11 @@
 import DynamicRecord from '../models/DynamicRecord.js';
+import ObjectMeta from '../models/ObjectMeta.js';
+import FieldMeta from '../models/FieldMeta.js';
 import { validateRecord } from './validationEngine.js';
-import { evaluateFormula } from './formulaParser.js';
+import { evaluateFormula, configKeysIn } from './formulaParser.js';
+import { computeFormulaValues } from './formulaService.js';
+import configurationService from './configurationService.js';
+import { ValidationError } from '../utils/errors.js';
 // TYPE-003: sanitize-html strips XSS payloads from rich-text values.
 import sanitizeHtml from 'sanitize-html';
 
@@ -438,9 +443,86 @@ const runObjectValidationRules = (validationRules = [], recordData = {}) => {
   return errors;
 };
 
+const isActiveRule = (rule) => rule.isActive !== false && rule.expression;
+
+/**
+ * TenantConfiguration values the active rules read with CONFIG("key"): the
+ * tenant's override, else the platform default (BRD 6.2).
+ */
+const loadRuleConfig = async (tenantId, rules = []) => {
+  const keys = [...new Set(rules.filter(isActiveRule).flatMap((r) => configKeysIn(r.expression)))];
+  if (keys.length === 0) return {};
+  return configurationService.resolveMany(keys, tenantId);
+};
+
+/**
+ * Evaluate every active rule on an object for one save (BRD 6.2) and return
+ * all failures — not just the first. `data` is the record as it will be saved
+ * (formula values included); `prev` is the stored record on update, which
+ * ISCHANGED() compares against, and is omitted on create.
+ */
+const evaluateValidationRules = async ({ tenantId, rules = [], data = {}, prev = null }) => {
+  if (!rules.some(isActiveRule)) return [];
+  const __config = await loadRuleConfig(tenantId, rules);
+  return runObjectValidationRules(rules, {
+    ...data,
+    __config,
+    ...(prev ? { __prev: prev } : {}),
+  });
+};
+
+/**
+ * Validation rules for a write that doesn't go through the records API (flow
+ * steps, incoming webhooks). Loads the object's rules and fields itself and
+ * returns the failing messages; an empty array means the write may go ahead.
+ */
+const checkRecordRules = async ({ tenantId, objectApiName, data = {}, prev = null }) => {
+  const obj = await ObjectMeta.findOne({ tenantId, apiName: objectApiName }).select('validationRules').lean();
+  const rules = obj?.validationRules || [];
+  if (!rules.some(isActiveRule)) return [];
+  const fields = await FieldMeta.find({ tenantId, objectApiName }).lean();
+  const failures = await evaluateValidationRules({
+    tenantId,
+    rules,
+    data: { ...data, ...computeFormulaValues(data, fields) },
+    prev,
+  });
+  return failures.map((f) => f.message);
+};
+
+/**
+ * One error listing every problem with a save: field checks from
+ * validateRecordData plus every failing rule (BRD 6.2). Two messages on the
+ * same field are both kept. Returns null when there is nothing to report.
+ */
+const buildValidationFailure = ({ errors = [], fieldErrors = {} } = {}, ruleErrors = []) => {
+  const issues = [];
+  const merged = { ...fieldErrors };
+  for (const message of errors) {
+    const field = Object.keys(fieldErrors).find((k) => fieldErrors[k] === message) || '';
+    issues.push({ message, errorField: field });
+  }
+  for (const re of ruleErrors) {
+    issues.push({ message: re.message, errorField: re.errorField || '' });
+    if (re.errorField) {
+      merged[re.errorField] = merged[re.errorField] ? `${merged[re.errorField]} ${re.message}` : re.message;
+    }
+  }
+  if (issues.length === 0) return null;
+  const messages = issues.map((i) => i.message);
+  return new ValidationError(messages, 400, {
+    fieldErrors: merged,
+    issues,
+    message: messages.length === 1 ? messages[0] : `${messages.length} problems need fixing: ${messages.join('; ')}`,
+  });
+};
+
 export {
   validateRecordData,
   runObjectValidationRules,
+  evaluateValidationRules,
+  checkRecordRules,
+  buildValidationFailure,
   isUniqueField,
   findDuplicateRecord,
   lockUniqueField,

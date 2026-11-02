@@ -15,6 +15,7 @@ import logger from './utils/logger.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import roleRoutes from './routes/roles.js';
+import permissionSetRoutes from './routes/permissionSets.js';
 import objectRoutes from './routes/objects.js';
 import fieldRoutes from './routes/fields.js';
 import recordRoutes from './routes/records.js';
@@ -53,6 +54,8 @@ import documentRoutes from './routes/documents.js';
 import insuranceRoutes from './routes/insurance.js';
 import configurationRoutes from './routes/configuration.js';
 import approvalProcessRoutes from './routes/approvalProcess.js';
+import approverGroupRoutes from './routes/approverGroups.js';
+import sharingRoutes from './routes/sharing.js';
 import duplicateRuleRoutes from './routes/duplicateRules.js';
 import consentRoutes from './routes/consents.js';
 import activityRoutes from './routes/activities.js';
@@ -175,6 +178,7 @@ const API_V1_PREFIX = '/api/v1';
 app.use(`${API_V1_PREFIX}/auth`, authRoutes);
 app.use(`${API_V1_PREFIX}/users`, userRoutes);
 app.use(`${API_V1_PREFIX}/roles`, roleRoutes);
+app.use(`${API_V1_PREFIX}/permission-sets`, permissionSetRoutes);
 app.use(`${API_V1_PREFIX}/objects`, objectRoutes);
 app.use(`${API_V1_PREFIX}/fields`, fieldRoutes);
 app.use(`${API_V1_PREFIX}/records`, recordRoutes);
@@ -215,6 +219,9 @@ app.use(`${API_V1_PREFIX}/insurance`, insuranceRoutes);
 app.use(`${API_V1_PREFIX}/configuration`, configurationRoutes);
 // Configurable multi-step approval processes (Core BRD §8).
 app.use(`${API_V1_PREFIX}/approval-processes`, approvalProcessRoutes);
+app.use(`${API_V1_PREFIX}/approver-groups`, approverGroupRoutes);
+// Sharing Model (Section 9.2): OWD settings and criteria-based sharing rules.
+app.use(`${API_V1_PREFIX}/sharing`, sharingRoutes);
 // Configurable duplicate detection rules (Core BRD §3.4).
 app.use(`${API_V1_PREFIX}/duplicate-rules`, duplicateRuleRoutes);
 // Communication consent & preferences (Core BRD §23).

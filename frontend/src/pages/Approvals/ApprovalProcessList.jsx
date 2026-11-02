@@ -117,10 +117,14 @@ export default function ApprovalProcessList() {
                       </td>
                       <td>{getObject(p.objectApiName)?.label || p.objectApiName}</td>
                       <td>{p.steps?.length || 0}</td>
-                      <td>
-                        {conditions === 0
-                          ? 'All records'
-                          : `${conditions} condition${conditions === 1 ? '' : 's'}`}
+                      <td title={p.entryCondition || undefined}>
+                        {p.entryCondition ? (
+                          <code>{p.entryCondition.length > 48 ? `${p.entryCondition.slice(0, 48)}…` : p.entryCondition}</code>
+                        ) : conditions === 0 ? (
+                          'All records'
+                        ) : (
+                          `${conditions} condition${conditions === 1 ? '' : 's'}`
+                        )}
                       </td>
                       <td>
                         <span className={`${styles.badge} ${p.active ? styles.badgeActive : ''}`}>

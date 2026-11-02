@@ -1,0 +1,157 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  margin-bottom: 20px;
+  background: var(--color-white, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: var(--border-radius-lg, 12px);
+}
+
+.heading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.tableWrap { overflow-x: auto; }
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: #64748b;
+  font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.apiName {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.select,
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.criteriaLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.criteriaRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.primaryBtn,
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 9px 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryBtn { background: #0ea5e9; color: #fff; }
+.primaryBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.secondaryBtn { background: #e2e8f0; color: #334155; }
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #ef4444;
+  cursor: pointer;
+}
+
+.iconBtn:hover { background: #fee2e2; }
+
+.linkBtn {
+  border: none;
+  background: transparent;
+  color: #0ea5e9;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}

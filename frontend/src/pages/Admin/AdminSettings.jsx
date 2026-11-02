@@ -16,6 +16,7 @@ import {
   Scroll,
   CheckCircle2,
   HardDrive,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import Layout from '../../layout/Layout';
@@ -76,6 +77,13 @@ const getSettingsGroups = (onDeleteClick, features = {}) => [
           icon={Shield}
           color="#8b5cf6"
           href="/admin/roles"
+        />
+        <SettingsCard
+          title="Sharing Settings"
+          description="Configure org-wide defaults and criteria-based sharing rules"
+          icon={Shield}
+          color="#14b8a6"
+          href="/admin/settings/sharing"
         />
         <SettingsCard
           title="Storage Usage"
@@ -173,6 +181,13 @@ const getSettingsGroups = (onDeleteClick, features = {}) => [
             href="/admin/settings/tenders-config"
           />
         )}
+        <SettingsCard
+          title="Configuration"
+          description="Company values for platform settings, such as the minimum deal value used by validation rules"
+          icon={SlidersHorizontal}
+          color="#6366f1"
+          href="/admin/settings/configuration"
+        />
         <SettingsCard
           title="Lead Approval Settings"
           description="Configure whether leads require approval before conversion to deals"

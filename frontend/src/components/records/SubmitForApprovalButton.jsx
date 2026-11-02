@@ -6,7 +6,15 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import styles from './ApprovalActions.module.css';
 
-const SubmitForApprovalButton = ({ leadId, approvalStatus, onSuccess }) => {
+const SubmitForApprovalButton = ({
+  leadId,
+  approvalStatus,
+  onSuccess,
+  // Configured button appearance (BRD 4.4 action buttons)
+  label = 'Submit for Approval',
+  variant = 'primary',
+  icon = <Send size={14} />,
+}) => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
@@ -32,12 +40,12 @@ const SubmitForApprovalButton = ({ leadId, approvalStatus, onSuccess }) => {
   return (
     <>
       <Button
-        variant="primary"
+        variant={variant}
         size="sm"
-        icon={<Send size={14} />}
+        icon={icon}
         onClick={() => setShowModal(true)}
       >
-        Submit for Approval
+        {label}
       </Button>
 
       <Modal

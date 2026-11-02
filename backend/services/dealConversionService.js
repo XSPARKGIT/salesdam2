@@ -10,7 +10,9 @@ import dealConversionEmailService from './dealConversionEmailService.js';
 import logger from '../utils/logger.js';
 
 /**
- * Convert a Deal to an Order when the deal is marked as "Closed Won"
+ * Convert a Deal to an Order. Runs from the "Convert to Order" action (BRD
+ * 4.4); which deals qualify (e.g. Stage = Closed Won) is that action's
+ * configured condition, checked before this is called.
  * - Creates a new Order record with mapped fields from the deal
  * - Copies all Deal Line Items to Order Line Items
  * - Sets the deal's is_converted and converted_date fields
@@ -26,14 +28,6 @@ export const convertDealToOrder = async (
     if (dealRecord.getField('is_converted')) {
       logger.warn(
         `Deal ${dealRecord._id} is already converted, skipping conversion`,
-      );
-      return null;
-    }
-
-    // Check if stage is 'closed_won'
-    if (dealRecord.getField('stage') !== 'closed_won') {
-      logger.warn(
-        `Deal ${dealRecord._id} stage is not 'closed_won', skipping conversion`,
       );
       return null;
     }

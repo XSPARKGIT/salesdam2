@@ -1,10 +1,11 @@
 import express from 'express';
 import multer from 'multer';
-import { listRecords, getRecord, createRecord, updateRecord, deleteRecord, bulkDelete, mergeRecords, restoreRecord, listDeletedRecords } from '../controllers/recordController.js';
+import { listRecords, getRecord, createRecord, updateRecord, deleteRecord, bulkDelete, deleteCheck, mergeRecords, restoreRecord, listDeletedRecords } from '../controllers/recordController.js';
 import { exportRecords, importRecords } from '../controllers/importExportController.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 import { checkObjectPermission } from '../middleware/permissions.js';
+import { requireReachableObject } from '../services/objectAccessService.js';
 
 const IMPORT_MIMES = new Set([
   'application/vnd.ms-excel',
@@ -28,11 +29,16 @@ import { asyncHandler, sendSuccess, AppError, paginate } from '../utils/errors.j
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import { validateRecord, evaluateFormulaRules, buildSampleContext as buildCtx, buildFieldKindMap } from '../services/validationEngine.js';
-import { validateFormula } from '../services/formulaParser.js';
+import { validateFormula, configKeysIn } from '../services/formulaParser.js';
+import configurationService from '../services/configurationService.js';
 
 const router = express.Router();
 
 router.use(requireAuth, enforceTenant);
+
+// Workspace isolation: records are only reachable for the active workspace's
+// objects (and the objects related to them by lookups).
+router.param('objectApiName', requireReachableObject);
 
 // ─── POST /records/validate ───────────────────────────────────────────────────
 // Validate record data against field metadata without persisting.
@@ -94,7 +100,9 @@ router.post('/validate', asyncHandler(async (req, res) => {
 // which fields it references.
 
 router.post('/validate-formula', asyncHandler(async (req, res) => {
-  const { objectApiName, expression, returnType, excludeFieldApiName } = req.body;
+  // context: 'rule' for a validation rule (must be true/false; ISCHANGED
+  // allowed), anything else for a formula field (BRD 6.1).
+  const { objectApiName, expression, returnType, excludeFieldApiName, context } = req.body;
   if (!expression) throw new AppError('expression is required.', 400);
   if (!objectApiName) throw new AppError('objectApiName is required.', 400);
 
@@ -108,10 +116,28 @@ router.post('/validate-formula', asyncHandler(async (req, res) => {
     ? fields.filter((f) => f.apiName !== excludeFieldApiName)
     : fields;
 
+  const isRule = context === 'rule' || context === 'approval';
   const result = validateFormula(expression, buildCtx(contextFields), {
-    expectedType: returnType || undefined,
+    expectedType: isRule ? undefined : returnType || undefined,
+    asCondition: isRule,
     fieldKinds: buildFieldKindMap(contextFields),
+    // Approval entry criteria can't use ISCHANGED (nothing to compare with) but can read CONFIG().
+    allowRecordState: context === 'rule',
+    allowConfig: isRule,
   });
+
+  // BRD 6.2: a rule's CONFIG("key") must name an existing setting.
+  if (isRule && result.valid) {
+    const keys = configKeysIn(expression);
+    if (keys.length) {
+      const found = await configurationService.resolveMany(keys, req.tenantId);
+      const missing = keys.find((k) => !(k in found));
+      if (missing) {
+        result.valid = false;
+        result.error = `CONFIG("${missing}") is not a configuration setting.`;
+      }
+    }
+  }
 
   sendSuccess(res, { data: result });
 }));
@@ -147,6 +173,7 @@ router.put('/:objectApiName/:id', checkObjectPermission('update'), updateRecord)
 router.patch('/:objectApiName/:id', checkObjectPermission('update'), updateRecord);
 router.delete('/:objectApiName/:id', checkObjectPermission('delete'), deleteRecord);
 router.post('/:objectApiName/bulk-delete', checkObjectPermission('delete'), bulkDelete);
+router.post('/:objectApiName/delete-check', checkObjectPermission('delete'), deleteCheck);
 router.post('/:objectApiName/merge', checkObjectPermission('delete'), mergeRecords);
 
 export default router;
