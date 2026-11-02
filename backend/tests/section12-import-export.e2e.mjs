@@ -10,6 +10,7 @@ import User from '../models/User.js';
 import Role from '../models/Role.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
+import Automation from '../models/Automation.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import { seedWorkspace } from './helpers/workspace.mjs';
 
@@ -49,6 +50,21 @@ try {
   for (const f of [{ apiName: 'name', label: 'Name', type: 'text', isRequired: true }, { apiName: 'type', label: 'Type', type: 'text' }, { apiName: 'premium', label: 'Premium', type: 'number' }, { apiName: 'calc', label: 'Calc', type: 'formula', formula: 'premium * 2' }]) {
     await FieldMeta.create({ tenantId: tenant._id, objectId: obj._id, objectApiName: 'policy', name: f.label, ...f });
   }
+  // Flow (automation) that marks imported records
+  await Automation.create({
+    tenantId: tenant._id,
+    name: 'Mark Flow Ran',
+    apiName: `mark_flow_ran_${RUN}`,
+    type: 'record_triggered',
+    isActive: true,
+    isValid: true,
+    trigger: { objectApiName: 'policy', events: ['create'], runWhen: 'always' },
+    nodes: [
+      { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {}, nextNodes: [{ nodeId: 'update', condition: null, label: '' }] },
+      { id: 'update', type: 'action_update_record', label: 'Mark flow ran', position: { x: 100, y: 0 }, config: { fields: { flow_ran: 'yes' } }, nextNodes: [{ nodeId: 'end', condition: null, label: '' }] },
+      { id: 'end', type: 'end', label: 'End', position: { x: 200, y: 0 }, config: {}, nextNodes: [] },
+    ],
+  });
   await seedWorkspace(tenant._id, [admin._id], ['policy']);
   const login = await loginCookie(admin.username);
   const C = login.cookie;
@@ -74,6 +90,11 @@ try {
   const created = await DynamicRecord.findOne({ tenantId: tenant._id, objectApiName: 'policy', 'data.name': 'GoodRow' }).lean();
   check('imported value persisted', !!created && created.data.premium === 200);
 
+  // Wait for non-blocking Flow execution
+  await new Promise((r) => setTimeout(r, 2000));
+  const createdAfterFlow = await DynamicRecord.findOne({ tenantId: tenant._id, objectApiName: 'policy', 'data.name': 'GoodRow' }).lean();
+  check('flow executes on normal import', createdAfterFlow?.data?.flow_ran === 'yes', `flow_ran=${createdAfterFlow?.data?.flow_ran}`);
+
   // Bypass import with invalid row should succeed
   const csvBypass = 'name,type,premium\nBypassRow,Funeral,50\n';
   const fdBypass = new FormData();
@@ -83,6 +104,10 @@ try {
   fdBypass.append('bypassValidation', 'true');
   const impBypass = await req('/api/v1/admin/import', { method: 'POST', cookie: C, formData: fdBypass });
   check('admin bypass imports invalid row', impBypass.status === 200 && (impBypass.json?.data?.created ?? 0) === 1, `HTTP ${impBypass.status} created=${impBypass.json?.data?.created}`);
+
+  await new Promise((r) => setTimeout(r, 2000));
+  const bypassed = await DynamicRecord.findOne({ tenantId: tenant._id, objectApiName: 'policy', 'data.name': 'BypassRow' }).lean();
+  check('flow skipped on bypass import', bypassed?.data?.flow_ran !== 'yes', `flow_ran=${bypassed?.data?.flow_ran}`);
 
   // Non-admin bypass (create non-admin user)
   const nonAdminRole = await Role.create({ tenantId: tenant._id, name: 'rep', label: 'Rep', dataAccess: 'own', objectPermissions: [{ objectApiName: 'policy', canCreate: true, canRead: true, canUpdate: true, canDelete: true, canExport: true, canImport: true }], appPermissions: { canImportData: true, canExportData: true } });
