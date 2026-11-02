@@ -202,4 +202,40 @@ router.get('/:id/usage', asyncHandler(async (req, res) => {
   });
 }));
 
+// POST /api/api-keys/:id/rotate — create replacement key and revoke old one
+router.post('/:id/rotate', asyncHandler(async (req, res) => {
+  const oldKey = await ApiKey.findOne({ _id: req.params.id, tenantId: req.tenantId });
+  if (!oldKey) throw new AppError('API key not found.', 404);
+  if (!oldKey.isActive) throw new AppError('Cannot rotate a revoked key.', 400);
+
+  const { raw, prefix, hash } = ApiKey.generateKey();
+  const newKey = await ApiKey.create({
+    tenantId: oldKey.tenantId,
+    name: `${oldKey.name} (rotated)`,
+    description: oldKey.description,
+    keyHash: hash,
+    keyPrefix: prefix,
+    scopes: oldKey.scopes,
+    expiresAt: oldKey.expiresAt,
+    ipWhitelist: oldKey.ipWhitelist,
+    allowedObjects: oldKey.allowedObjects,
+    createdBy: req.user._id,
+    isActive: true,
+  });
+
+  // Revoke old key
+  oldKey.isActive = false;
+  oldKey.revokedAt = new Date();
+  oldKey.revokedBy = req.user._id;
+  await oldKey.save();
+
+  sendSuccess(res, {
+    data: {
+      ...newKey.toObject(),
+      keyHash: undefined,
+      rawKey: raw,
+      rotatedFrom: oldKey._id,
+    },
+  }, 'API key rotated. Copy the new key now — it will not be shown again.', 201);
+}));
 export default router;

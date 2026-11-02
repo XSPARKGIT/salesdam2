@@ -44,6 +44,16 @@ const handleIncoming = asyncHandler(async (req, res) => {
     }
   }
 
+  // Idempotency / duplicate event protection
+  const idempotencyKey = req.headers['x-idempotency-key'] || req.body?.idempotencyKey;
+  if (idempotencyKey) {
+    const IdempotencyKey = (await import('../models/IdempotencyKey.js')).default;
+    const existing = await IdempotencyKey.findOne({ tenantId, key: idempotencyKey });
+    if (existing) {
+      return sendSuccess(res, { data: existing.result || { duplicate: true } }, 'Duplicate event — already processed');
+    }
+  }
+
   const { objectApiName, action = 'create', data = {}, recordId, triggerFlow = true, customCode, eventType = 'generic', source = 'external' } = req.body || {};
 
   const log = await IncomingWebhookLog.create({ tenantId, source, eventType, payload: req.body, action, objectApiName, status: 'received' });
@@ -102,6 +112,16 @@ const handleIncoming = asyncHandler(async (req, res) => {
     log.status = 'processed';
     log.processedAt = new Date();
     await log.save();
+
+    // Store idempotency key
+    if (idempotencyKey) {
+      try {
+        const IdempotencyKey = (await import('../models/IdempotencyKey.js')).default;
+        await IdempotencyKey.create({ tenantId, key: idempotencyKey, source: 'webhook', result: result || {}, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) });
+      } catch (e) {
+        // Duplicate key — already handled above
+      }
+    }
 
     sendSuccess(res, { data: result }, 'Webhook processed');
   } catch (err) {
