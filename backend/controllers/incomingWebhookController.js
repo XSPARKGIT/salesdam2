@@ -23,6 +23,27 @@ const assertRulesPass = async (tenantId, objectApiName, data, prev) => {
 
 const handleIncoming = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId;
+
+  // HMAC signature validation (if a webhook secret is configured for this tenant)
+  const webhookSecret = await (async () => {
+    try {
+      const { default: configurationService } = await import('../services/configurationService.js');
+      return await configurationService.resolve('integration.webhook.secret', tenantId);
+    } catch { return ''; }
+  })();
+
+  if (webhookSecret) {
+    const signature = req.headers['x-webhook-signature'] || req.headers['x-hub-signature-256'];
+    if (!signature) {
+      throw new AppError('Missing webhook signature.', 401);
+    }
+    const crypto = (await import('crypto')).default;
+    const expected = `sha256=${crypto.createHmac('sha256', webhookSecret).update(JSON.stringify(req.body)).digest('hex')}`;
+    if (signature !== expected) {
+      throw new AppError('Invalid webhook signature.', 401);
+    }
+  }
+
   const { objectApiName, action = 'create', data = {}, recordId, triggerFlow = true, customCode, eventType = 'generic', source = 'external' } = req.body || {};
 
   const log = await IncomingWebhookLog.create({ tenantId, source, eventType, payload: req.body, action, objectApiName, status: 'received' });

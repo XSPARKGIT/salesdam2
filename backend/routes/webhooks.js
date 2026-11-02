@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import axios from 'axios';
 import Webhook from '../models/Webhook.js';
+import WebhookDeliveryLog from '../models/WebhookDeliveryLog.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 import { checkAppPermission } from '../middleware/permissions.js';
@@ -65,10 +66,44 @@ router.post('/:id/test', checkAppPermission('canManageWebhooks'), asyncHandler(a
       },
       timeout: 10000,
     });
+
+    // Log delivery
+    await WebhookDeliveryLog.create({
+      tenantId: req.tenantId,
+      webhookId: webhook._id,
+      event: 'test',
+      url: webhook.url,
+      payload,
+      status: 'success',
+      httpStatus: response.status,
+      attempt: 1,
+      maxAttempts: webhook.retryCount || 3,
+      completedAt: new Date(),
+    });
+
     sendSuccess(res, { data: { status: response.status, ok: true } }, 'Webhook test successful');
   } catch (err) {
+    // Log failed delivery
+    await WebhookDeliveryLog.create({
+      tenantId: req.tenantId,
+      webhookId: webhook._id,
+      event: 'test',
+      url: webhook.url,
+      payload,
+      status: 'failed',
+      error: err.message,
+      attempt: 1,
+      maxAttempts: webhook.retryCount || 3,
+    });
+
     sendSuccess(res, { data: { error: err.message, ok: false } }, 'Webhook test failed');
   }
+}));
+
+// Delivery logs
+router.get('/:id/deliveries', checkAppPermission('canManageWebhooks'), asyncHandler(async (req, res) => {
+  const logs = await WebhookDeliveryLog.find({ tenantId: req.tenantId, webhookId: req.params.id }).sort({ createdAt: -1 }).limit(50);
+  sendSuccess(res, { data: logs });
 }));
 
 export default router;
