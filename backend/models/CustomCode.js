@@ -11,7 +11,7 @@ const versionSchema = new mongoose.Schema(
     inputs: { type: mongoose.Schema.Types.Mixed, default: {} },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     createdAt: { type: Date, default: Date.now },
-    status: { type: String, enum: ['draft', 'active', 'archived'], default: 'draft' },
+    status: { type: String, enum: ['draft', 'test', 'active', 'inactive', 'archived'], default: 'draft' },
     changeNote: { type: String, default: '' },
   },
   { _id: false },
@@ -21,6 +21,7 @@ const customCodeSchema = new mongoose.Schema(
   {
     tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
     name: { type: String, required: true, trim: true },
+    apiName: { type: String, trim: true, lowercase: true },
     description: { type: String, default: '' },
     // Currently active version number
     activeVersion: { type: Number, default: null },

@@ -35,8 +35,8 @@ const activate = asyncHandler(async (req, res) => {
 });
 
 const execute = asyncHandler(async (req, res) => {
-  const { inputs, record } = req.body || {};
-  const result = await customCodeService.executeCustomCode(req.tenantId, req.params.name, inputs || {}, { record });
+  const { inputs, record, testMode } = req.body || {};
+  const result = await customCodeService.executeCustomCode(req.tenantId, req.params.name, inputs || {}, { record, testMode: !!testMode, userId: req.user._id });
   sendSuccess(res, { data: result }, 'Executed');
 });
 

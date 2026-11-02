@@ -9,7 +9,7 @@ export default function CustomCodePage() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('result = inputs.x + 1;');
   const [inputs, setInputs] = useState('{}');
-  const [execResult, setExecResult] = useState(null);
+  const [testMode, setTestMode] = useState(false);
   const [selected, setSelected] = useState(null);
 
   const load = async () => {
@@ -51,11 +51,21 @@ export default function CustomCodePage() {
     }
   };
 
+  const restore = async (n, v) => {
+    try {
+      await api.post(`/custom-code/${n}/restore`, { version: v });
+      toast.success(`v${v} restored`);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Restore failed');
+    }
+  };
+
   const execute = async (n) => {
     try {
       let parsedInputs = {};
       try { parsedInputs = JSON.parse(inputs); } catch {}
-      const res = await api.post(`/custom-code/${n}/execute`, { inputs: parsedInputs });
+      const res = await api.post(`/custom-code/${n}/execute`, { inputs: parsedInputs, testMode });
       setExecResult(res.data?.data);
       toast.success('Executed');
     } catch (e) {
@@ -84,6 +94,10 @@ export default function CustomCodePage() {
             <input placeholder="Name" value={name} onChange={e=>setName(e.target.value)} />
             <textarea rows={6} value={code} onChange={e=>setCode(e.target.value)} style={{ fontFamily: 'monospace' }} />
             <input placeholder='Inputs JSON (e.g. {"x":5})' value={inputs} onChange={e=>setInputs(e.target.value)} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <input type="checkbox" checked={testMode} onChange={e=>setTestMode(e.target.checked)} />
+              Test mode (disable writes)
+            </label>
             <Button onClick={create}>Create (v1 draft)</Button>
           </div>
         </section>
@@ -102,6 +116,11 @@ export default function CustomCodePage() {
                     {(c.versions||[]).filter(v=>v.status!=='active').map(v=>(
                       <Button key={v.version} size="sm" onClick={()=>activate(c.name,v.version)} style={{ marginRight: 4 }}>
                         Activate v{v.version}
+                      </Button>
+                    ))}
+                    {(c.versions||[]).map(v=>(
+                      <Button key={`r${v.version}`} size="sm" variant="secondary" onClick={()=>restore(c.name,v.version)} style={{ marginRight: 4 }}>
+                        Restore v{v.version}
                       </Button>
                     ))}
                     <Button size="sm" onClick={()=>execute(c.name)} style={{ marginLeft: 4 }}>Execute</Button>

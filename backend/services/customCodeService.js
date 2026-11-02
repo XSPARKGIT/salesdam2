@@ -5,6 +5,7 @@ import { AppError } from '../utils/errors.js';
 
 const TIMEOUT_MS = 5000;
 const MAX_EXECUTIONS = 50;
+const _runningDepth = new Map();
 
 /**
  * Get the active version's code for a named custom code snippet.
@@ -23,57 +24,68 @@ export const getActiveCode = async (tenantId, name) => {
  * Returns { success, output, error, durationMs }.
  */
 export const executeCustomCode = async (tenantId, name, inputs = {}, context = {}) => {
-  const { doc, version } = await getActiveCode(tenantId, name);
+  const key = `${tenantId}:${name}`;
+  const currentDepth = _runningDepth.get(key) || 0;
+  if (currentDepth >= 1) {
+    throw new AppError(`Custom code "${name}" recursion blocked (depth ${currentDepth}).`, 429);
+  }
+  _runningDepth.set(key, currentDepth + 1);
+
   const startedAt = new Date();
   let success = true;
   let output = null;
   let error = null;
 
+  const testMode = Boolean(context?.testMode);
+  let doc, version;
   try {
-    const sandbox = {
-      inputs: inputs || {},
-      record: context.record || null,
-      ctx: context.ctx || {},
-      tenantId: String(tenantId),
-      console: {
-        log: (...a) => logger.info(`[customCode:${name}] ${a.join(' ')}`),
-        error: (...a) => logger.error(`[customCode:${name}] ${a.join(' ')}`),
-        warn: (...a) => logger.warn(`[customCode:${name}] ${a.join(' ')}`),
-      },
-      result: undefined,
-      // Controlled data access helpers (tenant-scoped)
-      readRecord: async (objectApiName, id) => {
-        const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
-        const rec = await DynamicRecord.findOne({ _id: id, tenantId, objectApiName, isDeleted: false }).lean();
-        if (!rec) return null;
-        return { id: rec._id, ...Object.fromEntries(rec.data instanceof Map ? rec.data : Object.entries(rec.data || {})) };
-      },
-      queryRecords: async (objectApiName, filter = {}, limit = 10) => {
-        const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
-        const q = { tenantId, objectApiName, isDeleted: false };
-        Object.entries(filter || {}).forEach(([k, v]) => { q[`data.${k}`] = v; });
-        const recs = await DynamicRecord.find(q).limit(Math.min(parseInt(limit) || 10, 100)).lean();
-        return recs.map((r) => ({ id: r._id, ...Object.fromEntries(r.data instanceof Map ? r.data : Object.entries(r.data || {})) }));
-      },
-      createRecord: async (objectApiName, data = {}) => {
-        const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
-        const ObjectMeta = (await import('../models/ObjectMeta.js')).default;
-        const obj = await ObjectMeta.findOne({ tenantId, apiName: objectApiName });
-        if (!obj) throw new Error(`Object ${objectApiName} not found`);
-        const rec = await DynamicRecord.create({ tenantId, objectId: obj._id, objectApiName, ownerId: context.userId || null, createdBy: context.userId || null, lastModifiedBy: context.userId || null, data });
-        Object.entries(data || {}).forEach(([k, v]) => rec.setField(k, v));
-        await rec.save();
-        return { id: rec._id };
-      },
-      updateRecord: async (objectApiName, id, data = {}) => {
-        const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
-        const rec = await DynamicRecord.findOne({ _id: id, tenantId, objectApiName, isDeleted: false });
-        if (!rec) throw new Error('Record not found');
-        Object.entries(data || {}).forEach(([k, v]) => rec.setField(k, v));
-        await rec.save();
-        return { id: rec._id };
-      },
-    };
+    ({ doc, version } = await getActiveCode(tenantId, name));
+  const sandbox = {
+    inputs: inputs || {},
+    record: context.record || null,
+    ctx: context.ctx || {},
+    tenantId: String(tenantId),
+    console: {
+      log: (...a) => logger.info(`[customCode:${name}] ${a.join(' ')}`),
+      error: (...a) => logger.error(`[customCode:${name}] ${a.join(' ')}`),
+      warn: (...a) => logger.warn(`[customCode:${name}] ${a.join(' ')}`),
+    },
+    result: undefined,
+    // Controlled data access helpers (tenant-scoped)
+    readRecord: async (objectApiName, id) => {
+      const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
+      const rec = await DynamicRecord.findOne({ _id: id, tenantId, objectApiName, isDeleted: false }).lean();
+      if (!rec) return null;
+      return { id: rec._id, ...Object.fromEntries(rec.data instanceof Map ? rec.data : Object.entries(rec.data || {})) };
+    },
+    queryRecords: async (objectApiName, filter = {}, limit = 10) => {
+      const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
+      const q = { tenantId, objectApiName, isDeleted: false };
+      Object.entries(filter || {}).forEach(([k, v]) => { q[`data.${k}`] = v; });
+      const recs = await DynamicRecord.find(q).limit(Math.min(parseInt(limit) || 10, 100)).lean();
+      return recs.map((r) => ({ id: r._id, ...Object.fromEntries(r.data instanceof Map ? r.data : Object.entries(r.data || {})) }));
+    },
+    createRecord: async (objectApiName, data = {}) => {
+      if (testMode) throw new Error('Test mode: createRecord is disabled to prevent production changes.');
+      const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
+      const ObjectMeta = (await import('../models/ObjectMeta.js')).default;
+      const obj = await ObjectMeta.findOne({ tenantId, apiName: objectApiName });
+      if (!obj) throw new Error(`Object ${objectApiName} not found`);
+      const rec = await DynamicRecord.create({ tenantId, objectId: obj._id, objectApiName, ownerId: context.userId || null, createdBy: context.userId || null, lastModifiedBy: context.userId || null, data });
+      Object.entries(data || {}).forEach(([k, v]) => rec.setField(k, v));
+      await rec.save();
+      return { id: rec._id };
+    },
+    updateRecord: async (objectApiName, id, data = {}) => {
+      if (testMode) throw new Error('Test mode: updateRecord is disabled to prevent production changes.');
+      const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
+      const rec = await DynamicRecord.findOne({ _id: id, tenantId, objectApiName, isDeleted: false });
+      if (!rec) throw new Error('Record not found');
+      Object.entries(data || {}).forEach(([k, v]) => rec.setField(k, v));
+      await rec.save();
+      return { id: rec._id };
+    },
+  };
 
     const script = new vm.Script(version.code, { filename: `${name}.js` });
     const ctx = vm.createContext(sandbox);
@@ -84,6 +96,10 @@ export const executeCustomCode = async (tenantId, name, inputs = {}, context = {
     success = false;
     error = err.message || String(err);
     logger.error(`Custom code "${name}" execution failed: ${error}`);
+  } finally {
+    const d = (_runningDepth.get(key) || 1) - 1;
+    if (d <= 0) _runningDepth.delete(key);
+    else _runningDepth.set(key, d);
   }
 
   const finishedAt = new Date();
