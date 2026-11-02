@@ -46,4 +46,11 @@ const remove = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: null }, 'Deleted');
 });
 
-export { list, get, create, addVersion, activate, execute, remove };
+const restore = asyncHandler(async (req, res) => {
+  const { version } = req.body || {};
+  if (!version) throw new AppError('version is required.', 400);
+  const doc = await customCodeService.restoreVersion(req.tenantId, req.params.name, Number(version), req.user);
+  sendSuccess(res, { data: doc }, 'Version restored');
+});
+
+export { list, get, create, addVersion, activate, execute, remove, restore };

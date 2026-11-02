@@ -41,6 +41,38 @@ export const executeCustomCode = async (tenantId, name, inputs = {}, context = {
         warn: (...a) => logger.warn(`[customCode:${name}] ${a.join(' ')}`),
       },
       result: undefined,
+      // Controlled data access helpers (tenant-scoped)
+      readRecord: async (objectApiName, id) => {
+        const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
+        const rec = await DynamicRecord.findOne({ _id: id, tenantId, objectApiName, isDeleted: false }).lean();
+        if (!rec) return null;
+        return { id: rec._id, ...Object.fromEntries(rec.data instanceof Map ? rec.data : Object.entries(rec.data || {})) };
+      },
+      queryRecords: async (objectApiName, filter = {}, limit = 10) => {
+        const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
+        const q = { tenantId, objectApiName, isDeleted: false };
+        Object.entries(filter || {}).forEach(([k, v]) => { q[`data.${k}`] = v; });
+        const recs = await DynamicRecord.find(q).limit(Math.min(parseInt(limit) || 10, 100)).lean();
+        return recs.map((r) => ({ id: r._id, ...Object.fromEntries(r.data instanceof Map ? r.data : Object.entries(r.data || {})) }));
+      },
+      createRecord: async (objectApiName, data = {}) => {
+        const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
+        const ObjectMeta = (await import('../models/ObjectMeta.js')).default;
+        const obj = await ObjectMeta.findOne({ tenantId, apiName: objectApiName });
+        if (!obj) throw new Error(`Object ${objectApiName} not found`);
+        const rec = await DynamicRecord.create({ tenantId, objectId: obj._id, objectApiName, ownerId: context.userId || null, createdBy: context.userId || null, lastModifiedBy: context.userId || null, data });
+        Object.entries(data || {}).forEach(([k, v]) => rec.setField(k, v));
+        await rec.save();
+        return { id: rec._id };
+      },
+      updateRecord: async (objectApiName, id, data = {}) => {
+        const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
+        const rec = await DynamicRecord.findOne({ _id: id, tenantId, objectApiName, isDeleted: false });
+        if (!rec) throw new Error('Record not found');
+        Object.entries(data || {}).forEach(([k, v]) => rec.setField(k, v));
+        await rec.save();
+        return { id: rec._id };
+      },
     };
 
     const script = new vm.Script(version.code, { filename: `${name}.js` });
@@ -117,4 +149,21 @@ export const activateVersion = async (tenantId, name, version, user) => {
   return doc;
 };
 
-export default { getActiveCode, executeCustomCode, createCustomCode, addVersion, activateVersion };
+/**
+ * Restore a previous version as the active version.
+ */
+export const restoreVersion = async (tenantId, name, version, user) => {
+  const doc = await CustomCode.findOne({ tenantId, name });
+  if (!doc) throw new AppError(`Custom code "${name}" not found.`, 404);
+  const v = doc.versions.find((x) => x.version === version);
+  if (!v) throw new AppError(`Version ${version} not found.`, 404);
+  // Archive current active
+  doc.versions.forEach((x) => { if (x.status === 'active') x.status = 'archived'; });
+  v.status = 'active';
+  doc.activeVersion = version;
+  doc.lastModifiedBy = user?._id;
+  await doc.save();
+  return doc;
+};
+
+export default { getActiveCode, executeCustomCode, createCustomCode, addVersion, activateVersion, restoreVersion };

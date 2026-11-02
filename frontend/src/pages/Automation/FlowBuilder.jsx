@@ -39,6 +39,7 @@ import {
   Play,
   Navigation,
   FileText,
+  FileCode,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -177,6 +178,12 @@ const STEP_TYPES = {
     icon: <Database size={16} />,
     color: '#6366f1',
     group: 'Record',
+  },
+  custom_code: {
+    label: 'Custom Code',
+    icon: <FileCode size={16} />,
+    color: '#7c3aed',
+    group: 'Actions',
   },
   delete_records: {
     label: 'Delete Records',
