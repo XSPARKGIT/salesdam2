@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 import { checkAppPermission } from '../middleware/permissions.js';
 import { asyncHandler, sendSuccess, AppError, paginate } from '../utils/errors.js';
+import { renderPdfTemplate } from '../services/pdfRenderService.js';
 import { audit } from '../utils/auditLogger.js';
 
 const router = express.Router();
@@ -104,6 +105,15 @@ router.post('/:id/duplicate', checkAppPermission('canManageDocumentTemplates'), 
     blocks:       src.blocks,
   });
   sendSuccess(res, { data: copy }, 'PDF template duplicated', 201);
+}));
+
+// Render a PDF from a template using actual record data
+router.get('/:id/render', asyncHandler(async (req, res) => {
+  const { recordId } = req.query;
+  const buffer = await renderPdfTemplate(req.tenantId, req.params.id, recordId);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="document.pdf"`);
+  res.send(buffer);
 }));
 
 export default router;
