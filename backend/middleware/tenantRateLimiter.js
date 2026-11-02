@@ -3,7 +3,7 @@ const tenantRateLimits = new Map();
 
 export const tenantRateLimiter = (maxRequests = 100, windowMs = 60000) => {
   return (req, res, next) => {
-    const tenantId = req.tenantId || req.headers['x-tenant-id'] || 'unknown';
+    const tenantId = req.tenantId || 'unknown';
     const key = `${tenantId}`;
     const now = Date.now();
     const windowStart = now - windowMs;
@@ -24,5 +24,3 @@ export const tenantRateLimiter = (maxRequests = 100, windowMs = 60000) => {
 };
 
 export default tenantRateLimiter;
-EOF
-echo "created"

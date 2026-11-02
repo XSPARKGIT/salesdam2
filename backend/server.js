@@ -47,6 +47,16 @@ approvalProcessService.ensureLeadApprovalProcesses().catch((err) =>
 // Scheduled / time-based flows (BRD 7.1), e.g. "3 days before Due Date".
 startFlowScheduler();
 
+// Webhook retry worker (BRD 17.5) — process pending deliveries every 30s.
+setInterval(async () => {
+  try {
+    const { default: webhookRetryService } = await import('./services/webhookRetryService.js');
+    await webhookRetryService.processWebhookRetries();
+  } catch (err) {
+    logger.error(`Webhook retry worker error: ${err.message}`);
+  }
+}, 30000);
+
 app.listen(PORT, () => {
   logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });

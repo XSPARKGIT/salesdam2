@@ -16,10 +16,11 @@ import ApiKeyUsageLog from '../models/ApiKeyUsageLog.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 import { checkAppPermission } from '../middleware/permissions.js';
+import { tenantRateLimiter } from '../middleware/tenantRateLimiter.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 
 const router = express.Router();
-router.use(requireAuth, enforceTenant, checkAppPermission('canManageApiKeys'));
+router.use(requireAuth, enforceTenant, tenantRateLimiter(100, 60000), checkAppPermission('canManageApiKeys'));
 
 // GET /api/api-keys — list keys (no hashes returned)
 router.get('/', asyncHandler(async (req, res) => {
