@@ -5,7 +5,7 @@ import * as LucideIcons from 'lucide-react';
 import { LayoutDashboard, ScrollText, AlertTriangle, Inbox, PieChart, FileBarChart } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getMyPendingApprovals } from '../../services/api/approvals';
-import { useAuth } from '../../hooks/useAuth';
+import { useBranding } from '../../hooks/useBranding';
 import { useAppContext } from '../../context/AppContext';
 import { useTenantContext } from '../../context/TenantContext';
 import SidebarHeader from './SidebarHeader';
@@ -33,6 +33,7 @@ const Sidebar = () => {
   const tenantFeatures = tenant?.features || {};
   const { sidebarCollapsed, toggleSidebar } = useAppContext();
   const { objects, loadingObjects } = useTenantContext();
+  const branding = useBranding();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -136,6 +137,7 @@ const Sidebar = () => {
   const displaySlug = activeWorkspace?.slug || tenant?.slug || '';
   const displayColor =
     activeWorkspace?.color ||
+    branding.primaryColor ||
     tenant?.settings?.primaryColor ||
     'var(--color-primary)';
   const DisplayIcon = LucideIcons[activeWorkspace?.icon] || null;
