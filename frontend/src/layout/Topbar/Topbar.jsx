@@ -187,6 +187,17 @@ const Topbar = () => {
   return (
     <header className={`${styles.topbar} ${sidebarCollapsed ? styles.collapsed : ''}`}>
       <div className={styles.left}>
+        {branding?.logoUrl ? (
+          <img
+            src={branding.logoUrl}
+            alt={branding.companyName}
+            style={{ height: 24, marginRight: 8 }}
+          />
+        ) : (
+          <span style={{ fontWeight: 600, marginRight: 12, color: 'var(--color-primary)' }}>
+            {branding?.companyName || 'Salesdam'}
+          </span>
+        )}
         <button
           className={styles.mobileMenuBtn}
           onClick={toggleSidebar}

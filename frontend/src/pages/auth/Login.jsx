@@ -98,7 +98,10 @@ const Login = () => {
         <div className={styles.leftPanel}>
           <div className={styles.welcomeContent}>
             <div className={styles.brandSection}>
-              <div className={styles.logoText}>Salesdam</div>
+              {branding?.loginLogoUrl ? (
+                <img src={branding.loginLogoUrl} alt={branding.companyName} className={styles.avatar} style={{ marginBottom: 8 }} />
+              ) : null}
+              <div className={styles.logoText}>{branding?.companyName || 'Salesdam'}</div>
 
               <h1 className={styles.title}>Welcome Back!</h1>
 
