@@ -37,7 +37,7 @@ const getSystemStats = asyncHandler(async (req, res) => {
  * GET /api/admin/logs
  */
 const getAuditLogs = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 100, userId, action } = req.query;
+  const { page = 1, limit = 100, userId, action, objectApiName, resourceId, from, to } = req.query;
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const query = { tenantId: req.tenantId };
@@ -49,6 +49,13 @@ const getAuditLogs = asyncHandler(async (req, res) => {
     query.userId = userId;
   }
   if (action) query.action = action;
+  if (objectApiName) query.objectApiName = objectApiName;
+  if (resourceId) query.resourceId = resourceId;
+  if (from || to) {
+    query.createdAt = {};
+    if (from) query.createdAt.$gte = new Date(from);
+    if (to) query.createdAt.$lte = new Date(to);
+  }
 
   const [logs, total] = await Promise.all([
     AuditLog.find(query)

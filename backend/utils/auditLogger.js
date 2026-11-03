@@ -2,8 +2,23 @@ import AuditLog from '../models/AuditLog.js';
 import logger from './logger.js';
 
 /**
- * Log an audit event. Non-blocking - errors are swallowed.
+ * Redact sensitive values from audit details.
  */
+const REDACT_KEYS = /password|secret|token|apiKey|api_key|keyHash|authorization/i;
+const redact = (obj) => {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(redact);
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (REDACT_KEYS.test(k)) {
+      out[k] = '[REDACTED]';
+    } else {
+      out[k] = redact(v);
+    }
+  }
+  return out;
+};
 const audit = async (params) => {
   try {
     const {
@@ -30,7 +45,7 @@ const audit = async (params) => {
       resource,
       resourceId: resourceId ? resourceId.toString() : undefined,
       objectApiName,
-      details: details ?? metadata,
+      details: redact(details ?? metadata),
       ipAddress: req?.ip,
       userAgent: req?.headers?.['user-agent'],
       sessionId: req?.session?.id,
