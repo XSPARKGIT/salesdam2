@@ -72,7 +72,7 @@ export default function Deployments() {
       load();
     } catch (e) {
       toast.dismiss(toastId);
-      toast.error(e.response?.data?.message || 'Clone failed');
+      toast.error(e.message || 'Clone failed');
     } finally { setLoading(false); }
   };
 
@@ -87,11 +87,10 @@ export default function Deployments() {
       setComponents([]);
       load();
     } catch (e) {
-      const msg = e.response?.data?.message || 'Create failed';
-      if (e.response?.status === 409) {
+      if (e.status === 409) {
         toast.error('A change set with this name already exists. Choose a different name.');
       } else {
-        toast.error(msg);
+        toast.error(e.message || 'Create failed');
       }
     } finally { setLoading(false); }
   };
@@ -104,7 +103,7 @@ export default function Deployments() {
       toast.success(res.data?.message || 'Validated');
       load();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Validation failed');
+      toast.error(e.message || 'Validation failed');
     }
   };
 
@@ -115,7 +114,7 @@ export default function Deployments() {
       toast.success('Deployed');
       load();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Deploy failed');
+      toast.error(e.message || 'Deploy failed');
     }
   };
 
@@ -129,7 +128,7 @@ export default function Deployments() {
       toast.success('Rolled back');
       load();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Rollback failed');
+      toast.error(e.message || 'Rollback failed');
     }
   };
 
