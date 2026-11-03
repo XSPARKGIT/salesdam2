@@ -63,6 +63,33 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
   if (!file) throw new AppError('file is required.', 400);
   if (!ALLOWED_MIMES.has(file.mimetype)) throw new AppError('Unsupported file type.', 400);
 
+  // Enforce configured max file size (from TenantConfiguration or default 10MB)
+  const { default: configurationService } = await import('../services/configurationService.js');
+  const maxFileSizeMB = await configurationService.resolve('files.max_file_size_mb', req.tenantId, 10);
+  const maxBytes = maxFileSizeMB * 1024 * 1024;
+  if (file.size > maxBytes) {
+    throw new AppError(`File exceeds maximum allowed size of ${maxFileSizeMB} MB.`, 400);
+  }
+
+  // Enforce configured allowed types
+  const allowedTypes = await configurationService.resolve('files.allowed_types', req.tenantId, 'image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain');
+  const allowedSet = new Set(String(allowedTypes).split(',').map((t) => t.trim()).filter(Boolean));
+  if (!allowedSet.has(file.mimetype)) {
+    throw new AppError(`File type "${file.mimetype}" is not permitted.`, 400);
+  }
+
+  // Enforce tenant storage limit
+  const Tenant = (await import('../models/Tenant.js')).default;
+  const tenant = await Tenant.findById(req.tenantId);
+  if (tenant) {
+    const allocatedMB = (tenant.limits?.storageGB || 1) * 1024;
+    const usedMB = tenant.usage?.storageUsedMB || 0;
+    const fileMB = file.size / (1024 * 1024);
+    if (usedMB + fileMB > allocatedMB) {
+      throw new AppError('Tenant storage limit exceeded.', 400);
+    }
+  }
+
   const name = sanitizeName(file.originalname);
   const data = file.buffer.toString('base64');
   const doc = await File.create({
@@ -74,8 +101,23 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
     sizeBytes: file.size,
     relatedTo: { objectApiName, recordId },
   });
+
+  // Update tenant storage usage
+  if (tenant) {
+    await Tenant.updateOne({ _id: req.tenantId }, { $inc: { 'usage.storageUsedMB': file.size / (1024 * 1024) } });
+  }
+
   await audit({ tenantId: req.tenantId, userId: req.user._id, action: 'create', resource: 'File', resourceId: doc._id, req });
   sendSuccess(res, { data: { ...doc.toObject(), data: undefined } }, 'File uploaded', 201);
+}));
+
+// Storage usage summary (must come before /:id)
+router.get('/storage-usage', asyncHandler(async (req, res) => {
+  const Tenant = (await import('../models/Tenant.js')).default;
+  const tenant = await Tenant.findById(req.tenantId).select('limits usage').lean();
+  const allocatedMB = (tenant?.limits?.storageGB || 1) * 1024;
+  const usedMB = tenant?.usage?.storageUsedMB || 0;
+  sendSuccess(res, { data: { allocatedMB, usedMB, availableMB: Math.max(0, allocatedMB - usedMB), percentUsed: allocatedMB > 0 ? Math.round((usedMB / allocatedMB) * 100) : 0 } });
 }));
 
 // Get single file metadata
@@ -120,12 +162,17 @@ router.put('/:id/replace', upload.single('file'), asyncHandler(async (req, res) 
   if (!newFile) throw new AppError('file is required.', 400);
   if (!ALLOWED_MIMES.has(newFile.mimetype)) throw new AppError('Unsupported file type.', 400);
 
+  const oldSize = file.sizeBytes || 0;
   file.name = sanitizeName(newFile.originalname);
   file.mimeType = newFile.mimetype;
   file.data = newFile.buffer.toString('base64');
   file.sizeBytes = newFile.size;
   file.lastModifiedBy = req.user._id;
   await file.save();
+  // Adjust tenant storage usage
+  const Tenant = (await import('../models/Tenant.js')).default;
+  const delta = (newFile.size - oldSize) / (1024 * 1024);
+  await Tenant.updateOne({ _id: req.tenantId }, { $inc: { 'usage.storageUsedMB': delta } });
   await audit({ tenantId: req.tenantId, userId: req.user._id, action: 'update', resource: 'File', resourceId: file._id, req });
   sendSuccess(res, { data: { ...file.toObject(), data: undefined } }, 'File replaced');
 }));
@@ -138,6 +185,11 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   file.isActive = false;
   file.lastModifiedBy = req.user._id;
   await file.save();
+  // Decrement tenant storage usage
+  if (file.sizeBytes) {
+    const Tenant = (await import('../models/Tenant.js')).default;
+    await Tenant.updateOne({ _id: req.tenantId }, { $inc: { 'usage.storageUsedMB': -(file.sizeBytes / (1024 * 1024)) } });
+  }
   await audit({ tenantId: req.tenantId, userId: req.user._id, action: 'delete', resource: 'File', resourceId: file._id, req });
   sendSuccess(res, {}, 'File deleted');
 }));

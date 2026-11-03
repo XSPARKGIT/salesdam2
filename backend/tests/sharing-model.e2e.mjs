@@ -200,7 +200,7 @@ try {
   const users = { admin, owner, unrelated, manager, grandboss, groupMember, rwMember, editor, noReadUser };
   const logins = {};
   for (const [label, u] of Object.entries(users)) {
-    logins[label] = await loginCookie(u.username);
+    logins[label] = await loginCookie(u.email);
   }
   const C = Object.fromEntries(Object.entries(logins).map(([k, v]) => [k, v.cookie]));
 
@@ -249,8 +249,8 @@ try {
   await hierOwner.save();
   await seedWorkspace(tenant._id, [managerViewer._id, hierOwner._id], ['policy'], 'Hierarchy Workspace');
   const hierRecord = await mkRecord(policyObj, hierOwner, { name: `Hier ${RUN}`, type: 'Motor' });
-  const loginMgrViewer = await loginCookie(managerViewer.username);
-  const loginHierOwner = await loginCookie(hierOwner.username);
+  const loginMgrViewer = await loginCookie(managerViewer.email);
+  const loginHierOwner = await loginCookie(hierOwner.email);
   r = await req(`/api/v1/records/policy/${hierRecord._id}`, { cookie: loginMgrViewer.cookie });
   check('hierarchy: read-only manager can view subordinate record', r.status === 200, `HTTP ${r.status}`);
   r = await req(`/api/v1/records/policy/${hierRecord._id}`, {

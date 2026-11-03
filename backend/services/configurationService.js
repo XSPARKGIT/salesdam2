@@ -169,6 +169,24 @@ export const SYSTEM_DEFAULTS = {
     description: 'How long call recordings are retained.',
     editableByTenant: true,
   },
+
+  // ── File storage (Section 19) ────────────────────────────────────────────
+  'files.max_file_size_mb': {
+    value: 10,
+    dataType: 'number',
+    category: 'files',
+    label: 'Maximum File Size (MB)',
+    description: 'Maximum size of a single uploaded file.',
+    editableByTenant: true,
+  },
+  'files.allowed_types': {
+    value: 'image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain',
+    dataType: 'string',
+    category: 'files',
+    label: 'Allowed File Types',
+    description: 'Comma-separated list of permitted MIME types for uploads.',
+    editableByTenant: true,
+  },
 };
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'dev-only-insecure-key-change-me';

@@ -130,8 +130,8 @@ try {
   const B = await seedTenant('b');
   createdTenantIds = [A.tenant._id, B.tenant._id];
 
-  const loginA = await loginCookie(A.user.username);
-  const loginB = await loginCookie(B.user.username);
+  const loginA = await loginCookie(A.user.email);
+  const loginB = await loginCookie(B.user.email);
   check('tenant A admin can authenticate', loginA.status === 200 && !!loginA.cookie, `HTTP ${loginA.status}`);
   check('tenant B admin can authenticate', loginB.status === 200 && !!loginB.cookie, `HTTP ${loginB.status}`);
   const ca = loginA.cookie;
