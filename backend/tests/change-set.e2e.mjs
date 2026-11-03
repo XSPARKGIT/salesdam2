@@ -94,8 +94,8 @@ try {
   const adminA = await makeUser(sandboxId, roleAdminA._id, 'Admin', 'One', 'csadmin1');
   const superA = await makeUser(sandboxId, roleSuperA._id, 'Super', 'One', 'cssuper1');
   const approverA = await makeUser(sandboxId, roleStdA._id, 'Claim', 'Approver', 'csapprover');
-  const cookieAdminA = await loginCookie(adminA.username);
-  const cookieSuperA = await loginCookie(superA.username);
+  const cookieAdminA = await loginCookie(adminA.email);
+  const cookieSuperA = await loginCookie(superA.email);
   check('sandbox users can log in', Boolean(cookieAdminA && cookieSuperA));
 
   // Source metadata: two objects, fields, layouts, a flow, an approval
@@ -169,7 +169,7 @@ try {
   const roleStdB = await Role.findOne({ tenantId: prodId, name: 'standard_user' });
   const roleAdminB = await Role.findOne({ tenantId: prodId, name: 'admin' });
   const adminB = await makeUser(prodId, roleAdminB._id, 'Admin', 'Two', 'csadmin2');
-  const cookieAdminB = await loginCookie(adminB.username);
+  const cookieAdminB = await loginCookie(adminB.email);
 
   const manifestIncomplete = [
     { componentType: 'object', componentKey: 'claim' },

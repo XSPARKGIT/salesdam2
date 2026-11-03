@@ -43,7 +43,7 @@ try {
   const obj = await ObjectMeta.findOne({ tenantId: tA._id, apiName: 'policy' });
   await FieldMeta.create({ tenantId: tA._id, objectId: obj._id, objectApiName: 'policy', name: 'Name', label: 'Name', apiName: 'name', type: 'text' });
   await seedWorkspace(tA._id, [admin._id], ['policy']);
-  const login = await loginCookie(admin.username);
+  const login = await loginCookie(admin.email);
   const C = login.cookie;
   check('admin auth', login.status === 200 && !!C);
 

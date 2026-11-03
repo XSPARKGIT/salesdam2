@@ -84,7 +84,7 @@ try {
     username: `gvsadmin_${RUN}`, password: PASSWORD, role: roleAdmin._id, status: 'active', emailVerified: true,
   });
   await seedWorkspace(tenantId, [admin._id], ['lead']);
-  const cookie = await loginCookie(admin.username);
+  const cookie = await loginCookie(admin.email);
   check('admin can log in', Boolean(cookie));
 
   const leadObj = await ObjectMeta.create({

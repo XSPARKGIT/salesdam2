@@ -104,7 +104,7 @@ try {
     await FieldMeta.create({ tenantId: tenantAId, objectId: leadObj._id, objectApiName: 'lead', name: apiName, label: apiName, apiName, type });
   }
   await seedWorkspace(tenantAId, [admin._id], ['lead']);
-  const cookieAdmin = await loginCookie(admin.username);
+  const cookieAdmin = await loginCookie(admin.email);
   check('admin auth', Boolean(cookieAdmin));
 
   // Consent enforcement on for this tenant throughout.

@@ -126,11 +126,11 @@ try {
 
   await seedWorkspace(tenantId, [adminUser, manager, submitter, approverA, approverB].map((u) => u._id), ['policy']);
 
-  const cookieAdmin = await loginCookie(adminUser.username);
-  const cookieSubmitter = await loginCookie(submitter.username);
-  const cookieA = await loginCookie(approverA.username);
-  const cookieB = await loginCookie(approverB.username);
-  const cookieManager = await loginCookie(manager.username);
+  const cookieAdmin = await loginCookie(adminUser.email);
+  const cookieSubmitter = await loginCookie(submitter.email);
+  const cookieA = await loginCookie(approverA.email);
+  const cookieB = await loginCookie(approverB.email);
+  const cookieManager = await loginCookie(manager.email);
   check('all users can log in', Boolean(cookieAdmin && cookieSubmitter && cookieA && cookieB && cookieManager));
 
   const createProcess = async (body) =>
@@ -480,7 +480,7 @@ try {
     email: `other-${RUN}@example.com`, username: `other_${RUN}`,
     password: PASSWORD, role: roleB._id, status: 'active', emailVerified: true,
   });
-  const cookieOther = await loginCookie(userB.username);
+  const cookieOther = await loginCookie(userB.email);
   const listOther = await req('/api/v1/approval-processes', { cookie: cookieOther });
   check('another tenant sees none of this tenant processes', listOther.status === 200 && listOther.json?.data?.length === 0, `count=${listOther.json?.data?.length}`);
 

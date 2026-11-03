@@ -36,7 +36,7 @@ try {
   await seedDefaultRoles(tenantId);
   const role = await Role.findOne({ tenantId, name:'admin' });
   const user = await User.create({ tenantId, firstName:'aud', lastName:'user', email:`aud-${RUN}@example.com`, username:`aud_${RUN}`, password:PASSWORD, role: role._id, status:'active', emailVerified:true });
-  const cookie = await loginCookie(user.username);
+  const cookie = await loginCookie(user.email);
   check('login succeeds', Boolean(cookie));
   // wait a moment for audit write
   await new Promise(r=>setTimeout(r,200));

@@ -93,13 +93,22 @@ try {
   const preview = await fetch(`${base}/api/v1/files/${fileId}/preview`, { headers: { Cookie: CA } });
   check('preview file (200)', preview.status === 200, `HTTP ${preview.status}`);
 
-  // Replace file
+  // Replace file (creates new version)
   const fd2 = new FormData();
   fd2.append('file', new Blob(['updated content'], { type: 'text/plain' }), 'updated.txt');
   const replace = await req(`/api/v1/files/${fileId}/replace`, { method: 'PUT', cookie: CA, formData: fd2 });
   check('replace file (200)', replace.status === 200, `HTTP ${replace.status}`);
-  const dbFile2 = await File.findById(fileId).lean();
-  check('replace persisted', dbFile2?.name === 'updated.txt' && dbFile2?.sizeBytes === 15);
+  const newFileId = replace.json?.data?._id;
+  check('replace returns new file id', !!newFileId && newFileId !== fileId);
+  const dbFile2 = await File.findById(newFileId).lean();
+  check('replace persisted (new version)', dbFile2?.name === 'updated.txt' && dbFile2?.version === 2);
+  const oldFile = await File.findById(fileId).lean();
+  check('old version superseded', oldFile?.isActive === false && String(oldFile?.supersededBy) === String(newFileId));
+
+  // Version history
+  const versions = await req(`/api/v1/files/${fileId}/versions`, { cookie: CA });
+  check('versions endpoint (200)', versions.status === 200, `HTTP ${versions.status}`);
+  check('version history has 2 entries', (versions.json?.data || []).length === 2, `count=${(versions.json?.data || []).length}`);
 
   // Delete file
   const del = await req(`/api/v1/files/${fileId}`, { method: 'DELETE', cookie: CA });

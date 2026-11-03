@@ -98,7 +98,7 @@ try {
   await Workspace.updateOne({ _id: claims._id }, { $addToSet: { memberIds: memberU._id } });
 
   const cookies = {};
-  for (const [k, u] of Object.entries({ adminU, agentU, brokerU, noReadU, psU, memberU })) cookies[k] = await loginCookie(u.username);
+  for (const [k, u] of Object.entries({ adminU, agentU, brokerU, noReadU, psU, memberU })) cookies[k] = await loginCookie(u.email);
   check('users can log in', Object.values(cookies).every(Boolean));
 
   const policy = await ObjectMeta.create({ tenantId, name: 'Policy', label: 'Policy', pluralLabel: 'Policies', apiName: 'policy', nameFieldApiName: 'name', isActive: true });

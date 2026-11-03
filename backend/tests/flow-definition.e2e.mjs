@@ -89,7 +89,7 @@ try {
     username: `flow_${RUN}`, password: PASSWORD, role: roleAdmin._id, status: 'active', emailVerified: true,
   });
   await seedWorkspace(tenantId, [admin._id], ['bill']);
-  const cookie = await loginCookie(admin.username);
+  const cookie = await loginCookie(admin.email);
   check('admin can log in', Boolean(cookie));
 
   const inv = await ObjectMeta.create({ tenantId, name: 'Invoice', label: 'Invoice', pluralLabel: 'Invoices', apiName: 'bill', nameFieldApiName: 'name', isActive: true });

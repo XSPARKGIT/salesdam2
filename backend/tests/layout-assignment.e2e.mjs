@@ -90,8 +90,8 @@ try {
   const adminU = await mkUser('admin', roleAdmin);
   const repU = await mkUser('rep', roleRep);
   await seedWorkspace(tenantId, [adminU._id, repU._id], ['policy', 'memo']);
-  const adminC = await loginCookie(adminU.username);
-  const repC = await loginCookie(repU.username);
+  const adminC = await loginCookie(adminU.email);
+  const repC = await loginCookie(repU.email);
   check('admin and rep can log in', Boolean(adminC && repC));
 
   const policy = await ObjectMeta.create({

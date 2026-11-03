@@ -29,10 +29,22 @@ const fileSchema = new mongoose.Schema({
   // Which PDF template generated this file (if any)
   pdfTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: 'PdfTemplate' },
 
+  // Versioning
+  version: { type: Number, default: 1 },
+  supersedes: { type: mongoose.Schema.Types.ObjectId, ref: 'File' }, // previous version
+  supersededBy: { type: mongoose.Schema.Types.ObjectId, ref: 'File' }, // next version
+
+  // Malware scanning
+  scanStatus: { type: String, enum: ['pending', 'clean', 'infected', 'error', 'skipped'], default: 'pending' },
+  scanResult: { type: String, default: '' },
+  scannedAt: { type: Date },
+
+  // Availability — files are not accessible until scan completes successfully
+  // Default true for backward compat (files created before scanning existed)
+  isAvailable: { type: Boolean, default: true },
+
   tags:      [{ type: String }],
   isActive:  { type: Boolean, default: true },
-
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 

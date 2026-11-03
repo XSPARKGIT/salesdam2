@@ -108,7 +108,7 @@ try {
     tenantId: srcId, firstName: 'Cs', lastName: 'Super', email: `lacs-super-${RUN}@example.com`,
     username: `lacs_super_${RUN}`, password: PASSWORD, role: roleSuperSrc._id, status: 'active', emailVerified: true,
   });
-  const cookie = await loginCookie(superSrc.username);
+  const cookie = await loginCookie(superSrc.email);
   check('source superuser can log in', Boolean(cookie));
 
   const { layouts: srcL } = await seedPolicy(srcId, ['Standard Policy', 'Rep Policy', 'Group Policy']);

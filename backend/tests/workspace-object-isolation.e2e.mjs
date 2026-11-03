@@ -140,10 +140,10 @@ try {
   await mkRec('note', `Zephyr Note ${RUN}`);
   await mkRec('policy', `Zephyr Policy ${RUN}`);
 
-  const cSuper = await loginCookie(superU.username);
-  const cAdmin = await loginCookie(adminU.username);
-  const cRep = await loginCookie(repU.username);
-  const cLone = await loginCookie(loneU.username);
+  const cSuper = await loginCookie(superU.email);
+  const cAdmin = await loginCookie(adminU.email);
+  const cRep = await loginCookie(repU.email);
+  const cLone = await loginCookie(loneU.email);
   check('all users can log in', Boolean(cSuper && cAdmin && cRep && cLone));
 
   // ── Superuser: workspace isolation applies ─────────────────────────────

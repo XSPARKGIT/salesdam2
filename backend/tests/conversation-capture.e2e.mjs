@@ -113,9 +113,9 @@ try {
     tenantId: tenantAId, firstName: 'Cap', lastName: 'Viewer', email: `capviewer-${RUN}@example.com`,
     username: `capviewer_${RUN}`, password: PASSWORD, role: roleRead._id, status: 'active', emailVerified: true,
   });
-  const cookieAdmin = await loginCookie(admin.username);
-  const cookieAgent = await loginCookie(agent.username);
-  const cookieViewer = await loginCookie(viewer.username);
+  const cookieAdmin = await loginCookie(admin.email);
+  const cookieAgent = await loginCookie(agent.email);
+  const cookieViewer = await loginCookie(viewer.email);
   check('users can log in', Boolean(cookieAdmin && cookieAgent && cookieViewer));
 
   const contactObj = await ObjectMeta.create({
@@ -195,7 +195,7 @@ try {
     tenantId: tenantBId, firstName: 'Cap', lastName: 'B', email: `capb-${RUN}@example.com`,
     username: `capb_${RUN}`, password: PASSWORD, role: roleAdminB._id, status: 'active', emailVerified: true,
   });
-  const cookieAdminB = await loginCookie(adminB.username);
+  const cookieAdminB = await loginCookie(adminB.email);
   const cross = await req(`/api/v1/conversations/${conv1}/create-record`, { method: 'POST', cookie: cookieAdminB, body: {} });
   check('a conversation from another tenant is not visible', cross.status === 404, `HTTP ${cross.status}`);
 } catch (err) {

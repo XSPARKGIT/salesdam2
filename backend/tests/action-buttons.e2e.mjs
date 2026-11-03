@@ -97,9 +97,9 @@ try {
   const repU = await mkUser('rep', roleRep);
   const viewerU = await mkUser('viewer', roleViewer);
   await seedWorkspace(tenantId, [adminU._id, repU._id, viewerU._id], ['deal', 'order', 'lead']);
-  const adminC = await loginCookie(adminU.username);
-  const repC = await loginCookie(repU.username);
-  const viewerC = await loginCookie(viewerU.username);
+  const adminC = await loginCookie(adminU.email);
+  const repC = await loginCookie(repU.email);
+  const viewerC = await loginCookie(viewerU.email);
   check('users can log in', Boolean(adminC && repC && viewerC));
 
   const mkObject = async (apiName, label, fields) => {

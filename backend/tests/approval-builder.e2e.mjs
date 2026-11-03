@@ -126,7 +126,7 @@ try {
   // Login is rate-limited (10 per window), so only the users who act are logged in.
   const C = {};
   for (const [k, u] of Object.entries({ admin, boss, owner, submitter, mgrA, loneSubmitter, gm1, roleGroupHolder, outsider })) {
-    C[k] = await loginCookie(u.username);
+    C[k] = await loginCookie(u.email);
   }
   check('users can log in', Object.values(C).every(Boolean));
 

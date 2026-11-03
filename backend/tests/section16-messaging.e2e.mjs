@@ -141,7 +141,7 @@ try {
   }
 
   await seedWorkspace(tenantAId, [admin._id, agent._id], ['lead', 'contact']);
-  const cookieAdmin = await loginCookie(admin.username);
+  const cookieAdmin = await loginCookie(admin.email);
   check('admin auth', Boolean(cookieAdmin));
 
   // ── §16.1 Facebook Lead Ads — flow that marks a lead touched by automation ──

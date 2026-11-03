@@ -86,7 +86,7 @@ try {
     role: roleAdmin._id, status: 'active', emailVerified: true,
   });
 
-  const adminCookie = await loginCookie(admin.username);
+  const adminCookie = await loginCookie(admin.email);
   check('admin logs in', Boolean(adminCookie));
 
   // ── 1. Create a custom object: "Project Milestone" ──────────────────────
@@ -109,7 +109,7 @@ try {
   // Add the custom object to workspace
   await seedWorkspace(tenantId, [admin._id], [objApiName]);
   // Re-login to pick up workspace
-  const adminCookie2 = await loginCookie(admin.username);
+  const adminCookie2 = await loginCookie(admin.email);
 
   // ── 2. Create custom fields ──────────────────────────────────────────────
   const fieldDefs = [

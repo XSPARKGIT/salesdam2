@@ -92,6 +92,13 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
 
   const name = sanitizeName(file.originalname);
   const data = file.buffer.toString('base64');
+
+  // Scan the file before making it available
+  const { scanFile } = await import('../services/fileScanService.js');
+  const scanResult = await scanFile(file.buffer, file.mimetype, name);
+
+  const isAvailable = scanResult.status === 'clean' || scanResult.status === 'skipped';
+
   const doc = await File.create({
     tenantId: req.tenantId,
     createdBy: req.user._id,
@@ -100,6 +107,11 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
     data,
     sizeBytes: file.size,
     relatedTo: { objectApiName, recordId },
+    scanStatus: scanResult.status,
+    scanResult: scanResult.result,
+    scannedAt: new Date(),
+    isAvailable,
+    version: 1,
   });
 
   // Update tenant storage usage
@@ -125,6 +137,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
   const file = await File.findOne({ _id: req.params.id, tenantId: req.tenantId, isActive: true });
   if (!file) throw new AppError('File not found.', 404);
   if (file.relatedTo?.objectApiName) await checkRead(req.user, file.relatedTo.objectApiName);
+  if (!file.isAvailable) throw new AppError('File is not available (pending scan or infected).', 403);
   sendSuccess(res, { data: { ...file.toObject(), data: undefined } });
 }));
 
@@ -133,6 +146,7 @@ router.get('/:id/download', asyncHandler(async (req, res) => {
   const file = await File.findOne({ _id: req.params.id, tenantId: req.tenantId, isActive: true });
   if (!file) throw new AppError('File not found.', 404);
   if (file.relatedTo?.objectApiName) await checkRead(req.user, file.relatedTo.objectApiName);
+  if (!file.isAvailable) throw new AppError('File is not available.', 403);
   const buf = Buffer.from(file.data || '', 'base64');
   res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${sanitizeName(file.name)}"`);
@@ -145,6 +159,7 @@ router.get('/:id/preview', asyncHandler(async (req, res) => {
   const file = await File.findOne({ _id: req.params.id, tenantId: req.tenantId, isActive: true });
   if (!file) throw new AppError('File not found.', 404);
   if (file.relatedTo?.objectApiName) await checkRead(req.user, file.relatedTo.objectApiName);
+  if (!file.isAvailable) throw new AppError('File is not available.', 403);
   const buf = Buffer.from(file.data || '', 'base64');
   res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
   res.setHeader('Content-Disposition', `inline; filename="${sanitizeName(file.name)}"`);
@@ -163,18 +178,38 @@ router.put('/:id/replace', upload.single('file'), asyncHandler(async (req, res) 
   if (!ALLOWED_MIMES.has(newFile.mimetype)) throw new AppError('Unsupported file type.', 400);
 
   const oldSize = file.sizeBytes || 0;
-  file.name = sanitizeName(newFile.originalname);
-  file.mimeType = newFile.mimetype;
-  file.data = newFile.buffer.toString('base64');
-  file.sizeBytes = newFile.size;
+  const oldVersion = file.version || 1;
+
+  // Create a new version record instead of overwriting
+  const newDoc = await File.create({
+    tenantId: req.tenantId,
+    createdBy: req.user._id,
+    lastModifiedBy: req.user._id,
+    name: sanitizeName(newFile.originalname),
+    mimeType: newFile.mimetype,
+    data: newFile.buffer.toString('base64'),
+    sizeBytes: newFile.size,
+    relatedTo: file.relatedTo,
+    version: oldVersion + 1,
+    supersedes: file._id,
+    scanStatus: 'skipped',
+    scanResult: 'No scanner configured.',
+    isAvailable: true,
+  });
+
+  // Mark old file as superseded
+  file.isActive = false;
+  file.supersededBy = newDoc._id;
   file.lastModifiedBy = req.user._id;
   await file.save();
+
   // Adjust tenant storage usage
-  const Tenant = (await import('../models/Tenant.js')).default;
-  const delta = (newFile.size - oldSize) / (1024 * 1024);
-  await Tenant.updateOne({ _id: req.tenantId }, { $inc: { 'usage.storageUsedMB': delta } });
-  await audit({ tenantId: req.tenantId, userId: req.user._id, action: 'update', resource: 'File', resourceId: file._id, req });
-  sendSuccess(res, { data: { ...file.toObject(), data: undefined } }, 'File replaced');
+  const TenantModel = (await import('../models/Tenant.js')).default;
+  const delta = (req.file.size - oldSize) / (1024 * 1024);
+  await TenantModel.updateOne({ _id: req.tenantId }, { $inc: { 'usage.storageUsedMB': delta } });
+
+  await audit({ tenantId: req.tenantId, userId: req.user._id, action: 'update', resource: 'File', resourceId: newDoc._id, req });
+  sendSuccess(res, { data: { ...newDoc.toObject(), data: undefined } }, 'File replaced');
 }));
 
 // Soft-delete
@@ -192,6 +227,37 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   }
   await audit({ tenantId: req.tenantId, userId: req.user._id, action: 'delete', resource: 'File', resourceId: file._id, req });
   sendSuccess(res, {}, 'File deleted');
+}));
+
+// Get version history for a file
+router.get('/:id/versions', asyncHandler(async (req, res) => {
+  const file = await File.findOne({ _id: req.params.id, tenantId: req.tenantId });
+  if (!file) throw new AppError('File not found.', 404);
+  if (file.relatedTo?.objectApiName) await checkRead(req.user, file.relatedTo.objectApiName);
+
+  // Walk the version chain
+  const versions = [];
+  let current = file;
+  // Find the latest version (walk supersededBy chain)
+  let latest = file;
+  while (latest.supersededBy) {
+    const next = await File.findOne({ _id: latest.supersededBy, tenantId: req.tenantId });
+    if (!next) break;
+    latest = next;
+  }
+  // Walk back via supersedes
+  const chain = [];
+  let cur = latest;
+  while (cur) {
+    chain.unshift(cur);
+    if (cur.supersedes) {
+      cur = await File.findOne({ _id: cur.supersedes, tenantId: req.tenantId });
+    } else {
+      cur = null;
+    }
+  }
+  const result = chain.map((f) => ({ _id: f._id, name: f.name, version: f.version, sizeBytes: f.sizeBytes, mimeType: f.mimeType, isActive: f.isActive, isAvailable: f.isAvailable, scanStatus: f.scanStatus, createdAt: f.createdAt, createdBy: f.createdBy }));
+  sendSuccess(res, { data: result });
 }));
 
 export default router;

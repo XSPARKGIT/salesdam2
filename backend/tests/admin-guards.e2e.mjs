@@ -99,7 +99,7 @@ try {
     emailVerified: true,
   });
 
-  const adminLogin = await loginCookie(admin.username);
+  const adminLogin = await loginCookie(admin.email);
   check('tenant admin can authenticate', adminLogin.status === 200 && !!adminLogin.cookie, `HTTP ${adminLogin.status}`);
   const ca = adminLogin.cookie;
 

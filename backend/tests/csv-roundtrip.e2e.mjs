@@ -67,7 +67,7 @@ try {
     username: `csvadmin_${RUN}`, password: PASSWORD, role: roleAdmin._id, status: 'active', emailVerified: true,
   });
   await seedWorkspace(tenantId, [admin._id], ['gadget']);
-  const cookie = await loginCookie(admin.username);
+  const cookie = await loginCookie(admin.email);
   check('admin can log in', Boolean(cookie));
 
   const obj = await ObjectMeta.create({

@@ -48,8 +48,8 @@ try {
   await seedWorkspace(tA._id, [adminA._id], ['policy']);
   await seedWorkspace(tB._id, [adminB._id], ['policy']);
 
-  const loginA = await loginCookie(adminA.username);
-  const loginB = await loginCookie(adminB.username);
+  const loginA = await loginCookie(adminA.email);
+  const loginB = await loginCookie(adminB.email);
   const CA = loginA.cookie, CB = loginB.cookie;
   check('admins auth', loginA.status === 200 && loginB.status === 200);
 

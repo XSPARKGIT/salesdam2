@@ -101,7 +101,7 @@ const seedTenant = async (tag) => {
     f('member_count', 'Member Count', 'number'),
     f('premium', 'Premium', 'currency'),
   ]);
-  const cookie = await loginCookie(admin.username);
+  const cookie = await loginCookie(admin.email);
   return { tenantId, admin, obj, cookie };
 };
 

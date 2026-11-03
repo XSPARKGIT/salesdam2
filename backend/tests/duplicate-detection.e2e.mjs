@@ -101,8 +101,8 @@ try {
   }
 
   await seedWorkspace(tenantId, [adminUser._id, stdUser._id], ['contact']);
-  const cookieAdmin = await loginCookie(adminUser.username);
-  const cookieStd = await loginCookie(stdUser.username);
+  const cookieAdmin = await loginCookie(adminUser.email);
+  const cookieStd = await loginCookie(stdUser.email);
   check('users can log in', Boolean(cookieAdmin && cookieStd));
 
   const createRecord = (body) =>
@@ -236,7 +236,7 @@ try {
     username: `otherdup_${RUN}`, password: PASSWORD, role: roleB._id, status: 'active', emailVerified: true,
   });
   await seedWorkspace(tenantBId, [userB._id], ['contact']);
-  const cookieOther = await loginCookie(userB.username);
+  const cookieOther = await loginCookie(userB.email);
 
   const listOther = await req('/api/v1/duplicate-rules', { cookie: cookieOther });
   check('another tenant sees no duplicate rules', listOther.status === 200 && listOther.json?.data?.length === 0, `count=${listOther.json?.data?.length}`);

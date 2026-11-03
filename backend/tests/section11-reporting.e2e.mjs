@@ -91,7 +91,7 @@ try {
     role: roleAdmin._id, status: 'active', emailVerified: true,
   });
 
-  const adminCookie = await loginCookie(admin.username);
+  const adminCookie = await loginCookie(admin.email);
   check('admin logs in', Boolean(adminCookie));
 
   // ── 1. Create parent object: "Project" ─────────────────────────────────
@@ -122,7 +122,7 @@ try {
 
   // Add objects to workspace + re-login
   await seedWorkspace(tenantId, [admin._id], [parentApi, childApi]);
-  const adminCookie2 = await loginCookie(admin.username);
+  const adminCookie2 = await loginCookie(admin.email);
 
   // ── 3. Create fields on Project ─────────────────────────────────────────
   const projectFields = [

@@ -86,8 +86,8 @@ try {
   });
   // widget stays in the workspace so its refusal below comes from role permissions.
   await seedWorkspace(tenantAId, [admin._id, std._id], ['contact', 'deal', 'widget']);
-  const cookieAdmin = await loginCookie(admin.username);
-  const cookieStd = await loginCookie(std.username);
+  const cookieAdmin = await loginCookie(admin.email);
+  const cookieStd = await loginCookie(std.email);
   check('users can log in', Boolean(cookieAdmin && cookieStd));
 
   const contactObj = await ObjectMeta.create({
@@ -220,7 +220,7 @@ try {
     username: `mergeadminb_${RUN}`, password: PASSWORD, role: roleAdminB._id, status: 'active', emailVerified: true,
   });
   await seedWorkspace(tenantBId, [adminB._id], ['contact']);
-  const cookieAdminB = await loginCookie(adminB.username);
+  const cookieAdminB = await loginCookie(adminB.email);
   const crossTenant = await req('/api/v1/records/contact/merge', {
     method: 'POST', cookie: cookieAdminB, body: { masterId: aId, duplicateIds: [String(fId)] },
   });

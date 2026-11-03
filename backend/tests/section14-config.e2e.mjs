@@ -43,8 +43,8 @@ try {
   await seedWorkspace(tA._id, [adminA._id], []);
   await seedWorkspace(tB._id, [adminB._id], []);
 
-  const loginA = await loginCookie(adminA.username);
-  const loginB = await loginCookie(adminB.username);
+  const loginA = await loginCookie(adminA.email);
+  const loginB = await loginCookie(adminB.email);
   const CA = loginA.cookie, CB = loginB.cookie;
   check('admins auth', loginA.status === 200 && loginB.status === 200);
 
@@ -86,7 +86,7 @@ try {
   const suRole = await Role.create({ tenantId: tA._id, name: 'superuser', label: 'Superuser', dataAccess: 'all', objectPermissions: [], appPermissions: {} });
   const su = await User.create({ tenantId: tA._id, firstName: 'Super', lastName: 'User', email: `su-${RUN}@example.com`, username: `su_${RUN}`, password: PASSWORD, role: suRole._id, status: 'active', emailVerified: true });
   await seedWorkspace(tA._id, [su._id], []);
-  const loginSU = await loginCookie(su.username);
+  const loginSU = await loginCookie(su.email);
   const CSU = loginSU.cookie;
   check('superuser auth', loginSU.status === 200);
 

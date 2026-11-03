@@ -66,7 +66,7 @@ try {
     ],
   });
   await seedWorkspace(tenant._id, [admin._id], ['policy']);
-  const login = await loginCookie(admin.username);
+  const login = await loginCookie(admin.email);
   const C = login.cookie;
   check('admin auth', login.status === 200 && !!C);
 
@@ -113,7 +113,7 @@ try {
   const nonAdminRole = await Role.create({ tenantId: tenant._id, name: 'rep', label: 'Rep', dataAccess: 'own', objectPermissions: [{ objectApiName: 'policy', canCreate: true, canRead: true, canUpdate: true, canDelete: true, canExport: true, canImport: true }], appPermissions: { canImportData: true, canExportData: true } });
   const nonAdmin = await User.create({ tenantId: tenant._id, firstName: 'Non', lastName: 'Admin', email: `nonadmin-${RUN}@example.com`, username: `nonadmin_${RUN}`, password: PASSWORD, role: nonAdminRole._id, status: 'active', emailVerified: true });
   await seedWorkspace(tenant._id, [nonAdmin._id], ['policy']);
-  const loginNA = await loginCookie(nonAdmin.username);
+  const loginNA = await loginCookie(nonAdmin.email);
   const fdNA = new FormData();
   fdNA.append('file', new Blob(['name,type,premium\nX,Funeral,10\n'], { type: 'text/csv' }), 'na.csv');
   fdNA.append('object', 'policy');

@@ -97,8 +97,8 @@ try {
 
   await seedWorkspace(tenantId, [admin._id, limited._id]);
 
-  const adminCookie = await loginCookie(admin.username);
-  const limitedCookie = await loginCookie(limited.username);
+  const adminCookie = await loginCookie(admin.email);
+  const limitedCookie = await loginCookie(limited.email);
   check('admin logs in', Boolean(adminCookie));
   check('limited user logs in', Boolean(limitedCookie));
 
@@ -142,7 +142,7 @@ try {
   await limited.save();
 
   // Need new session — re-login
-  const limitedCookie2 = await loginCookie(limited.username);
+  const limitedCookie2 = await loginCookie(limited.email);
   check('limited user logs in with custom role', Boolean(limitedCookie2));
 
   r = await req('/api/v1/admin/logs', { cookie: limitedCookie2 });
@@ -167,7 +167,7 @@ try {
   });
 
   // Re-login to pick up permission set
-  const limitedCookie3 = await loginCookie(limited.username);
+  const limitedCookie3 = await loginCookie(limited.email);
 
   r = await req('/api/v1/admin/export?objectApiName=lead', { cookie: limitedCookie3 });
   check('permission set grants export data', r.status === 200 || r.status === 400);
@@ -198,7 +198,7 @@ try {
   limited.role = codeRole._id;
   await limited.save();
 
-  const limitedCookie4 = await loginCookie(limited.username);
+  const limitedCookie4 = await loginCookie(limited.email);
 
   r = await req('/api/v1/custom-code', { cookie: limitedCookie4 });
   check('canManageCustomCode grants custom code access', r.status === 200);
@@ -217,7 +217,7 @@ try {
   limited.role = userMgrRole._id;
   await limited.save();
 
-  const limitedCookie5 = await loginCookie(limited.username);
+  const limitedCookie5 = await loginCookie(limited.email);
 
   r = await req('/api/v1/users', { cookie: limitedCookie5 });
   check('canManageUsers grants user list', r.status === 200);
@@ -240,7 +240,7 @@ try {
   limited.role = exportOnlyRole._id;
   await limited.save();
 
-  const limitedCookie6 = await loginCookie(limited.username);
+  const limitedCookie6 = await loginCookie(limited.email);
 
   r = await req('/api/v1/admin/export?objectApiName=lead', { cookie: limitedCookie6 });
   check('canExportData grants export', r.status === 200 || r.status === 400);
@@ -252,7 +252,7 @@ try {
   // The user_mgr user tries to add canManageRoles to their own role
   limited.role = userMgrRole._id;
   await limited.save();
-  const limitedCookie7 = await loginCookie(limited.username);
+  const limitedCookie7 = await loginCookie(limited.email);
 
   r = await req(`/api/v1/roles/${userMgrRole._id}`, {
     method: 'PUT',
@@ -269,7 +269,7 @@ try {
   permSet.assignedUserIds = [limited._id];
   await permSet.save();
 
-  const limitedCookie8 = await loginCookie(limited.username);
+  const limitedCookie8 = await loginCookie(limited.email);
   r = await req('/api/v1/auth/me', { cookie: limitedCookie8 });
   const ep = r.json?.data?.user?.effectivePermissions;
   check(

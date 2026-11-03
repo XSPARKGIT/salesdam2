@@ -108,9 +108,9 @@ try {
   tenantAId = A.tenant._id;
   tenantBId = B.tenant._id;
 
-  const cookieA = await loginCookie(A.user.username);
-  const cookieB = await loginCookie(B.user.username);
-  const cookieSuper = await loginCookie(A.superuser.username);
+  const cookieA = await loginCookie(A.user.email);
+  const cookieB = await loginCookie(B.user.email);
+  const cookieSuper = await loginCookie(A.superuser.email);
   check('admin login returns session cookie', Boolean(cookieA));
   check('superuser login returns session cookie', Boolean(cookieSuper));
 

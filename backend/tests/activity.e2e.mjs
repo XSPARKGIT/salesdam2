@@ -78,7 +78,7 @@ try {
     tenantId, firstName: 'Agent', lastName: 'Two', email: `agent2-${RUN}@example.com`,
     username: `agent2_${RUN}`, password: PASSWORD, role: stdRole._id, status: 'active', emailVerified: true,
   });
-  const cookie = await loginCookie(agent.username);
+  const cookie = await loginCookie(agent.email);
   check('agent can log in', Boolean(cookie));
 
   const create = (body) => req('/api/v1/activities', { method: 'POST', cookie, body });
@@ -145,7 +145,7 @@ try {
     tenantId: tenantBId, firstName: 'Other', lastName: 'Tenant', email: `otheract-${RUN}@example.com`,
     username: `otheract_${RUN}`, password: PASSWORD, role: roleB._id, status: 'active', emailVerified: true,
   });
-  const cookieB = await loginCookie(userB.username);
+  const cookieB = await loginCookie(userB.email);
 
   const timelineB = await req(`/api/v1/activities/timeline?objectApiName=contact&recordId=${RECORD}`, { cookie: cookieB });
   check('another tenant sees an empty timeline for the record', timelineB.status === 200 && timelineB.json?.data?.length === 0, `count=${timelineB.json?.data?.length}`);

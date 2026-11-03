@@ -76,7 +76,7 @@ try {
   const superUser = await mk(srcId, superSrcRole, 'agsuper', `agsuper-${RUN}@example.com`);
   const memberSrc = await mk(srcId, stdSrc, 'agmember', `agmember-${RUN}@example.com`);
   const memberDst = await mk(dstId, stdDst, 'agmember', `agmember-${RUN}@example.com`); // same email in the target
-  const cookie = await loginCookie(superUser.username);
+  const cookie = await loginCookie(superUser.email);
   check('source superuser can log in', Boolean(cookie));
 
   const obj = await ObjectMeta.create({ tenantId: srcId, name: 'Claim', label: 'Claim', pluralLabel: 'Claims', apiName: 'claim', nameFieldApiName: 'name', isActive: true });
