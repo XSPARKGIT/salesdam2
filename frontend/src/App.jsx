@@ -50,6 +50,7 @@ import PdfTemplateList from './pages/PdfTemplates/PdfTemplateList';
 import PdfTemplateEditor from './pages/PdfTemplates/PdfTemplateEditor';
 import AdminSettings from './pages/Admin/AdminSettings';
 import Deployments from './pages/Admin/Deployments';
+import CallCentre from './pages/Admin/CallCentre';
 import CustomCodePage from './pages/Admin/CustomCode';
 import ChannelAccountsPage from './pages/Admin/ChannelAccounts';
 import MessageTemplatesPage from './pages/Admin/MessageTemplates';
@@ -800,6 +801,12 @@ export default function App() {
         path="/admin/deployments"
         element={
           <Deployments />
+        }
+      />
+      <Route
+        path="/admin/call-centre"
+        element={
+          <CallCentre />
         }
       />
       <Route
