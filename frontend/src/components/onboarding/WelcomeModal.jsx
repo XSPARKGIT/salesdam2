@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Database, LayoutDashboard, Zap, Users, Sparkles } from 'lucide-react';
 import { useOnboarding } from './OnboardingProvider';
 import styles from './Onboarding.module.css';
@@ -42,6 +42,14 @@ const WelcomeModal = () => {
 const Welcome = () => {
   const { turnedOff, startTour, exploreOnMyOwn } = useOnboarding();
   const [dontShowAgain, setDontShowAgain] = useState(turnedOff);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') exploreOnMyOwn(dontShowAgain);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [exploreOnMyOwn, dontShowAgain]);
 
   return (
     <div

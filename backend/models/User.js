@@ -92,6 +92,9 @@ const userSchema = new mongoose.Schema(
           type: String,
           enum: ['in_progress', 'skipped', 'completed', 'dismissed'],
         },
+        completedAt: { type: Date },
+        lastStep: { type: Number, default: 0 },
+        tourVersion: { type: String, default: '1' },
       },
     },
 

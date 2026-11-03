@@ -17,6 +17,7 @@ export const TOUR_STEPS = [
   },
   {
     path: '/setup/objects',
+    adminOnly: true,
     selectors: ['[data-tour="objects"]', 'main h1', '[data-tour="page"]'],
     placement: 'right',
     group: 'Setup',
@@ -25,6 +26,7 @@ export const TOUR_STEPS = [
   },
   {
     path: '/setup/schema-builder',
+    adminOnly: true,
     selectors: ['main h1', '[data-tour="page"]'],
     placement: 'right',
     group: 'Setup',
@@ -33,6 +35,7 @@ export const TOUR_STEPS = [
   },
   {
     path: '/workspaces',
+    adminOnly: true,
     selectors: ['[data-tour="workspaces"]', 'main h1', '[data-tour="page"]'],
     placement: 'right',
     title: 'Workspaces',
@@ -40,6 +43,7 @@ export const TOUR_STEPS = [
   },
   {
     path: '/automation',
+    adminOnly: true,
     selectors: ['main h1', '[data-tour="page"]'],
     placement: 'bottom',
     title: 'Automate the busywork',
@@ -54,6 +58,7 @@ export const TOUR_STEPS = [
   },
   {
     path: '/setup/duplicate-rules',
+    adminOnly: true,
     selectors: ['main h1', '[data-tour="page"]'],
     placement: 'bottom',
     group: 'Setup',

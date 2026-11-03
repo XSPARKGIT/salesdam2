@@ -34,8 +34,10 @@ export const OnboardingProvider = ({ children }) => {
   }
 
   const turnedOff = Boolean(user?.preferences?.onboarding?.welcomeTurnedOffAt);
+  const tourStatus = user?.preferences?.onboarding?.tourStatus;
+  const completed = tourStatus === 'completed';
   const welcomeOpen =
-    Boolean(user) && !tourOpen && (reopened || (!turnedOff && !dismissed));
+    Boolean(user) && !tourOpen && (reopened || (!turnedOff && !dismissed && !completed));
 
   const save = useCallback(
     (patch) => {
@@ -80,7 +82,7 @@ export const OnboardingProvider = ({ children }) => {
   const finishTour = useCallback(
     (status) => {
       setTourOpen(false);
-      save({ tourStatus: status === 'completed' ? 'completed' : 'dismissed' });
+      save({ tourStatus: status === 'completed' ? 'completed' : 'dismissed', completedAt: new Date().toISOString() });
     },
     [save],
   );
@@ -95,12 +97,13 @@ export const OnboardingProvider = ({ children }) => {
       welcomeOpen,
       turnedOff,
       tourOpen,
+      tourStatus,
       startTour,
       exploreOnMyOwn,
       finishTour,
       openWelcome,
     }),
-    [welcomeOpen, turnedOff, tourOpen, startTour, exploreOnMyOwn, finishTour, openWelcome],
+    [welcomeOpen, turnedOff, tourOpen, tourStatus, startTour, exploreOnMyOwn, finishTour, openWelcome],
   );
 
   return (

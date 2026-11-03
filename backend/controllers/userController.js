@@ -277,6 +277,10 @@ const deactivateUser = asyncHandler(async (req, res) => {
   await user.save();
   await req.tenant.updateOne({ $inc: { 'usage.users': -1 } });
 
+  // Invalidate all sessions for the deactivated user.
+  const Session = (await import('../models/Session.js')).default;
+  await Session.deleteMany({ userId: user._id });
+
   await audit({
     tenantId: req.tenantId,
     userId: req.user._id,
@@ -360,10 +364,11 @@ const resetUserPassword = asyncHandler(async (req, res) => {
   const user = await User.findOne({
     _id: req.params.id,
     tenantId: req.tenantId,
-  });
+  }).select('+password');
   if (!user) throw new AppError('User not found.', 404);
 
   user.password = newPassword; // pre-save hook will hash it
+  user.markModified('password');
   user.failedLoginAttempts = 0;
   user.lockedUntil = undefined;
   await user.save();

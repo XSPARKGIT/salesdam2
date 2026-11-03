@@ -1,4 +1,5 @@
 import Activity, { ACTIVITY_TYPES } from '../models/Activity.js';
+import Notification from '../models/Notification.js';
 import { AppError } from '../utils/errors.js';
 
 /**
@@ -27,12 +28,52 @@ const createActivity = async (data = {}, user) => {
     throw new AppError('objectApiName and recordId are required.', 400);
   }
   const status = data.status || (type === 'task' ? 'open' : 'completed');
-  return Activity.create({
+  const activity = await Activity.create({
     ...data,
     status,
     createdBy: user?._id,
     occurredAt: data.occurredAt ? new Date(data.occurredAt) : new Date(),
   });
+
+  // Automated follow-up task trigger (Section 24.2): qualifying calls/meetings
+  // with metadata.followUpRequired create a single follow-up task + notification.
+  const qualifying = (type === 'call' || type === 'meeting') && data?.metadata?.followUpRequired === true;
+  if (qualifying) {
+    const externalId = `followup:${activity._id}`;
+    const existing = await Activity.findOne({ tenantId: data.tenantId, externalId, type: 'task' });
+    if (!existing) {
+      const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const assignee = data.assignedTo || data.createdBy || user?._id;
+      const task = await Activity.create({
+        tenantId: data.tenantId,
+        type: 'task',
+        subject: `Follow up: ${data.subject || type}`,
+        body: data.body || '',
+        objectApiName: data.objectApiName,
+        recordId: data.recordId,
+        assignedTo: assignee,
+        createdBy: user?._id,
+        status: 'open',
+        dueAt,
+        occurredAt: new Date(),
+        externalId,
+        metadata: { followUpFor: String(activity._id), source: type },
+      }).catch(() => null);
+      if (task && assignee) {
+        await Notification.create({
+          tenantId: data.tenantId,
+          userId: assignee,
+          type: 'task_due',
+          title: `Follow-up task: ${task.subject}`,
+          body: `A follow-up task was created from a ${type}.`,
+          link: `/o/${data.objectApiName}/${data.recordId}`,
+          data: { taskId: String(task._id), activityId: String(activity._id) },
+        }).catch(() => {});
+      }
+    }
+  }
+
+  return activity;
 };
 
 /**

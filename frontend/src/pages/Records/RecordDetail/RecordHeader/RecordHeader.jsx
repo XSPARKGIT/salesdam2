@@ -1,4 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom';
+import { useState } from 'react';
+import CallModal from '../../../../components/records/CallModal';
 import * as LucideIcons from 'lucide-react';
 import { ArrowLeft, Edit2, Trash2, Lock } from 'lucide-react';
 import Button from '../../../../components/common/Button/Button';
@@ -26,6 +28,7 @@ const RecordHeader = ({
   onActionFlowDone,
 }) => {
   const navigate = useNavigate();
+  const [callOpen, setCallOpen] = useState(false);
 
   return (
     <div className={styles.header}>
@@ -109,6 +112,11 @@ const RecordHeader = ({
         </div>
       </div>
       <div className={styles.actions}>
+        {(objectApiName === 'lead' || objectApiName === 'contact') && (
+          <button type="button" onClick={() => setCallOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+            Call
+          </button>
+        )}
         {/* Configured action buttons (BRD 4.4): Flows, screen flows and
             platform actions such as Convert to Deal or Generate Quote,
             each optionally shown only when the record matches conditions. */}
@@ -174,6 +182,7 @@ const RecordHeader = ({
           </Button>
         )}
       </div>
+      <CallModal open={callOpen} onClose={() => setCallOpen(false)} objectApiName={objectApiName} recordId={id} defaultNumber={record?.phone || record?.phoneNumber || record?.mobile} />
     </div>
   );
 };
