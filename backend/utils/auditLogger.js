@@ -93,4 +93,4 @@ const auditMiddleware = (action, resource) => {
   };
 };
 
-export { audit, auditMiddleware };
+export { audit, auditMiddleware, redact };

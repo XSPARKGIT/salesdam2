@@ -262,6 +262,19 @@ const login = asyncHandler(async (req, res) => {
   }
 
   if (!user) {
+    // Log auth failure
+    try {
+      const AuthFailureLog = (await import('../models/AuthFailureLog.js')).default;
+      await AuthFailureLog.create({
+        tenantId: null,
+        integration: 'session',
+        identifier: identifier,
+        reason: 'User not found',
+        ip: req.ip || req.headers['x-forwarded-for'],
+        path: req.path,
+        method: req.method,
+      });
+    } catch { /* ignore */ }
     throw new AppError('Invalid username or password.', 401);
   }
 
@@ -287,6 +300,19 @@ const login = asyncHandler(async (req, res) => {
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     await user.incrementFailedLogins();
+    // Log auth failure
+    try {
+      const AuthFailureLog = (await import('../models/AuthFailureLog.js')).default;
+      await AuthFailureLog.create({
+        tenantId: user.tenantId,
+        integration: 'session',
+        identifier: user.email,
+        reason: 'Invalid password',
+        ip: req.ip || req.headers['x-forwarded-for'],
+        path: req.path,
+        method: req.method,
+      });
+    } catch { /* ignore */ }
     await audit({
       tenantId: user.tenantId,
       userId: user._id,
