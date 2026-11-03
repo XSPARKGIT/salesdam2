@@ -315,7 +315,7 @@ const ingestCall = async (account, payload) => {
   await _touchConversation(conversation, { inbound: call.direction === 'inbound' });
 
   if (conversation.linkedRecord) {
-    await Activity.create({
+    const activity = await Activity.create({
       tenantId: account.tenantId,
       type: 'call',
       subject: `Call ${call.direction} - ${number}`,
@@ -330,7 +330,14 @@ const ingestCall = async (account, payload) => {
         ? `call:${account._id}:${payload.externalMessageId}`
         : undefined,
       metadata: { ...call, conversationId: String(conversation._id) },
-    }).catch(() => {});
+    }).catch(() => null);
+
+    if (activity) {
+      try {
+        const { fireAutomations } = await import('./automationService.js');
+        fireAutomations(call.direction === 'inbound' ? 'incoming_call' : 'outgoing_call', conversation.linkedRecord.objectApiName, activity, account.tenantId).catch(() => {});
+      } catch (e) { /* ignore */ }
+    }
   }
 
   return { conversation, message, duplicate: false };

@@ -96,7 +96,7 @@ const automationSchema = new mongoose.Schema(
     // Trigger configuration
     trigger: {
       objectApiName: { type: String }, // which object triggers this
-      events: [{ type: String, enum: ['create', 'update', 'delete', 'all'] }],
+      events: [{ type: String, enum: ['create', 'update', 'delete', 'all', 'incoming_call', 'outgoing_call', 'missed_call', 'recording_available', 'call_outcome'] }],
       runWhen: {
         type: String,
         enum: ['always', 'conditions_met'],
