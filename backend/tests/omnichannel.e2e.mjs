@@ -104,8 +104,8 @@ try {
   const admin = await makeUser(tenantAId, roleAdmin._id, 'omniadmin');
   const agent = await makeUser(tenantAId, roleStd._id, 'omniagent');
   const agent2 = await makeUser(tenantAId, roleStd._id, 'omniagent2');
-  const cookieAdmin = await loginCookie(admin.username);
-  const cookieAgent = await loginCookie(agent.username);
+  const cookieAdmin = await loginCookie(admin.email);
+  const cookieAgent = await loginCookie(agent.email);
   check('users can log in', Boolean(cookieAdmin && cookieAgent));
 
   // A contact object + one matching record (phone + email).
@@ -289,7 +289,7 @@ try {
   await seedDefaultRoles(tenantBId);
   const roleAdminB = await Role.findOne({ tenantId: tenantBId, name: 'admin' });
   const adminB = await makeUser(tenantBId, roleAdminB._id, 'omniadminb');
-  const cookieAdminB = await loginCookie(adminB.username);
+  const cookieAdminB = await loginCookie(adminB.email);
 
   const accountsB = await req('/api/v1/channels', { cookie: cookieAdminB });
   const convsB = await req('/api/v1/conversations', { cookie: cookieAdminB });
