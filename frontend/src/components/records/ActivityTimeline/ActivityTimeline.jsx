@@ -69,6 +69,7 @@ const ActivityTimeline = ({ objectApiName, recordId }) => {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [dueAt, setDueAt] = useState('');
+  const [relatedRecordsInput, setRelatedRecordsInput] = useState('');
 
   const queryKey = ['activity-timeline', objectApiName, recordId, limit, filterType, fromDate, toDate, filterUserId];
 
@@ -91,6 +92,7 @@ const ActivityTimeline = ({ objectApiName, recordId }) => {
       setSubject('');
       setBody('');
       setDueAt('');
+      setRelatedRecordsInput('');
       toast.success(`${TYPE_META[type].label} logged.`);
       refresh();
     },
@@ -128,6 +130,19 @@ const ActivityTimeline = ({ objectApiName, recordId }) => {
       subject: subject.trim(),
       body: body.trim(),
       ...(type === 'task' && dueAt ? { dueAt: new Date(dueAt).toISOString() } : {}),
+      ...(relatedRecordsInput.trim()
+        ? {
+            relatedRecords: relatedRecordsInput
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .map((pair) => {
+                const [obj, rid] = pair.split(':').map((x) => x.trim());
+                return obj && rid ? { objectApiName: obj, recordId: rid } : null;
+              })
+              .filter(Boolean),
+          }
+        : {}),
     });
   };
 
@@ -187,6 +202,16 @@ const ActivityTimeline = ({ objectApiName, recordId }) => {
           ) : (
             <span />
           )}
+          <label className={styles.field}>
+            Related records (object:recordId, comma-separated)
+            <input
+              type="text"
+              className={styles.input}
+              value={relatedRecordsInput}
+              onChange={(e) => setRelatedRecordsInput(e.target.value)}
+              placeholder="e.g. account:abc123, deal:def456"
+            />
+          </label>
           <Button type="submit" size="sm" loading={create.isPending}>
             Log {TYPE_META[type].label.toLowerCase()}
           </Button>
