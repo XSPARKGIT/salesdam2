@@ -123,6 +123,23 @@ const canContact = async (tenantId, subjectType, subjectId, channel) => {
   const evidence = doc?.channels?.[channel];
   const optedIn = evidence?.optedIn ?? null;
 
+  // Fall back to CommunicationPreference if no Consent record exists
+  if (optedIn === null && !doc) {
+    try {
+      const CommunicationPreference = (await import('../models/CommunicationPreference.js')).default;
+      const pref = await CommunicationPreference.findOne({ tenantId, objectApiName: subjectType, recordId: subjectId }).lean();
+      if (pref) {
+        const prefVal = pref[channel === 'email' ? 'email' : channel === 'whatsapp' ? 'whatsapp' : channel === 'telephone' ? 'telephone' : channel === 'marketing' ? 'marketing' : null];
+        if (prefVal === 'opted_in' || prefVal === 'granted' || prefVal === 'allowed') {
+          return { allowed: true, reason: 'consent granted (from preferences)', enforced };
+        }
+        if (prefVal === 'opted_out' || prefVal === 'withdrawn' || prefVal === 'denied' || prefVal === 'do_not_call') {
+          if (enforced) return { allowed: false, reason: 'consent withdrawn (from preferences)', enforced };
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
   if (optedIn === true) {
     return { allowed: true, reason: 'consent granted', enforced };
   }
