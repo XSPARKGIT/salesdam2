@@ -73,6 +73,12 @@ const createActivity = async (data = {}, user) => {
     }
   }
 
+  // Fire record-triggered automations (non-blocking, after persistence)
+  try {
+    const { fireAutomations } = await import('./automationService.js');
+    fireAutomations('create', data.objectApiName, activity, data.tenantId).catch(() => {});
+  } catch (e) { /* ignore */ }
+
   return activity;
 };
 
