@@ -97,32 +97,18 @@ try {
   r = await req('/api/v1/auth/me', { cookie: bLogin.cookie });
   check('tenant B is unaffected by tenant A’s inactivity timeout (tenant-scoped config)', r.status === 200, `HTTP ${r.status}`);
 
-  // ── SSO: plan gating, persisted config, honest status/initiate/callback ─
+  // ── SSO: a minimal smoke check only ─────────────────────────────────────
+  // The full SSO flow (plan gating, persisted config, a genuine OIDC
+  // handshake against a real test identity provider, every rejection path)
+  // is covered in depth by section21-sso-flow.e2e.mjs. This file originally
+  // predates that real implementation — it only confirms the status route
+  // is reachable and defaults to disabled; it's otherwise session-timeout
+  // focused.
   r = await req(`/api/v1/auth/sso/${tenant._id}/status`);
   check('SSO status is publicly readable (no auth) and off by default', r.status === 200 && r.json?.data?.enabled === false, JSON.stringify(r.json?.data));
-  check('the status endpoint is honest that the handshake itself is not implemented', r.json?.data?.implemented === false);
-
-  // Downgrade tenant A to a non-enterprise plan to test the gate.
-  await Tenant.updateOne({ _id: tenantId }, { $set: { plan: 'starter' } });
-  r = await req('/api/v1/configuration/auth.sso_enabled', { method: 'PUT', cookie: adminCookie2, body: { value: true } });
-  check('enabling SSO on a non-enterprise plan is rejected', r.status === 403, `HTTP ${r.status} ${r.text}`);
-  await Tenant.updateOne({ _id: tenantId }, { $set: { plan: 'enterprise' } });
-
-  r = await req('/api/v1/configuration/auth.sso_enabled', { method: 'PUT', cookie: adminCookie2, body: { value: true } });
-  check('enabling SSO on an enterprise plan succeeds', r.status === 200, `HTTP ${r.status} ${r.text}`);
-  await req('/api/v1/configuration/auth.sso_provider', { method: 'PUT', cookie: adminCookie2, body: { value: 'oidc' } });
-
-  r = await req(`/api/v1/auth/sso/${tenant._id}/status`);
-  check('SSO status reflects the persisted, enterprise-gated configuration', r.status === 200 && r.json?.data?.enabled === true && r.json?.data?.provider === 'oidc', JSON.stringify(r.json?.data));
 
   r = await req(`/api/v1/auth/sso/${tenant._id}/status`);
   check('SSO status never exposes a client secret or issuer URL', !JSON.stringify(r.json).toLowerCase().includes('secret'));
-
-  r = await req(`/api/v1/auth/sso/${tenant._id}/login`);
-  check('SSO initiate is a real route that responds honestly (501), not a silent no-op or a faked success', r.status === 501, `HTTP ${r.status}`);
-
-  r = await req(`/api/v1/auth/sso/${tenant._id}/callback`);
-  check('SSO callback is a real route that responds honestly (501)', r.status === 501, `HTTP ${r.status}`);
 
   r = await req(`/api/v1/auth/sso/000000000000000000000000/status`);
   check('SSO status for an unknown tenant slug 404s rather than leaking state', r.status === 404, `HTTP ${r.status}`);

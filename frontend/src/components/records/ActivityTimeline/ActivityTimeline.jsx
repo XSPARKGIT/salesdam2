@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -24,6 +24,7 @@ import {
   updateActivity,
   deleteActivity,
 } from '../../../services/api/activities';
+import { getUsers } from '../../../services/api/users';
 import styles from './ActivityTimeline.module.css';
 
 const PAGE_SIZE = 25;
@@ -59,15 +60,21 @@ const ActivityTimeline = ({ objectApiName, recordId }) => {
   const [filterType, setFilterType] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [users, setUsers] = useState([]);
+  const [filterUserId, setFilterUserId] = useState('');
+
+  useEffect(() => {
+    getUsers({}).then((u) => setUsers(Array.isArray(u) ? u : [])).catch(() => {});
+  }, []);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [dueAt, setDueAt] = useState('');
 
-  const queryKey = ['activity-timeline', objectApiName, recordId, limit, filterType, fromDate, toDate];
+  const queryKey = ['activity-timeline', objectApiName, recordId, limit, filterType, fromDate, toDate, filterUserId];
 
   const { data, isLoading, isError } = useQuery({
     queryKey,
-    queryFn: () => getTimeline(objectApiName, recordId, { limit, types: filterType || undefined, from: fromDate || undefined, to: toDate || undefined }),
+    queryFn: () => getTimeline(objectApiName, recordId, { limit, types: filterType || undefined, from: fromDate || undefined, to: toDate || undefined, userId: filterUserId || undefined }),
     enabled: !!objectApiName && !!recordId,
   });
   const items = data?.items || [];
@@ -192,6 +199,15 @@ const ActivityTimeline = ({ objectApiName, recordId }) => {
           <option value="">All</option>
           {Object.keys(TYPE_META).map((t) => (
             <option key={t} value={t}>{TYPE_META[t].label}</option>
+          ))}
+        </select>
+        <label style={{ fontSize: 12 }}>User:</label>
+        <select value={filterUserId} onChange={(e) => setFilterUserId(e.target.value)} style={{ fontSize: 12, padding: '2px 6px' }}>
+          <option value="">All users</option>
+          {users.map((u) => (
+            <option key={u._id || u.id} value={u._id || u.id}>
+              {u.firstName || u.name || u.email || u._id}
+            </option>
           ))}
         </select>
         <label style={{ fontSize: 12 }}>From:</label>
