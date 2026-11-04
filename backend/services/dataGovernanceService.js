@@ -123,4 +123,30 @@ const restoreBackup = async (jobId, targetTenantId, user) => {
   return { restored: true, componentCount: job.componentCount };
 };
 
-export default { resolveRetention, enforceRetention, createBackup, restoreBackup };
+/**
+ * Anonymise personal information in records of a given object for a tenant.
+ * Replaces PII fields with anonymised values. Records are retained but
+ * personal data is masked.
+ */
+const anonymiseRecords = async (tenantId, objectApiName, recordIds, user) => {
+  const fields = await FieldMeta.find({ tenantId, objectApiName }).lean();
+  const piiFields = fields.filter((f) =>
+    ['text', 'email', 'phone', 'textarea'].includes(f.type) &&
+    /name|email|phone|address|contact/i.test(f.apiName),
+  );
+
+  let affected = 0;
+  for (const id of recordIds) {
+    const record = await DynamicRecord.findOne({ _id: id, tenantId, objectApiName, isDeleted: false });
+    if (!record) continue;
+    for (const f of piiFields) {
+      record.setField(f.apiName, '[ANONYMISED]');
+    }
+    record.lastModifiedBy = user?._id;
+    await record.save();
+    affected++;
+  }
+  return { anonymised: affected };
+};
+
+export default { resolveRetention, enforceRetention, createBackup, restoreBackup, anonymiseRecords };

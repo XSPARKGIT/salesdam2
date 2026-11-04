@@ -51,4 +51,13 @@ router.post('/backups/:id/restore', checkAppPermission('canManageTenantSettings'
   sendSuccess(res, { data: result }, 'Backup restored');
 }));
 
+router.post('/anonymise', checkAppPermission('canManageTenantSettings'), asyncHandler(async (req, res) => {
+  const { objectApiName, recordIds } = req.body || {};
+  if (!objectApiName || !Array.isArray(recordIds) || recordIds.length === 0) {
+    throw new AppError('objectApiName and recordIds array are required.', 400);
+  }
+  const result = await dataGovernanceService.anonymiseRecords(req.tenantId, objectApiName, recordIds, req.user);
+  sendSuccess(res, { data: result }, 'Records anonymised');
+}));
+
 export default router;
