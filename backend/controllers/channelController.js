@@ -2,6 +2,7 @@ import channelService from '../services/channelService.js';
 import channelProviders from '../services/channelProviders.js';
 import { CHANNELS } from '../models/ChannelAccount.js';
 import { asyncHandler, sendSuccess } from '../utils/errors.js';
+import { audit } from '../utils/auditLogger.js';
 
 const listAccounts = asyncHandler(async (req, res) => {
   const accounts = await channelService.listAccounts(req.tenantId);
@@ -38,6 +39,16 @@ const createAccount = asyncHandler(async (req, res) => {
     data: req.body,
     user: req.user,
   });
+  // Never include credentials/webhookSecret in audit details.
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'integration_config_create',
+    resource: 'ChannelAccount',
+    resourceId: account._id,
+    details: { channel: account.channel, provider: account.provider, name: account.name },
+    req,
+  });
   sendSuccess(res, { data: account }, 'Channel account created', 201);
 });
 
@@ -47,11 +58,30 @@ const updateAccount = asyncHandler(async (req, res) => {
     id: req.params.id,
     updates: req.body,
   });
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'integration_config_update',
+    resource: 'ChannelAccount',
+    resourceId: account._id,
+    details: { channel: account.channel, provider: account.provider, fields: Object.keys(req.body || {}).filter((k) => k !== 'credentials' && k !== 'webhookSecret') },
+    req,
+  });
   sendSuccess(res, { data: account }, 'Channel account updated');
 });
 
 const deleteAccount = asyncHandler(async (req, res) => {
+  const existing = await channelService.getAccount({ tenantId: req.tenantId, id: req.params.id }).catch(() => null);
   await channelService.deleteAccount({ tenantId: req.tenantId, id: req.params.id });
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'integration_config_delete',
+    resource: 'ChannelAccount',
+    resourceId: req.params.id,
+    details: { channel: existing?.channel, provider: existing?.provider, name: existing?.name },
+    req,
+  });
   sendSuccess(res, {}, 'Channel account deleted');
 });
 

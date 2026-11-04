@@ -86,6 +86,13 @@ const getSettingsGroups = (onDeleteClick, features = {}) => [
           href="/admin/settings/sharing"
         />
         <SettingsCard
+          title="Data Governance & Backup"
+          description="Retention rules, backups, and recovery"
+          icon={HardDrive}
+          color="#0ea5e9"
+          href="/admin/settings/data-governance"
+        />
+        <SettingsCard
           title="Storage Usage"
           description="View workspace storage consumption breakdown by object"
           icon={HardDrive}

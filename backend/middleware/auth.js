@@ -3,6 +3,21 @@ import Session from '../models/Session.js';
 import ApiKey from '../models/ApiKey.js';
 import ApiKeyUsageLog from '../models/ApiKeyUsageLog.js';
 import { AppError } from '../utils/errors.js';
+import configurationService from '../services/configurationService.js';
+import authSecurityService from '../services/authSecurityService.js';
+
+// Core BRD §21.4: while MFA is required but not yet enrolled, a session can
+// reach only what's needed to finish enrollment (or sign out) — nothing
+// else. Checked against req.originalUrl since requireAuth is shared across
+// every router, so a relative req.path would mean different things
+// depending on where it's mounted.
+const MFA_ENROLLMENT_ALLOWLIST = new Set([
+  '/api/v1/auth/me',
+  '/api/v1/auth/logout',
+  '/api/v1/auth/mfa/status',
+  '/api/v1/auth/mfa/enroll',
+  '/api/v1/auth/mfa/enroll/verify',
+]);
 
 /**
  * requireAuth - Enforce active session OR valid API key.
@@ -18,6 +33,30 @@ const requireAuth = async (req, res, next) => {
     // 2. Check session is present (loaded by sessionMiddleware from DB)
     if (!req.sessionData?.userId) {
       throw new AppError('Authentication required. Please log in.', 401);
+    }
+
+    // A session still awaiting its MFA challenge is not an authenticated
+    // session — only POST /auth/mfa/verify may act on it.
+    if (req.sessionData.mfaPending) {
+      throw new AppError('MFA verification required. Please complete sign-in.', 401);
+    }
+
+    // Core BRD §21.5: automatic logout after configured inactivity. 0 (the
+    // default) disables this check — only the absolute session lifetime
+    // (sessionMiddleware's TTL) applies.
+    if (req.sessionData.lastAccessedAt) {
+      const inactivityMinutes = await configurationService.resolve(
+        'auth.session_inactivity_timeout_minutes',
+        req.sessionData.tenantId,
+        0,
+      );
+      if (inactivityMinutes > 0) {
+        const idleMs = Date.now() - new Date(req.sessionData.lastAccessedAt).getTime();
+        if (idleMs > inactivityMinutes * 60 * 1000) {
+          await req.destroySession();
+          throw new AppError('Your session has expired due to inactivity. Please log in again.', 401);
+        }
+      }
     }
 
     // 3. Load the user
@@ -49,6 +88,20 @@ const requireAuth = async (req, res, next) => {
     const tenantId = req.sessionData.tenantId;
     if (!tenantId) {
       throw new AppError('No active tenant. Please select a workspace.', 400);
+    }
+
+    // Core BRD §21.4: block everything except finishing enrollment (or
+    // logging out) for a user MFA requires but who hasn't enrolled yet.
+    // Enforced here, on every authenticated request, not just at login —
+    // so it can't be bypassed by going straight to another endpoint.
+    if (!user.mfa?.enabled) {
+      const mfaRequired = await authSecurityService.isMfaRequiredFor(user);
+      if (mfaRequired) {
+        const path = (req.originalUrl || '').split('?')[0];
+        if (!MFA_ENROLLMENT_ALLOWLIST.has(path)) {
+          throw new AppError('Multi-factor authentication setup is required before you can continue.', 403);
+        }
+      }
     }
 
     req.user = user;

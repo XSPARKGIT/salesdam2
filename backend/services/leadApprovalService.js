@@ -5,6 +5,7 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import User from '../models/User.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
+import { audit } from '../utils/auditLogger.js';
 
 class LeadApprovalService {
   async getSmtpTransporter() {
@@ -256,6 +257,16 @@ class LeadApprovalService {
       // Commit transaction
       await session.commitTransaction();
 
+      await audit({
+        tenantId,
+        userId,
+        action: 'approval_approve',
+        resource: 'Lead',
+        resourceId: leadId,
+        objectApiName: 'lead',
+        details: { dealId: deal._id },
+      });
+
       // Send email after transaction commits
       await this.sendEmail(
         leadOwner.email,
@@ -295,6 +306,16 @@ class LeadApprovalService {
     lead.setField('approval_status', 'Rejected');
     lead.setField('rejection_reason', reason);
     await lead.save();
+
+    await audit({
+      tenantId,
+      userId,
+      action: 'approval_reject',
+      resource: 'Lead',
+      resourceId: leadId,
+      objectApiName: 'lead',
+      details: { reason },
+    });
 
     // Send email to lead owner
     const appUrl = process.env.APP_URL || 'http://localhost:3000';

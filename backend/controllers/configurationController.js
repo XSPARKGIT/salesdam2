@@ -1,5 +1,6 @@
 import configurationService from '../services/configurationService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { audit } from '../utils/auditLogger.js';
 
 /**
  * GET /api/v1/configuration
@@ -30,11 +31,29 @@ const updateTenantConfig = asyncHandler(async (req, res) => {
     throw new AppError('A "value" is required.', 400);
   }
 
+  // Core BRD §21.6: SSO is an enterprise-plan capability.
+  if (key === 'auth.sso_enabled' && (req.body.value === true || req.body.value === 'true')) {
+    if (req.tenant?.plan !== 'enterprise') {
+      throw new AppError('Single Sign-On is available on the enterprise plan.', 403);
+    }
+  }
+
   const doc = await configurationService.set({
     key,
     tenantId: req.tenantId,
     value: req.body.value,
     updatedBy: req.user._id,
+  });
+  // The value itself may be a secret (e.g. an integration access token), so
+  // only the key name is recorded here — never the value, old or new.
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'tenant_config_update',
+    resource: 'TenantConfiguration',
+    resourceId: key,
+    details: { key },
+    req,
   });
   sendSuccess(res, { data: doc }, 'Configuration saved');
 });
@@ -45,6 +64,15 @@ const updateTenantConfig = asyncHandler(async (req, res) => {
  */
 const resetTenantConfig = asyncHandler(async (req, res) => {
   const removed = await configurationService.clear(req.params.key, req.tenantId);
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'tenant_config_reset',
+    resource: 'TenantConfiguration',
+    resourceId: req.params.key,
+    details: { key: req.params.key, removed },
+    req,
+  });
   sendSuccess(
     res,
     { data: { removed } },

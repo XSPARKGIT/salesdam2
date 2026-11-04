@@ -1,6 +1,7 @@
 import Integration from '../models/Integration.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
+import { audit } from '../utils/auditLogger.js';
 
 /**
  * GET /api/integrations
@@ -58,6 +59,16 @@ const createIntegration = asyncHandler(async (req, res) => {
   const token = integration.generateToken();
   await integration.save();
 
+  await audit({
+    tenantId: req.user.tenantId,
+    userId: req.user._id,
+    action: 'create',
+    resource: 'Integration',
+    resourceId: integration._id,
+    details: { name, externalSystem },
+    req,
+  });
+
   sendSuccess(res, {
     data: {
       ...integration.toObject(),
@@ -113,6 +124,16 @@ const updateIntegration = asyncHandler(async (req, res) => {
 
   await integration.save();
 
+  await audit({
+    tenantId: req.user.tenantId,
+    userId: req.user._id,
+    action: 'update',
+    resource: 'Integration',
+    resourceId: integration._id,
+    details: { fields: Object.keys(req.body || {}) },
+    req,
+  });
+
   sendSuccess(res, {
     data: integration.toObject({ select: '-tokenHash -accessToken' }),
     message: 'Integration updated successfully.',
@@ -136,6 +157,16 @@ const regenerateToken = asyncHandler(async (req, res) => {
 
   const newToken = integration.generateToken();
   await integration.save();
+
+  await audit({
+    tenantId: req.user.tenantId,
+    userId: req.user._id,
+    action: 'api_credential_rotate',
+    resource: 'Integration',
+    resourceId: integration._id,
+    details: { name: integration.name },
+    req,
+  });
 
   sendSuccess(res, {
     data: {
@@ -163,6 +194,16 @@ const deleteIntegration = asyncHandler(async (req, res) => {
 
   integration.isDeleted = true;
   await integration.save();
+
+  await audit({
+    tenantId: req.user.tenantId,
+    userId: req.user._id,
+    action: 'delete',
+    resource: 'Integration',
+    resourceId: integration._id,
+    details: { name: integration.name },
+    req,
+  });
 
   sendSuccess(res, {
     message: 'Integration deleted successfully.',

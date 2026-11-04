@@ -13,6 +13,7 @@ import logger from '../utils/logger.js';
 import { ensureUserObject } from '../services/metadataService.js';
 import passwordResetService from '../services/passwordResetService.js';
 import { validateUserPermissions } from '../services/permissionValidationService.js';
+import authSecurityService from '../services/authSecurityService.js';
 
 /**
  * The superuser role is tenant-scoped and `user.role` is an unpopulated
@@ -131,6 +132,10 @@ const createUser = asyncHandler(async (req, res) => {
     throw new AppError('Either provide a password or set sendWelcomeEmail to true', 400);
   }
 
+  if (userPassword) {
+    await authSecurityService.validatePasswordForTenant(userPassword, req.tenantId);
+  }
+
   // Find the default workspace to add the user to
   const Workspace = (await import('../models/Workspace.js')).default;
   const defaultWorkspace = await Workspace.findOne({
@@ -235,11 +240,25 @@ const updateUser = asyncHandler(async (req, res) => {
     'preferences',
     'manager',
   ];
+  const wasInactive = user.status !== 'active';
   allowedFields.forEach((key) => {
     if (req.body[key] !== undefined) user[key] = req.body[key];
   });
 
   await user.save();
+
+  // Reactivation gets its own audit event (BRD §20.1/§21.3), distinct from
+  // the generic update — mirrors deactivateUser's dedicated event.
+  if (wasInactive && user.status === 'active') {
+    await audit({
+      tenantId: req.tenantId,
+      userId: req.user._id,
+      action: 'user_activate',
+      resource: 'User',
+      resourceId: user._id,
+      req,
+    });
+  }
 
   await audit({
     tenantId: req.tenantId,
@@ -357,9 +376,10 @@ const updateMyProfile = asyncHandler(async (req, res) => {
  */
 const resetUserPassword = asyncHandler(async (req, res) => {
   const { newPassword } = req.body;
-  if (!newPassword || newPassword.length < 8) {
-    throw new AppError('Password must be at least 8 characters.', 400);
+  if (!newPassword) {
+    throw new AppError('A new password is required.', 400);
   }
+  await authSecurityService.validatePasswordForTenant(newPassword, req.tenantId);
 
   const user = await User.findOne({
     _id: req.params.id,
@@ -563,22 +583,13 @@ const changeMyPassword = asyncHandler(async (req, res) => {
     throw new AppError('Current password and new password are required.', 400);
   }
 
-  if (newPassword.length < 8) {
-    throw new AppError('Password must be at least 8 characters long.', 400);
-  }
-
-  if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/.test(newPassword)) {
-    throw new AppError(
-      'Password must contain uppercase, lowercase, number, and special character.',
-      400,
-    );
-  }
-
   const user = await User.findById(req.user._id).select('+password');
   if (!user) throw new AppError('User not found.', 404);
 
   const isMatch = await user.comparePassword(currentPassword);
   if (!isMatch) throw new AppError('Current password is incorrect.', 401);
+
+  await authSecurityService.validatePasswordForTenant(newPassword, req.tenantId);
 
   user.password = newPassword;
   await user.save();

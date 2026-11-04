@@ -192,6 +192,7 @@ const RoleForm = () => {
     label: '',
     description: '',
     dataAccess: 'own',
+    mfaRequired: false,
     appPermissions: {},
     objectPermissions: [],
     appIds: [],
@@ -447,6 +448,17 @@ const RoleForm = () => {
                     <option value="own_and_subordinates">Own & Subordinates</option>
                     <option value="own">Own Records Only</option>
                   </select>
+                </div>
+                <div className={`${styles.field} ${styles.fullWidth}`}>
+                  <label title={isReadOnly ? undefined : 'Every user with this role must complete multi-factor authentication to sign in'} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: isReadOnly ? 'default' : 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!form.mfaRequired}
+                      onChange={(e) => setForm((p) => ({ ...p, mfaRequired: e.target.checked }))}
+                      disabled={isReadOnly}
+                    />
+                    <span className={styles.label} style={{ margin: 0 }}>Require Multi-Factor Authentication</span>
+                  </label>
                 </div>
               </div>
             </div>

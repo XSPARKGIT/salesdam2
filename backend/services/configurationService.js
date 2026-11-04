@@ -1,7 +1,7 @@
 import TenantConfiguration from '../models/TenantConfiguration.js';
-import crypto from 'crypto';
 import { AppError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
+import { encryptSecret as _encryptSecret, decryptSecret as _decryptSecret, isEncrypted } from '../utils/secretCrypto.js';
 
 /**
  * Code-level system defaults. These are used when neither a tenant-specific
@@ -187,37 +187,130 @@ export const SYSTEM_DEFAULTS = {
     description: 'Comma-separated list of permitted MIME types for uploads.',
     editableByTenant: true,
   },
-};
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'dev-only-insecure-key-change-me';
+  // ── Authentication & Session Security (Core BRD §21) ─────────────────────
+  'auth.password_min_length': {
+    value: 8,
+    dataType: 'number',
+    category: 'auth',
+    label: 'Minimum Password Length',
+    description: 'Shortest password accepted when a user sets or resets their password.',
+    editableByTenant: true,
+  },
+  'auth.password_require_uppercase': {
+    value: false,
+    dataType: 'boolean',
+    category: 'auth',
+    label: 'Require Uppercase Letter',
+    description: 'A new password must contain at least one uppercase letter.',
+    editableByTenant: true,
+  },
+  'auth.password_require_lowercase': {
+    value: false,
+    dataType: 'boolean',
+    category: 'auth',
+    label: 'Require Lowercase Letter',
+    description: 'A new password must contain at least one lowercase letter.',
+    editableByTenant: true,
+  },
+  'auth.password_require_number': {
+    value: false,
+    dataType: 'boolean',
+    category: 'auth',
+    label: 'Require Number',
+    description: 'A new password must contain at least one digit.',
+    editableByTenant: true,
+  },
+  'auth.password_require_symbol': {
+    value: false,
+    dataType: 'boolean',
+    category: 'auth',
+    label: 'Require Symbol',
+    description: 'A new password must contain at least one special character.',
+    editableByTenant: true,
+  },
+  'auth.max_failed_login_attempts': {
+    value: 5,
+    dataType: 'number',
+    category: 'auth',
+    label: 'Max Failed Login Attempts',
+    description: 'Number of consecutive failed logins before the account is locked.',
+    editableByTenant: true,
+  },
+  'auth.lockout_duration_minutes': {
+    value: 30,
+    dataType: 'number',
+    category: 'auth',
+    label: 'Lockout Duration (minutes)',
+    description: 'How long an account stays locked after too many failed logins.',
+    editableByTenant: true,
+  },
+  'auth.session_inactivity_timeout_minutes': {
+    value: 0,
+    dataType: 'number',
+    category: 'auth',
+    label: 'Session Inactivity Timeout (minutes)',
+    description: 'Automatically end a session after this many minutes of inactivity. 0 disables inactivity timeout (the absolute session lifetime still applies).',
+    editableByTenant: true,
+  },
+  'auth.mfa_required': {
+    value: false,
+    dataType: 'boolean',
+    category: 'auth',
+    label: 'Require Multi-Factor Authentication',
+    description: 'Every user in this tenant must complete MFA to sign in. When set as a platform default that tenants cannot override, this enforces MFA platform-wide.',
+    editableByTenant: true,
+  },
+  'auth.sso_enabled': {
+    value: false,
+    dataType: 'boolean',
+    category: 'auth',
+    label: 'Single Sign-On Enabled',
+    description: 'Allow this tenant to sign in through its configured identity provider.',
+    editableByTenant: true,
+  },
+  'auth.sso_provider': {
+    value: '',
+    dataType: 'string',
+    category: 'auth',
+    label: 'SSO Provider Type',
+    description: 'Identity provider protocol, e.g. "oidc".',
+    editableByTenant: true,
+  },
+  'auth.sso_issuer': {
+    value: '',
+    dataType: 'string',
+    category: 'auth',
+    label: 'SSO Issuer URL',
+    description: 'The identity provider’s issuer/discovery URL.',
+    editableByTenant: true,
+  },
+  'auth.sso_client_id': {
+    value: '',
+    dataType: 'string',
+    category: 'auth',
+    label: 'SSO Client ID',
+    description: 'The client/application ID registered with the identity provider.',
+    editableByTenant: true,
+  },
+  'auth.sso_client_secret': {
+    value: '',
+    dataType: 'string',
+    category: 'auth',
+    label: 'SSO Client Secret',
+    description: 'The client secret registered with the identity provider. Stored encrypted.',
+    editableByTenant: true,
+    isSecret: true,
+  },
+};
 
 const hasDefault = (key) =>
   Object.prototype.hasOwnProperty.call(SYSTEM_DEFAULTS, key);
 
-const deriveKey = () => crypto.scryptSync(ENCRYPTION_KEY, 'salesdam-config-salt', 32);
-
-const encryptSecret = (plaintext) => {
-  const key = deriveKey();
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const enc = Buffer.concat([cipher.update(String(plaintext ?? ''), 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `enc:${iv.toString('base64')}:${tag.toString('base64')}:${enc.toString('base64')}`;
-};
-
-const isEncrypted = (v) => typeof v === 'string' && v.startsWith('enc:');
-
-const decryptSecret = (stored) => {
-  if (!isEncrypted(stored)) return stored;
-  const parts = stored.split(':');
-  if (parts.length !== 4) return stored;
-  const [, ivB64, tagB64, dataB64] = parts;
-  const key = deriveKey();
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
-  decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
-  const dec = Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]);
-  return dec.toString('utf8');
-};
+// This service's own secrets (tenant config values) stay on the original
+// 'salesdam-config-salt' domain — unchanged from before the extraction.
+const encryptSecret = (plaintext) => _encryptSecret(plaintext, 'salesdam-config-salt');
+const decryptSecret = (stored) => _decryptSecret(stored, 'salesdam-config-salt');
 
 const maskSecret = () => '••••••••';
 

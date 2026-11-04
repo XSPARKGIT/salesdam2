@@ -28,6 +28,72 @@ const RESERVED_FIELD_API_NAMES = ['owner_id', 'description', 'id'];
 // evaluation cost bounded.
 const MAX_VALIDATION_RULES = 50;
 
+// Fields whose change is worth naming in a validation-rule audit event.
+// Long free-text fields (expression, errorMessage, description) are flagged
+// as changed without their full text, to keep entries compact and avoid
+// echoing large formulas into the Audit Trail.
+const VALIDATION_RULE_AUDIT_FIELDS = ['name', 'description', 'expression', 'errorMessage', 'errorField', 'isActive'];
+const SHORT_VALIDATION_RULE_FIELDS = new Set(['name', 'errorField', 'isActive']);
+
+const ruleKey = (rule) => String(rule._id || rule.id || '');
+
+/**
+ * Diffs the object's validation rules before vs. after a save and emits
+ * distinct, per-rule audit events (BRD §20.1) — never folded into the
+ * generic ObjectMeta 'update' event, so rule changes stay individually
+ * searchable in the Audit Trail.
+ */
+const auditValidationRuleChanges = async ({ tenantId, userId, objectApiName, before, after, req }) => {
+  const beforeByKey = new Map(before.map((r) => [ruleKey(r), r]));
+  const afterByKey = new Map(after.map((r) => [ruleKey(r), r]));
+
+  const events = [];
+  for (const [key, rule] of afterByKey) {
+    if (!beforeByKey.has(key)) {
+      events.push({
+        action: 'validation_rule_create',
+        resourceId: rule._id || rule.id,
+        details: { name: rule.name, isActive: rule.isActive !== false },
+      });
+    }
+  }
+  for (const [key, rule] of beforeByKey) {
+    if (!afterByKey.has(key)) {
+      events.push({
+        action: 'validation_rule_delete',
+        resourceId: rule._id || rule.id,
+        details: { name: rule.name },
+      });
+    }
+  }
+  for (const [key, prevRule] of beforeByKey) {
+    const nextRule = afterByKey.get(key);
+    if (!nextRule) continue;
+    const changed = VALIDATION_RULE_AUDIT_FIELDS.filter((f) => String(prevRule[f] ?? '') !== String(nextRule[f] ?? ''));
+    if (changed.length === 0) continue;
+    const details = { name: nextRule.name, changedFields: changed };
+    // Short, non-sensitive fields are useful enough to show their actual
+    // before/after values; long free-text fields are flagged by name only.
+    for (const f of changed) {
+      if (SHORT_VALIDATION_RULE_FIELDS.has(f)) {
+        details[f] = { from: prevRule[f], to: nextRule[f] };
+      }
+    }
+    events.push({ action: 'validation_rule_update', resourceId: nextRule._id || nextRule.id, details });
+  }
+
+  await Promise.all(events.map((e) => audit({
+    tenantId,
+    userId,
+    action: e.action,
+    resource: 'ValidationRule',
+    resourceId: e.resourceId,
+    objectApiName,
+    details: e.details,
+    req,
+  })));
+};
+
 /**
  * Normalise and validate an object-level Kanban configuration.
  *
@@ -507,6 +573,12 @@ const updateObject = asyncHandler(async (req, res) => {
 
   const wasSearchable = obj.searchable;
   const wasHasRecordTypes = obj.hasRecordTypes;
+  // Snapshot before the overwrite below, so the rule-level diff below can
+  // tell exactly what changed — only taken when this request actually
+  // touches validationRules, so an unrelated field update never runs it.
+  const prevValidationRules = req.body.validationRules !== undefined
+    ? (obj.validationRules ? obj.validationRules.toObject() : [])
+    : null;
   allowedUpdates.forEach((key) => {
     if (key === 'kanbanConfig' || key === 'calendarConfig') return;
     if (req.body[key] !== undefined) obj[key] = req.body[key];
@@ -527,6 +599,19 @@ const updateObject = asyncHandler(async (req, res) => {
   }
   obj.lastModifiedBy = req.user._id;
   await obj.save();
+
+  // Distinct, per-rule audit events (BRD §20.1) — only when this request
+  // actually touched validationRules, and only for the rules that changed.
+  if (prevValidationRules !== null) {
+    await auditValidationRuleChanges({
+      tenantId: req.tenantId,
+      userId: req.user._id,
+      objectApiName: apiName,
+      before: prevValidationRules,
+      after: obj.validationRules ? obj.validationRules.toObject() : [],
+      req,
+    });
+  }
 
   // RTYPE-002: Ensure a system "type" picklist exists whenever hasRecordTypes
   // is enabled — covers both the initial toggle and any case where the field

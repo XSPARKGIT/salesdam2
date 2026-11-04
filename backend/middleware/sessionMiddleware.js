@@ -59,6 +59,10 @@ const sessionMiddleware = async (req, res, next) => {
           workspaceId: session.workspaceId?.toString() || null,
           userAgent: session.userAgent || '',
           ipAddress: session.ipAddress || '',
+          // A session awaiting an MFA challenge is not yet an authenticated
+          // session — requireAuth must treat it as unauthenticated.
+          mfaPending: Boolean(session.data?.mfaPending),
+          lastAccessedAt: session.lastAccessedAt,
         };
       }
     } catch {
@@ -67,15 +71,18 @@ const sessionMiddleware = async (req, res, next) => {
   }
 
   /* ── Helper: create a brand-new session ────────────────────────────── */
-  req.createSession = async (data) => {
+  // `opts.maxAgeMs` shortens the lifetime (used for an MFA-pending session);
+  // `opts.data` stores arbitrary session-state (e.g. { mfaPending: true }).
+  req.createSession = async (data, opts = {}) => {
     const newSid = uuidv4();
-    const expiresAt = new Date(Date.now() + SESSION_MAX_AGE);
+    const maxAgeMs = opts.maxAgeMs || SESSION_MAX_AGE;
+    const expiresAt = new Date(Date.now() + maxAgeMs);
 
     await Session.create({
       sessionId: newSid,
       userId: data.userId || null,
       tenantId: data.tenantId || null,
-      data: {},
+      data: opts.data || {},
       expiresAt,
       lastAccessedAt: new Date(),
       ipAddress: data.ipAddress || req.ip || '',
@@ -83,10 +90,22 @@ const sessionMiddleware = async (req, res, next) => {
     });
 
     req.sessionId = newSid;
-    req.sessionData = { ...data };
+    req.sessionData = { ...data, mfaPending: Boolean(opts.data?.mfaPending) };
 
-    _setSessionCookie(res, newSid);
+    _setSessionCookie(res, newSid, maxAgeMs);
     return newSid;
+  };
+
+  /* ── Helper: turn the current MFA-pending session into a full one ───── */
+  req.upgradeSessionAfterMfa = async () => {
+    if (!req.sessionId) return;
+    const expiresAt = new Date(Date.now() + SESSION_MAX_AGE);
+    await Session.updateOne(
+      { sessionId: req.sessionId },
+      { $set: { data: {}, expiresAt, lastAccessedAt: new Date() } },
+    );
+    req.sessionData = { ...req.sessionData, mfaPending: false };
+    _setSessionCookie(res, req.sessionId, SESSION_MAX_AGE);
   };
 
   /* ── Helper: patch the current session document ─────────────────────── */
@@ -114,9 +133,9 @@ const sessionMiddleware = async (req, res, next) => {
 
 /* ── Cookie utilities ───────────────────────────────────────────────────── */
 
-const _setSessionCookie = (res, sid) => {
+const _setSessionCookie = (res, sid, maxAgeMs = SESSION_MAX_AGE) => {
   const isProd = process.env.NODE_ENV === 'production';
-  const maxAge = Math.floor(SESSION_MAX_AGE / 1000);
+  const maxAge = Math.floor(maxAgeMs / 1000);
 
   const parts = [
     `${SESSION_COOKIE}=${encodeURIComponent(sid)}`,

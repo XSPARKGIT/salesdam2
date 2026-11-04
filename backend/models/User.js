@@ -116,6 +116,21 @@ const userSchema = new mongoose.Schema(
     passwordResetToken: { type: String, select: false },
     passwordResetExpires: { type: Date, select: false },
 
+    // Core BRD §21.2: Multi-Factor Authentication (TOTP). The secret and
+    // backup codes are never selected by default and never appear in any
+    // API response or audit entry — only enrollment/verification endpoints
+    // touch them, and always with an explicit .select('+mfa.secret').
+    mfa: {
+      enabled: { type: Boolean, default: false },
+      secret: { type: String, select: false }, // encrypted at rest (secretCrypto)
+      backupCodeHashes: { type: [String], select: false, default: [] },
+      enrolledAt: { type: Date },
+      lastVerifiedAt: { type: Date },
+    },
+    // Per-user override: MFA required for this specific user regardless of
+    // tenant/Role policy ("required for selected users").
+    mfaRequired: { type: Boolean, default: false },
+
     manager: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

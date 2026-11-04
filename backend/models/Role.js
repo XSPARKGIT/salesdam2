@@ -31,6 +31,11 @@ const roleSchema = new mongoose.Schema({
   isEditable: { type: Boolean, default: true }, // superuser role is not editable
   isDefault: { type: Boolean, default: false }, // assigned to new users by default
 
+  // Core BRD §21.2: MFA required for every user holding this Role ("required
+  // for ... administrative Profiles"), independent of any tenant-wide or
+  // per-user MFA setting.
+  mfaRequired: { type: Boolean, default: false },
+
   // Object-level permissions
   objectPermissions: [objectPermissionSchema],
 

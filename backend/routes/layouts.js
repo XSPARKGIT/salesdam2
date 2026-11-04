@@ -12,6 +12,7 @@ import { requireObjectMetadataAccess } from '../services/objectAccessService.js'
 import { checkAppPermission, buildDataAccessFilter } from '../middleware/permissions.js';
 import { resolveLayout } from '../services/layoutResolver.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { audit } from '../utils/auditLogger.js';
 
 const router = express.Router();
 
@@ -146,6 +147,18 @@ router.put('/:objectApiName/assignments', checkAppPermission('canManageLayouts')
   ));
 
   const saved = await LayoutAssignment.find({ tenantId, objectApiName }).lean();
+
+  await audit({
+    tenantId,
+    userId: req.user._id,
+    action: 'layout_assignment_update',
+    resource: 'LayoutAssignment',
+    resourceId: objectApiName,
+    objectApiName,
+    details: { roleCount: keep.length },
+    req,
+  });
+
   sendSuccess(res, { data: saved }, 'Layout assignment saved');
 }));
 
@@ -170,6 +183,16 @@ router.post('/', checkAppPermission('canManageLayouts'), asyncHandler(async (req
     ...req.body,
   });
 
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'create',
+    resource: 'Layout',
+    resourceId: layout._id,
+    objectApiName,
+    req,
+  });
+
   sendSuccess(res, { data: layout }, 'Layout created', 201);
 }));
 
@@ -190,6 +213,17 @@ router.put('/:id', checkAppPermission('canManageLayouts'), asyncHandler(async (r
   layout.lastModifiedBy = req.user._id;
   await layout.save();
 
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'update',
+    resource: 'Layout',
+    resourceId: layout._id,
+    objectApiName: layout.objectApiName,
+    details: { fields: allowed.filter((k) => req.body[k] !== undefined) },
+    req,
+  });
+
   sendSuccess(res, { data: layout }, 'Layout updated');
 }));
 
@@ -208,6 +242,18 @@ router.delete('/:id', checkAppPermission('canManageLayouts'), asyncHandler(async
     { tenantId: req.tenantId, objectApiName: layout.objectApiName },
     { $pull: { rules: { layoutId: layout._id } } },
   );
+
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'delete',
+    resource: 'Layout',
+    resourceId: layout._id,
+    objectApiName: layout.objectApiName,
+    details: { name: layout.name },
+    req,
+  });
+
   sendSuccess(res, {}, 'Layout deleted');
 }));
 

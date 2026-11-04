@@ -8,7 +8,7 @@ import styles from './Login.module.css';
 import api from '../../services/api';
 
 const ForgotPassword = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -17,15 +17,15 @@ const ForgotPassword = () => {
     event.preventDefault();
     setError('');
 
-    if (!username.trim()) {
-      setError('Please enter your username');
+    if (!email.trim()) {
+      setError('Please enter your email address');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      await api.post('/auth/forgot-password', { username });
+      await api.post('/auth/forgot-password', { email });
       setSubmitted(true);
     } catch (err) {
       setError(
@@ -76,7 +76,7 @@ const ForgotPassword = () => {
               <p className={styles.formSubtitle}>
                 {submitted
                   ? 'We sent a password reset link to your email'
-                  : 'Enter your username to receive a password reset link'}
+                  : 'Enter your email address to receive a password reset link'}
               </p>
             </div>
 
@@ -111,7 +111,7 @@ const ForgotPassword = () => {
                 </div>
                 <p style={{ color: '#666', marginBottom: '1.5rem' }}>
                   Didn't receive an email? Check your spam folder or try with a
-                  different username.
+                  different email address.
                 </p>
                 <Link
                   to="/login"
@@ -131,18 +131,18 @@ const ForgotPassword = () => {
             ) : (
               <form onSubmit={handleSubmit} noValidate className={styles.form}>
                 <FormInput
-                  id="username"
-                  label="Username"
-                  name="username"
-                  type="text"
-                  value={username}
+                  id="email"
+                  label="Email"
+                  name="email"
+                  type="email"
+                  value={email}
                   onChange={(e) => {
-                    setUsername(e.target.value);
+                    setEmail(e.target.value);
                     setError('');
                   }}
-                  placeholder="Enter your username"
+                  placeholder="Enter your email address"
                   autoFocus
-                  autoComplete="username"
+                  autoComplete="email"
                   error={error}
                 />
 

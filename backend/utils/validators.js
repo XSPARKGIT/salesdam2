@@ -1,13 +1,12 @@
 import Joi from 'joi';
 
 // ─── Password Requirements (used everywhere) ──────────────────────────────────
-const passwordSchema = Joi.string()
-  .min(8)
-  .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-  .message(
-    'Password must contain uppercase, lowercase, number, and special character',
-  )
-  .required();
+// Core BRD §21.3: password policy is tenant-configurable (see
+// services/authSecurityService.js), so the actual rules are enforced there,
+// against the right tenant, with a message naming exactly what's missing.
+// This Joi-level check only guards against an empty/absurd value reaching
+// that service.
+const passwordSchema = Joi.string().min(1).max(200).required();
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 const registerSchema = Joi.object({
@@ -245,9 +244,12 @@ const verifyPaymentSchema = Joi.object({
 });
 
 // ─── Password Reset ───────────────────────────────────────────────────────────
+// Email is the sole login identifier (see authController.login); `username`
+// is accepted only as a legacy alias, same pattern as the login schema.
 const forgotPasswordSchema = Joi.object({
-  username: Joi.string().required(),
-});
+  email: Joi.string().email(),
+  username: Joi.string(),
+}).or('email', 'username');
 
 const verifyResetTokenSchema = Joi.object({
   token: Joi.string().required(),

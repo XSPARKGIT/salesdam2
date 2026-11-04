@@ -19,6 +19,8 @@ import { validateUserPermissions } from '../services/permissionValidationService
 import { getPlanTier } from '../config/planMapping.js';
 import { executeWithTransaction } from '../utils/transactionHelper.js';
 import PLAN_LIMITS from '../config/planLimits.js';
+import authSecurityService from '../services/authSecurityService.js';
+import mfaService from '../services/mfaService.js';
 
 /**
  * POST /api/auth/register
@@ -61,6 +63,10 @@ const register = asyncHandler(async (req, res) => {
   if (slugExists) {
     throw new AppError('A workspace with this URL already exists.', 409);
   }
+
+  // No tenant exists yet for the new account, so this is checked against the
+  // platform-wide default policy (tenantId: null).
+  await authSecurityService.validatePasswordForTenant(password, null);
 
   const selectedPlan = getPlanTier(plan || 'starter');
   const limits = PLAN_LIMITS[selectedPlan];
@@ -299,7 +305,7 @@ const login = asyncHandler(async (req, res) => {
 
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
-    await user.incrementFailedLogins();
+    const { justLocked } = await authSecurityService.recordFailedLogin(user, user.tenantId);
     // Log auth failure
     try {
       const AuthFailureLog = (await import('../models/AuthFailureLog.js')).default;
@@ -321,6 +327,17 @@ const login = asyncHandler(async (req, res) => {
       req,
       status: 'failure',
     });
+    if (justLocked) {
+      await audit({
+        tenantId: user.tenantId,
+        userId: user._id,
+        userEmail: user.email,
+        action: 'account_lockout',
+        resource: 'User',
+        resourceId: user._id,
+        req,
+      });
+    }
     throw new AppError('Invalid username or password.', 401);
   }
 
@@ -343,12 +360,40 @@ const login = asyncHandler(async (req, res) => {
     await user.save();
   }
 
-  await user.resetFailedLogins();
+  await authSecurityService.recordSuccessfulLogin(user);
+
+  const effectiveTenantId = (tenantId || user.tenantId).toString();
+
+  // Core BRD §21.4: MFA, enforced here on the backend — never skippable by
+  // going straight to a different endpoint, since no full session exists
+  // until this check passes. Challenged on EVERY enrolled user, whether
+  // enrollment was required by policy or set up voluntarily — "required"
+  // only controls whether an unenrolled user is forced to enroll below.
+  const mfaRequired = await authSecurityService.isMfaRequiredFor(user);
+  if (user.mfa?.enabled) {
+    // Password was correct, but authentication is not complete: issue a
+    // short-lived pending session that only POST /auth/mfa/verify can act
+    // on (requireAuth rejects it — see middleware/auth.js).
+    await req.createSession(
+      {
+        userId: user._id.toString(),
+        tenantId: effectiveTenantId,
+        userAgent: req.headers['user-agent'] || '',
+        ipAddress: req.ip,
+      },
+      { maxAgeMs: 5 * 60 * 1000, data: { mfaPending: true } },
+    );
+    return sendSuccess(
+      res,
+      { data: { mfaChallengeRequired: true } },
+      'Enter your authentication code to finish signing in.',
+    );
+  }
 
   // Create session record and set cookie
   await req.createSession({
     userId: user._id.toString(),
-    tenantId: (tenantId || user.tenantId).toString(),
+    tenantId: effectiveTenantId,
     userAgent: req.headers['user-agent'] || '',
     ipAddress: req.ip,
   });
@@ -389,10 +434,232 @@ const login = asyncHandler(async (req, res) => {
             symbol: 'R',
           },
         },
+        // Tenant/Role/user policy requires MFA but this user has not
+        // enrolled yet — let them in, but the frontend must prompt
+        // enrollment immediately rather than leaving them permanently able
+        // to skip it.
+        mfaEnrollmentRequired: mfaRequired && !user.mfa?.enabled,
       },
     },
     'Login successful',
   );
+});
+
+/**
+ * POST /api/auth/mfa/verify
+ * Completes login for a session left pending by an MFA-required user.
+ * Accepts either a live TOTP code or a one-time backup code.
+ */
+const mfaVerifyLogin = asyncHandler(async (req, res) => {
+  const { code, backupCode } = req.body || {};
+  if (!req.sessionData?.mfaPending || !req.sessionData?.userId) {
+    throw new AppError('No pending MFA challenge for this session.', 400);
+  }
+
+  const user = await User.findById(req.sessionData.userId).select('+mfa.secret +mfa.backupCodeHashes');
+  if (!user || !user.mfa?.enabled) {
+    await req.destroySession();
+    throw new AppError('MFA is not set up for this account.', 400);
+  }
+
+  let ok = false;
+  let usedBackupCode = false;
+  if (code) {
+    const secret = mfaService.decryptMfaSecret(user.mfa.secret);
+    ok = mfaService.verifyToken(code, secret);
+  } else if (backupCode) {
+    const idx = await mfaService.matchBackupCode(backupCode, user.mfa.backupCodeHashes || []);
+    if (idx >= 0) {
+      ok = true;
+      usedBackupCode = true;
+      user.mfa.backupCodeHashes.splice(idx, 1);
+      await user.save();
+    }
+  }
+
+  if (!ok) {
+    await audit({
+      tenantId: user.tenantId,
+      userId: user._id,
+      userEmail: user.email,
+      action: 'mfa_verify_failed',
+      resource: 'User',
+      resourceId: user._id,
+      req,
+      status: 'failure',
+    });
+    throw new AppError('Incorrect authentication code.', 401);
+  }
+
+  user.mfa.lastVerifiedAt = new Date();
+  await user.save();
+  await req.upgradeSessionAfterMfa();
+
+  await audit({
+    tenantId: user.tenantId,
+    userId: user._id,
+    userEmail: user.email,
+    action: usedBackupCode ? 'mfa_recovery_used' : 'mfa_verify_success',
+    resource: 'User',
+    resourceId: user._id,
+    req,
+  });
+  await audit({
+    tenantId: user.tenantId,
+    userId: user._id,
+    userEmail: user.email,
+    action: 'login',
+    resource: 'User',
+    req,
+  });
+
+  const activeTenant = await Tenant.findById(req.sessionData.tenantId);
+  sendSuccess(res, {
+    data: {
+      user: {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        avatar: user.avatar,
+        preferences: user.preferences,
+        activeTenantId: req.sessionData?.tenantId,
+      },
+      tenant: activeTenant ? {
+        _id: activeTenant._id,
+        name: activeTenant.name,
+        slug: activeTenant.slug,
+        settings: activeTenant.settings,
+        features: activeTenant.features,
+      } : null,
+      usedBackupCode,
+    },
+  }, 'Login successful');
+});
+
+/**
+ * GET /api/auth/mfa/status
+ * Whether the current user has MFA enabled and/or is required to have it.
+ */
+const mfaStatus = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id).populate('role', 'mfaRequired');
+  const required = await authSecurityService.isMfaRequiredFor(user);
+  sendSuccess(res, {
+    data: {
+      enabled: Boolean(user.mfa?.enabled),
+      required,
+      enrolledAt: user.mfa?.enrolledAt || null,
+    },
+  });
+});
+
+/**
+ * POST /api/auth/mfa/enroll
+ * Starts enrollment: generates a TOTP secret (stored, but not yet "enabled"
+ * — enrollment only completes once the user proves they can generate a
+ * valid code from it) and a fresh set of recovery codes.
+ */
+const mfaEnroll = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (user.mfa?.enabled) {
+    throw new AppError('MFA is already enabled. Disable it before re-enrolling.', 400);
+  }
+
+  const secret = mfaService.generateSecret();
+  const { plain: backupCodes, hashes } = await mfaService.generateBackupCodes();
+
+  user.mfa = {
+    enabled: false,
+    secret: mfaService.encryptMfaSecret(secret),
+    backupCodeHashes: hashes,
+  };
+  await user.save();
+
+  await audit({
+    tenantId: req.tenantId,
+    userId: user._id,
+    userEmail: user.email,
+    action: 'mfa_enroll',
+    resource: 'User',
+    resourceId: user._id,
+    req,
+  });
+
+  // The secret, QR code and backup codes are shown exactly once, here —
+  // never returned by any other endpoint and never written to the audit log.
+  const otpAuthUri = mfaService.buildOtpAuthUri(secret, user.email);
+  const qrCodeDataUrl = await mfaService.buildEnrollmentQrCode(otpAuthUri);
+  sendSuccess(res, {
+    data: {
+      secret,
+      otpAuthUri,
+      qrCodeDataUrl,
+      backupCodes,
+    },
+  }, 'Scan this with your authenticator app, then confirm with a code to finish enrollment.');
+});
+
+/**
+ * POST /api/auth/mfa/enroll/verify
+ * Completes enrollment by proving the user can generate a valid code.
+ */
+const mfaEnrollVerify = asyncHandler(async (req, res) => {
+  const { code } = req.body || {};
+  const user = await User.findById(req.user._id).select('+mfa.secret');
+  if (!user.mfa?.secret) {
+    throw new AppError('No MFA enrollment in progress. Start enrollment first.', 400);
+  }
+
+  const secret = mfaService.decryptMfaSecret(user.mfa.secret);
+  if (!mfaService.verifyToken(code, secret)) {
+    throw new AppError('Incorrect authentication code.', 401);
+  }
+
+  user.mfa.enabled = true;
+  user.mfa.enrolledAt = new Date();
+  user.mfa.lastVerifiedAt = new Date();
+  await user.save();
+
+  await audit({
+    tenantId: req.tenantId,
+    userId: user._id,
+    userEmail: user.email,
+    action: 'mfa_enabled',
+    resource: 'User',
+    resourceId: user._id,
+    req,
+  });
+
+  sendSuccess(res, {}, 'MFA is now enabled on your account.');
+});
+
+/**
+ * POST /api/auth/mfa/disable
+ * Requires the current password, so a hijacked session alone can't turn
+ * MFA off.
+ */
+const mfaDisable = asyncHandler(async (req, res) => {
+  const { currentPassword } = req.body || {};
+  if (!currentPassword) throw new AppError('Current password is required.', 400);
+
+  const user = await User.findById(req.user._id).select('+password');
+  const isMatch = await user.comparePassword(currentPassword);
+  if (!isMatch) throw new AppError('Current password is incorrect.', 401);
+
+  user.mfa = { enabled: false, backupCodeHashes: [] };
+  await user.save();
+
+  await audit({
+    tenantId: req.tenantId,
+    userId: user._id,
+    userEmail: user.email,
+    action: 'mfa_disabled',
+    resource: 'User',
+    resourceId: user._id,
+    req,
+  });
+
+  sendSuccess(res, {}, 'MFA has been disabled on your account.');
 });
 
 /**
@@ -520,6 +787,17 @@ const getMe = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /api/auth/password-policy
+ * Lets the frontend validate with exactly the rules the backend enforces.
+ * Unauthenticated callers (register, forgot-password) get the platform
+ * default; an authenticated call resolves the caller's own tenant policy.
+ */
+const getPasswordPolicyRoute = asyncHandler(async (req, res) => {
+  const policy = await authSecurityService.getPasswordPolicy(req.tenantId || null);
+  sendSuccess(res, { data: policy });
+});
+
+/**
  * POST /api/auth/change-password
  */
 const changePassword = asyncHandler(async (req, res) => {
@@ -532,8 +810,14 @@ const changePassword = asyncHandler(async (req, res) => {
   const isMatch = await user.comparePassword(currentPassword);
   if (!isMatch) throw new AppError('Current password is incorrect.', 401);
 
+  await authSecurityService.validatePasswordForTenant(newPassword, req.tenantId);
+
   user.password = newPassword;
   await user.save();
+
+  // Keep the session that just made this request alive; end every other
+  // one, consistent with "password reset must invalidate existing sessions".
+  await Session.deleteMany({ userId: user._id, sessionId: { $ne: req.sessionId } });
 
   await audit({
     tenantId: req.tenantId,
@@ -603,24 +887,27 @@ const revokeSession = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/auth/forgot-password
- * Initiates password reset by username. Sends reset link to registered email.
+ * Initiates password reset by email — email is the sole login identifier
+ * (see login() above); `username` is accepted only as a legacy alias and is
+ * never matched against the stored username/display handle.
  */
 const forgotPassword = asyncHandler(async (req, res) => {
-  const { username } = req.body;
+  const { email, username } = req.body;
+  const identifier = String(email || username || '').trim().toLowerCase();
 
-  if (!username) {
-    throw new AppError('Username is required.', 400);
+  if (!identifier) {
+    throw new AppError('Email is required.', 400);
   }
 
-  // Find user by username
-  const user = await User.findOne({ username: username.toLowerCase() });
+  const user = await User.findOne({ email: identifier });
 
-  // Return generic message regardless of whether user exists (security best practice - no user enumeration)
+  // Return generic message regardless of whether the account exists
+  // (security best practice — no account enumeration via this endpoint).
   if (!user || user.status !== 'active') {
     sendSuccess(
       res,
       {},
-      'If that username exists, a password reset link has been sent to the associated email.',
+      'If that email address is registered, a password reset link has been sent to it.',
     );
     return;
   }
@@ -652,7 +939,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
   sendSuccess(
     res,
     {},
-    'If that username exists, a password reset link has been sent to the associated email.',
+    'If that email address is registered, a password reset link has been sent to it.',
   );
 });
 
@@ -693,10 +980,6 @@ const resetPassword = asyncHandler(async (req, res) => {
     throw new AppError('Reset token and new password are required.', 400);
   }
 
-  if (newPassword.length < 8) {
-    throw new AppError('Password must be at least 8 characters long.', 400);
-  }
-
   const user = await User.findOne({
     passwordResetToken: passwordResetService.hashToken(token),
     passwordResetExpires: { $gt: new Date() },
@@ -708,6 +991,8 @@ const resetPassword = asyncHandler(async (req, res) => {
       400,
     );
   }
+
+  await authSecurityService.validatePasswordForTenant(newPassword, user.tenantId);
 
   // Set new password and clear reset token
   user.password = newPassword;
@@ -753,4 +1038,10 @@ export {
   verifyResetToken,
   resetPassword,
   switchTenant,
+  getPasswordPolicyRoute,
+  mfaVerifyLogin,
+  mfaStatus,
+  mfaEnroll,
+  mfaEnrollVerify,
+  mfaDisable,
 };

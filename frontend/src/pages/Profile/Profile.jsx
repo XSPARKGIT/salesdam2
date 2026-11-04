@@ -3,6 +3,7 @@ import { Camera, AlertCircle, Check } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../services/api';
 import Layout from '../../layout/Layout';
+import MfaSettings from './MfaSettings';
 import styles from './Profile.module.css';
 
 const Profile = () => {
@@ -623,6 +624,10 @@ const Profile = () => {
                     </button>
                   </div>
                 </div>
+
+                <hr className={styles.divider} />
+
+                <MfaSettings />
 
                 <hr className={styles.divider} />
 

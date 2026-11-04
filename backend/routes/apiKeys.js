@@ -18,6 +18,7 @@ import { enforceTenant } from '../middleware/tenant.js';
 import { checkAppPermission } from '../middleware/permissions.js';
 import { tenantRateLimiter } from '../middleware/tenantRateLimiter.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { audit } from '../utils/auditLogger.js';
 
 const router = express.Router();
 router.use(requireAuth, enforceTenant, tenantRateLimiter(100, 60000), checkAppPermission('canManageApiKeys'));
@@ -108,6 +109,18 @@ router.post('/', asyncHandler(async (req, res) => {
     isActive:   true,
   });
 
+  // Never put the raw key, hash or prefix in the audit details — only the
+  // key's non-secret metadata.
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'api_credential_create',
+    resource: 'ApiKey',
+    resourceId: key._id,
+    details: { name, scopes },
+    req,
+  });
+
   sendSuccess(res, {
     data: {
       ...key.toObject(),
@@ -126,6 +139,16 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   allowed.forEach(k => { if (req.body[k] !== undefined) key[k] = req.body[k]; });
   await key.save();
 
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'api_credential_update',
+    resource: 'ApiKey',
+    resourceId: key._id,
+    details: { fields: allowed.filter((k) => req.body[k] !== undefined) },
+    req,
+  });
+
   sendSuccess(res, { data: { ...key.toObject(), keyHash: undefined } }, 'Key updated');
 }));
 
@@ -139,14 +162,36 @@ router.delete('/:id/revoke', asyncHandler(async (req, res) => {
   key.revokedBy  = req.user._id;
   await key.save();
 
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'api_credential_revoke',
+    resource: 'ApiKey',
+    resourceId: key._id,
+    details: { name: key.name },
+    req,
+  });
+
   sendSuccess(res, {}, 'API key revoked. All requests using this key will now be rejected.');
 }));
 
 // DELETE /api/api-keys/:id — permanent delete
 router.delete('/:id', asyncHandler(async (req, res) => {
+  const key = await ApiKey.findOne({ _id: req.params.id, tenantId: req.tenantId }).select('name');
   await ApiKey.deleteOne({ _id: req.params.id, tenantId: req.tenantId });
   // Also clean up usage logs
   ApiKeyUsageLog.deleteMany({ keyId: req.params.id }).catch(() => {});
+
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'api_credential_delete',
+    resource: 'ApiKey',
+    resourceId: req.params.id,
+    details: { name: key?.name },
+    req,
+  });
+
   sendSuccess(res, {}, 'API key deleted.');
 }));
 
@@ -267,6 +312,16 @@ router.post('/:id/rotate', asyncHandler(async (req, res) => {
   oldKey.revokedAt = new Date();
   oldKey.revokedBy = req.user._id;
   await oldKey.save();
+
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'api_credential_rotate',
+    resource: 'ApiKey',
+    resourceId: newKey._id,
+    details: { name: newKey.name, rotatedFrom: oldKey._id },
+    req,
+  });
 
   sendSuccess(res, {
     data: {

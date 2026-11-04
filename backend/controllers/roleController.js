@@ -67,7 +67,7 @@ const updateRole = asyncHandler(async (req, res) => {
     }
   }
 
-  const allowed = ['label', 'description', 'objectPermissions', 'appPermissions', 'dataAccess', 'isDefault'];
+  const allowed = ['label', 'description', 'objectPermissions', 'appPermissions', 'dataAccess', 'isDefault', 'mfaRequired'];
   allowed.forEach(key => {
     if (req.body[key] !== undefined) role[key] = req.body[key];
   });

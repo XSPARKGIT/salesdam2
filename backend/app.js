@@ -56,6 +56,7 @@ import configurationRoutes from './routes/configuration.js';
 import approvalProcessRoutes from './routes/approvalProcess.js';
 import approverGroupRoutes from './routes/approverGroups.js';
 import sharingRoutes from './routes/sharing.js';
+import dataGovernanceRoutes from './routes/dataGovernance.js';
 import duplicateRuleRoutes from './routes/duplicateRules.js';
 import consentRoutes from './routes/consents.js';
 import activityRoutes from './routes/activities.js';
@@ -231,6 +232,8 @@ app.use(`${API_V1_PREFIX}/approval-processes`, approvalProcessRoutes);
 app.use(`${API_V1_PREFIX}/approver-groups`, approverGroupRoutes);
 // Sharing Model (Section 9.2): OWD settings and criteria-based sharing rules.
 app.use(`${API_V1_PREFIX}/sharing`, sharingRoutes);
+// Data Governance, Retention, Backup & Recovery (Section 22)
+app.use(`${API_V1_PREFIX}/data-governance`, dataGovernanceRoutes);
 // Configurable duplicate detection rules (Core BRD §3.4).
 app.use(`${API_V1_PREFIX}/duplicate-rules`, duplicateRuleRoutes);
 // Communication consent & preferences (Core BRD §23).

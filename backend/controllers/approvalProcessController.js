@@ -5,6 +5,7 @@ import User from '../models/User.js';
 import approvalProcessService from '../services/approvalProcessService.js';
 import { validateApprovalDefinition } from '../services/approvalDefinitionService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { audit } from '../utils/auditLogger.js';
 
 /* ── Process configuration (admin) ──────────────────────────────────────── */
 
@@ -41,6 +42,15 @@ const createProcess = asyncHandler(async (req, res) => {
     tenantId: req.tenantId,
     createdBy: req.user._id,
   });
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'create',
+    resource: 'ApprovalProcess',
+    resourceId: process._id,
+    objectApiName: process.objectApiName,
+    req,
+  });
   sendSuccess(res, { data: process }, 'Approval process created', 201);
 });
 
@@ -58,6 +68,16 @@ const updateProcess = asyncHandler(async (req, res) => {
     { new: true, runValidators: true },
   );
   if (!process) throw new AppError('Approval process not found.', 404);
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'update',
+    resource: 'ApprovalProcess',
+    resourceId: process._id,
+    objectApiName: process.objectApiName,
+    details: { fields: Object.keys(updates) },
+    req,
+  });
   sendSuccess(res, { data: process }, 'Approval process updated');
 });
 
@@ -71,6 +91,16 @@ const deleteProcess = asyncHandler(async (req, res) => {
     tenantId: req.tenantId,
   });
   if (!process) throw new AppError('Approval process not found.', 404);
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'delete',
+    resource: 'ApprovalProcess',
+    resourceId: process._id,
+    objectApiName: process.objectApiName,
+    details: { name: process.name },
+    req,
+  });
   sendSuccess(res, {}, 'Approval process deleted');
 });
 
@@ -103,6 +133,16 @@ const approveRequest = asyncHandler(async (req, res) => {
     comment: req.body?.comment,
     options: { clientId: req.body?.clientId || null },
   });
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'approval_approve',
+    resource: 'ApprovalRequest',
+    resourceId: request._id,
+    objectApiName: request.objectApiName,
+    details: { recordId: request.recordId, comment: req.body?.comment },
+    req,
+  });
   sendSuccess(res, { data: request }, 'Approval recorded');
 });
 
@@ -114,6 +154,16 @@ const rejectRequest = asyncHandler(async (req, res) => {
     decision: 'reject',
     comment: req.body?.comment,
   });
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'approval_reject',
+    resource: 'ApprovalRequest',
+    resourceId: request._id,
+    objectApiName: request.objectApiName,
+    details: { recordId: request.recordId, comment: req.body?.comment },
+    req,
+  });
   sendSuccess(res, { data: request }, 'Rejection recorded');
 });
 
@@ -122,6 +172,16 @@ const recallRequest = asyncHandler(async (req, res) => {
     tenantId: req.tenantId,
     requestId: req.params.id,
     user: req.user,
+  });
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'approval_recall',
+    resource: 'ApprovalRequest',
+    resourceId: request._id,
+    objectApiName: request.objectApiName,
+    details: { recordId: request.recordId },
+    req,
   });
   sendSuccess(res, { data: request }, 'Approval recalled');
 });

@@ -62,6 +62,7 @@ import EmailConfiguration from './pages/Admin/settings/EmailConfiguration';
 import DataImport from './pages/Admin/settings/DataImport';
 import Configuration from './pages/Admin/settings/Configuration';
 import DataExport from './pages/Admin/settings/DataExport';
+import DataGovernance from './pages/Admin/settings/DataGovernance';
 import Billing from './pages/Admin/settings/Billing';
 import Integrations from './pages/Admin/settings/Integrations';
 import OtherSettings from './pages/Admin/settings/OtherSettings';
@@ -657,6 +658,14 @@ export default function App() {
         element={
           <Guard requireAdmin>
             <DataExport />
+          </Guard>
+        }
+      />
+      <Route
+        path="/admin/settings/data-governance"
+        element={
+          <Guard requireAdmin>
+            <DataGovernance />
           </Guard>
         }
       />

@@ -142,13 +142,34 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password, tenantId) => {
     const res = await api.post('/auth/login', { username, password, tenantId });
-    const { user: userData, tenant: tenantData } = res.data.data;
+    const { user: userData, tenant: tenantData, mfaChallengeRequired } = res.data.data;
+
+    // Core BRD §21.4: the password step alone is not a completed login when
+    // MFA is required — no user/tenant state is set here, so the app stays
+    // on the login screen until mfaVerify() below succeeds.
+    if (mfaChallengeRequired) {
+      return res.data;
+    }
+
     if (tenantData?._id)
       localStorage.setItem('tenantId', String(tenantData._id));
     setUser(userData);
     setTenant(tenantData);
     buildPermissions(userData);
     // Workspaces are loaded in full by the subsequent /auth/me call from fetchMe
+    await fetchMe();
+    return res.data;
+  };
+
+  /** Completes a login left pending by an MFA challenge. */
+  const mfaVerify = async ({ code, backupCode }) => {
+    const res = await api.post('/auth/mfa/verify', { code, backupCode });
+    const { user: userData, tenant: tenantData } = res.data.data;
+    if (tenantData?._id)
+      localStorage.setItem('tenantId', String(tenantData._id));
+    setUser(userData);
+    setTenant(tenantData);
+    buildPermissions(userData);
     await fetchMe();
     return res.data;
   };
@@ -261,6 +282,7 @@ export const AuthProvider = ({ children }) => {
         tenants,
         switchTenant,
         login,
+        mfaVerify,
         register,
         logout,
         switchWorkspace,

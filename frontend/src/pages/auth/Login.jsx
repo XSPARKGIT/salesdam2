@@ -12,7 +12,7 @@ import { version } from '../../../package.json';
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, mfaVerify } = useAuth();
   const branding = useBranding();
   useEffect(() => {
     if (branding?.primaryColor) {
@@ -33,6 +33,13 @@ const Login = () => {
     username: prefilledUsername,
     password: '',
   });
+
+  // Core BRD §21.4: once login() reports mfaChallengeRequired, the password
+  // step is done but the sign-in isn't — show the code step instead of
+  // navigating away.
+  const [mfaStep, setMfaStep] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [useBackupCode, setUseBackupCode] = useState(false);
 
   const from = location.state?.from?.pathname || '/';
 
@@ -58,9 +65,16 @@ const Login = () => {
     setTriedEmptyUsername(false);
     setTriedEmptyPassword(false);
     setIsSubmitting(true);
+    setFormSubmitErrors('');
 
     try {
-      await login(credentials.username, credentials.password);
+      const result = await login(credentials.username, credentials.password);
+
+      if (result?.data?.mfaChallengeRequired) {
+        setMfaStep(true);
+        setIsSubmitting(false);
+        return;
+      }
 
       navigate(from, { replace: true });
     } catch (error) {
@@ -72,6 +86,27 @@ const Login = () => {
         error?.response?.data?.message ||
           error?.message ||
           'Please check your email and password.',
+      );
+    }
+  };
+
+  const handleMfaSubmit = async (event) => {
+    event.preventDefault();
+    if (!mfaCode.trim()) {
+      setFormSubmitErrors(useBackupCode ? 'Enter a recovery code' : 'Enter your authentication code');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormSubmitErrors('');
+
+    try {
+      await mfaVerify(useBackupCode ? { backupCode: mfaCode.trim() } : { code: mfaCode.trim() });
+      navigate(from, { replace: true });
+    } catch (error) {
+      setIsSubmitting(false);
+      setFormSubmitErrors(
+        error?.response?.data?.message || error?.message || 'Incorrect code.',
       );
     }
   };
@@ -127,75 +162,129 @@ const Login = () => {
             <div className={styles.formHeader}>
               <img src="/icon.png" alt="Salesdam" className={styles.avatar} />
 
-              <h2 className={styles.formTitle}>Sign in to your account</h2>
+              <h2 className={styles.formTitle}>
+                {mfaStep ? 'Enter your authentication code' : 'Sign in to your account'}
+              </h2>
 
               <p className={styles.formSubtitle}>
-                Enter your credentials to access your account
+                {mfaStep
+                  ? (useBackupCode
+                    ? 'Enter one of your saved recovery codes'
+                    : 'Open your authenticator app and enter the 6-digit code')
+                  : 'Enter your credentials to access your account'}
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} noValidate className={styles.form}>
-              <FormInput
-                id="username"
-                label="Email"
-                name="username"
-                type="text"
-                value={credentials.username}
-                onChange={handleFormChange}
-                autoFocus
-                autoComplete="username"
-                error={
-                  triedEmptyUsername && credentials.username === ''
-                    ? 'Username is required'
-                    : ''
-                }
-              />
+            {mfaStep ? (
+              <form onSubmit={handleMfaSubmit} noValidate className={styles.form}>
+                <FormInput
+                  id="mfaCode"
+                  label={useBackupCode ? 'Recovery code' : 'Authentication code'}
+                  name="mfaCode"
+                  type="text"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  autoFocus
+                  autoComplete="one-time-code"
+                  placeholder={useBackupCode ? 'XXXXX-XXXXX' : '000000'}
+                />
 
-              <FormInput
-                id="password"
-                label="Password"
-                name="password"
-                type="password"
-                value={credentials.password}
-                onChange={handleFormChange}
-                autoComplete="current-password"
-                error={
-                  triedEmptyPassword && credentials.password === ''
-                    ? 'Password is required'
-                    : ''
-                }
-              />
+                {formSubmitErrors && (
+                  <div className={styles.errorMessage}>
+                    <LogIn size={16} />
+                    <span>{formSubmitErrors}</span>
+                  </div>
+                )}
 
-              {formSubmitErrors && (
-                <div className={styles.errorMessage}>
-                  <LogIn size={16} />
-                  <span>{formSubmitErrors}</span>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Verifying...' : 'Verify'}
+                </Button>
+
+                <div className={styles.formFooter}>
+                  <button
+                    type="button"
+                    className={styles.forgotPassword}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                    onClick={() => {
+                      setUseBackupCode((v) => !v);
+                      setMfaCode('');
+                      setFormSubmitErrors('');
+                    }}
+                  >
+                    {useBackupCode ? 'Use authenticator app instead' : 'Use a recovery code instead'}
+                  </button>
                 </div>
-              )}
+              </form>
+            ) : (
+              <form onSubmit={handleSubmit} noValidate className={styles.form}>
+                <FormInput
+                  id="username"
+                  label="Email"
+                  name="username"
+                  type="text"
+                  value={credentials.username}
+                  onChange={handleFormChange}
+                  autoFocus
+                  autoComplete="username"
+                  error={
+                    triedEmptyUsername && credentials.username === ''
+                      ? 'Username is required'
+                      : ''
+                  }
+                />
 
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                fullWidth
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Signing in...' : 'Sign in'}
-              </Button>
+                <FormInput
+                  id="password"
+                  label="Password"
+                  name="password"
+                  type="password"
+                  value={credentials.password}
+                  onChange={handleFormChange}
+                  autoComplete="current-password"
+                  error={
+                    triedEmptyPassword && credentials.password === ''
+                      ? 'Password is required'
+                      : ''
+                  }
+                />
 
-              <div className={styles.formFooter}>
-                <Link className={styles.forgotPassword} to="/forgot-password">
-                  Forgot your password?
-                </Link>
+                {formSubmitErrors && (
+                  <div className={styles.errorMessage}>
+                    <LogIn size={16} />
+                    <span>{formSubmitErrors}</span>
+                  </div>
+                )}
 
-                <p className={styles.registerText}>
-                  Don&apos;t have an account?{' '}
-                  <Link to="/register" className={styles.registerLink}>
-                    Register
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Signing in...' : 'Sign in'}
+                </Button>
+
+                <div className={styles.formFooter}>
+                  <Link className={styles.forgotPassword} to="/forgot-password">
+                    Forgot your password?
                   </Link>
-                </p>
-              </div>
-            </form>
+
+                  <p className={styles.registerText}>
+                    Don&apos;t have an account?{' '}
+                    <Link to="/register" className={styles.registerLink}>
+                      Register
+                    </Link>
+                  </p>
+                </div>
+              </form>
+            )}
           </div>
 
           <footer className={styles.copyright}>
