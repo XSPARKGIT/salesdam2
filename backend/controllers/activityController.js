@@ -40,6 +40,28 @@ const getTimeline = asyncHandler(async (req, res) => {
   });
 });
 
+const getActivityReport = asyncHandler(async (req, res) => {
+  const { objectApiName, recordId, from, to, groupBy = 'type' } = req.query;
+  const filter = { tenantId: req.tenantId };
+  if (objectApiName) filter.objectApiName = objectApiName;
+  if (recordId) filter.recordId = recordId;
+  if (from || to) {
+    filter.occurredAt = {};
+    if (from) filter.occurredAt.$gte = new Date(from);
+    if (to) filter.occurredAt.$lte = new Date(to);
+  }
+
+  const Activity = (await import('../models/Activity.js')).default;
+  const field = groupBy === 'user' ? 'createdBy' : 'type';
+  const pipeline = [
+    { $match: filter },
+    { $group: { _id: `$${field}`, count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+  ];
+  const results = await Activity.aggregate(pipeline);
+  sendSuccess(res, { data: { groupBy, results } });
+});
+
 const getActivity = asyncHandler(async (req, res) => {
   const activity = await Activity.findOne({
     _id: req.params.id,
@@ -97,4 +119,5 @@ export {
   updateActivity,
   deleteActivity,
   getActivityTypes,
+  getActivityReport,
 };

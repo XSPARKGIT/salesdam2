@@ -57,15 +57,17 @@ const ActivityTimeline = ({ objectApiName, recordId }) => {
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [type, setType] = useState('note');
   const [filterType, setFilterType] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [dueAt, setDueAt] = useState('');
 
-  const queryKey = ['activity-timeline', objectApiName, recordId, limit, filterType];
+  const queryKey = ['activity-timeline', objectApiName, recordId, limit, filterType, fromDate, toDate];
 
   const { data, isLoading, isError } = useQuery({
     queryKey,
-    queryFn: () => getTimeline(objectApiName, recordId, { limit, types: filterType || undefined }),
+    queryFn: () => getTimeline(objectApiName, recordId, { limit, types: filterType || undefined, from: fromDate || undefined, to: toDate || undefined }),
     enabled: !!objectApiName && !!recordId,
   });
   const items = data?.items || [];
@@ -184,14 +186,18 @@ const ActivityTimeline = ({ objectApiName, recordId }) => {
         </div>
       </form>
 
-      <div style={{ marginBottom: '0.75rem' }}>
-        <label style={{ fontSize: 12, marginRight: 8 }}>Filter by type:</label>
+      <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <label style={{ fontSize: 12 }}>Filter by type:</label>
         <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ fontSize: 12, padding: '2px 6px' }}>
           <option value="">All</option>
           {Object.keys(TYPE_META).map((t) => (
             <option key={t} value={t}>{TYPE_META[t].label}</option>
           ))}
         </select>
+        <label style={{ fontSize: 12 }}>From:</label>
+        <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={{ fontSize: 12, padding: '2px 6px' }} />
+        <label style={{ fontSize: 12 }}>To:</label>
+        <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={{ fontSize: 12, padding: '2px 6px' }} />
       </div>
 
       {isLoading ? (
