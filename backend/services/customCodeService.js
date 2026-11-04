@@ -51,6 +51,11 @@ export const executeCustomCode = async (tenantId, name, inputs = {}, context = {
       warn: (...a) => logger.warn(`[customCode:${name}] ${a.join(' ')}`),
     },
     result: undefined,
+    // Consent check helper (shared enforcement service)
+    checkConsent: async (subjectType, subjectId, channel) => {
+      const consentService = (await import('./consentService.js')).default;
+      return await consentService.canContact(tenantId, subjectType, subjectId, channel);
+    },
     // Controlled data access helpers (tenant-scoped)
     readRecord: async (objectApiName, id) => {
       const DynamicRecord = (await import('../models/DynamicRecord.js')).default;

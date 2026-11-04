@@ -80,8 +80,8 @@ try {
   const stdRole = await Role.findOne({ tenantId, name: 'standard_user' });
   await seedUser(tenant, adminRole, 'consadmin');
   await seedUser(tenant, stdRole, 'consstd');
-  const cookieAdmin = await loginCookie(`consadmin_${RUN}`);
-  const cookieStd = await loginCookie(`consstd_${RUN}`);
+  const cookieAdmin = await loginCookie(`consadmin-${RUN}@example.com`);
+  const cookieStd = await loginCookie(`consstd-${RUN}@example.com`);
   check('users can log in', Boolean(cookieAdmin && cookieStd));
 
   const getConsent = () => req(`/api/v1/consents/contact/${SUBJECT}`, { cookie: cookieAdmin });
@@ -195,7 +195,7 @@ try {
   await seedDefaultRoles(tenantBId);
   const roleB = await Role.findOne({ tenantId: tenantBId, name: 'admin' });
   await seedUser(tenantB, roleB, 'othercons');
-  const cookieOther = await loginCookie(`othercons_${RUN}`);
+  const cookieOther = await loginCookie(`othercons-${RUN}@example.com`);
 
   const otherGet = await req(`/api/v1/consents/contact/${SUBJECT}`, { cookie: cookieOther });
   check('another tenant cannot read this consent', otherGet.json?.data === null, `data=${JSON.stringify(otherGet.json?.data)}`);
