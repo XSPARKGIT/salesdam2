@@ -138,6 +138,27 @@ export const generateQuote = async (tenantId, dealId, userId) => {
     quote._searchText = await buildSearchText(quote, quoteFields);
     await quote.save();
 
+    // Persist generated document as a File attached to the originating deal
+    try {
+      const File = (await import('../models/File.js')).default;
+      await File.create({
+        tenantId,
+        createdBy: userId,
+        lastModifiedBy: userId,
+        name: `quote-${quote._id}.json`,
+        mimeType: 'application/json',
+        data: JSON.stringify({ id: quote._id, ...quote.toDataObject() }),
+        sizeBytes: 0,
+        relatedTo: { objectApiName: 'deal', recordId: dealId },
+        scanStatus: 'skipped',
+        scanResult: 'Generated document',
+        isAvailable: true,
+        version: 1,
+      });
+    } catch (e) {
+      // Non-blocking: document generation should not fail if file save fails
+    }
+
     // Populate product information for each line item
     const lineItemsWithProducts = await Promise.all(
       lineItems.map(async (li) => {
@@ -268,6 +289,27 @@ export const generateInvoice = async (tenantId, orderId, userId) => {
     await applyAutoNumbers(invoice, invoiceFields, tenantId, 'invoice');
     invoice._searchText = await buildSearchText(invoice, invoiceFields);
     await invoice.save();
+
+    // Persist generated document as a File attached to the originating order
+    try {
+      const File = (await import('../models/File.js')).default;
+      await File.create({
+        tenantId,
+        createdBy: userId,
+        lastModifiedBy: userId,
+        name: `invoice-${invoice._id}.json`,
+        mimeType: 'application/json',
+        data: JSON.stringify({ id: invoice._id, ...invoice.toDataObject() }),
+        sizeBytes: 0,
+        relatedTo: { objectApiName: 'order', recordId: orderId },
+        scanStatus: 'skipped',
+        scanResult: 'Generated document',
+        isAvailable: true,
+        version: 1,
+      });
+    } catch (e) {
+      // Non-blocking
+    }
 
     // Populate product information for each line item
     const lineItemsWithProducts = await Promise.all(
