@@ -99,4 +99,40 @@ const restore = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: doc }, 'Version restored');
 });
 
-export { list, get, create, addVersion, activate, execute, remove, restore };
+const update = asyncHandler(async (req, res) => {
+  const { description } = req.body || {};
+  const doc = await customCodeService.updateSnippet(req.tenantId, req.params.name, { description }, req.user);
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'update',
+    resource: 'CustomCode',
+    resourceId: doc._id,
+    details: { name: req.params.name },
+    req,
+  });
+  sendSuccess(res, { data: doc }, 'Updated');
+});
+
+const updateVersion = asyncHandler(async (req, res) => {
+  const { code, inputs, changeNote } = req.body || {};
+  const doc = await customCodeService.updateVersionCode(
+    req.tenantId,
+    req.params.name,
+    Number(req.params.version),
+    { code, inputs, changeNote },
+    req.user,
+  );
+  await audit({
+    tenantId: req.tenantId,
+    userId: req.user._id,
+    action: 'custom_code_edit_version',
+    resource: 'CustomCode',
+    resourceId: doc._id,
+    details: { name: req.params.name, version: Number(req.params.version) },
+    req,
+  });
+  sendSuccess(res, { data: doc }, 'Version updated');
+});
+
+export { list, get, create, addVersion, activate, execute, remove, restore, update, updateVersion };

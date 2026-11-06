@@ -1,0 +1,388 @@
+/* ── Full-bleed, full-height wrapper ──────────────── */
+.inboxOuter {
+  margin: calc(-1 * var(--spacing-6));
+  height: calc(100vh - var(--topbar-height));
+  overflow: hidden;
+  display: flex;
+}
+
+/* ── Two-panel layout ─────────────────────────────── */
+.sidebar {
+  width: 300px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
+  background: var(--color-white);
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--color-gray-50);
+  overflow: hidden;
+}
+
+/* ── Sidebar header (filters) ─────────────────────── */
+.sidebarHead {
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.sidebarTitle {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-gray-900);
+  margin: 0;
+}
+.filterRow {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.filterBtn {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: none;
+  color: var(--color-gray-600);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.filterBtn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.filterBtnActive { background: var(--color-primary); color: #fff !important; border-color: var(--color-primary) !important; }
+
+/* ── Conversation list ────────────────────────────── */
+.convList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.convEmpty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-400);
+}
+.convItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background var(--transition-fast);
+  position: relative;
+}
+.convItem:hover { background: var(--color-gray-50); }
+.convItemActive { background: #eff6ff !important; border-left-color: var(--color-primary); }
+.convAvatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; flex-shrink: 0;
+  color: white;
+}
+.convBody { flex: 1; min-width: 0; }
+.convNameRow { display: flex; align-items: center; gap: 6px; }
+.convName {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.convUnreadDot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--color-primary); flex-shrink: 0; margin-left: auto;
+}
+.convMeta {
+  font-size: 11px;
+  color: var(--color-gray-400);
+  margin-top: 2px;
+  display: flex; align-items: center; gap: 5px;
+}
+.channelDot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+.statusPill {
+  display: inline-flex; align-items: center;
+  padding: 1px 6px; border-radius: 999px;
+  font-size: 10px; font-weight: 600;
+}
+.statusOpen     { background: #dcfce7; color: #16a34a; }
+.statusPending  { background: #fef9c3; color: #a16207; }
+.statusClosed   { background: #f1f5f9; color: #64748b; }
+
+/* ── Main: empty state ────────────────────────────── */
+.emptyState {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 12px; color: var(--color-gray-400);
+  font-size: var(--font-size-sm);
+}
+.emptyStateIcon { opacity: 0.3; }
+.emptyStateTitle { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-gray-500); margin: 0; }
+
+/* ── Main: conversation header ────────────────────── */
+.convHeader {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px;
+  background: var(--color-white);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.convHeaderAvatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; color: white; flex-shrink: 0;
+}
+.convHeaderInfo { flex: 1; min-width: 0; }
+.convHeaderName {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+}
+.convHeaderMeta {
+  display: flex; align-items: center; gap: 8px; margin-top: 2px;
+}
+.channelBadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; padding: 2px 7px;
+  border-radius: 999px; border: 1px solid;
+}
+.convActions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.actionBtn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  background: none; cursor: pointer;
+  font-size: 12px; font-weight: 500; color: var(--color-gray-700);
+  transition: all var(--transition-fast); white-space: nowrap;
+}
+.actionBtn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
+.actionBtnPrimary {
+  composes: actionBtn;
+  background: var(--color-primary); color: white !important; border-color: var(--color-primary) !important;
+}
+.actionBtnPrimary:hover { opacity: 0.9; }
+.actionBtnDanger {
+  composes: actionBtn;
+}
+.actionBtnDanger:hover { border-color: var(--color-danger); color: var(--color-danger) !important; background: #fee2e2; }
+.actionSep { width: 1px; height: 24px; background: var(--border-color); flex-shrink: 0; }
+
+/* ── Message thread ───────────────────────────────── */
+.messageThread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 20px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.msgRow {
+  display: flex;
+  margin-bottom: 4px;
+}
+.msgRowIn  { justify-content: flex-start; }
+.msgRowOut { justify-content: flex-end; }
+.msgRowNote { justify-content: center; }
+
+.bubble {
+  max-width: 68%; padding: 8px 12px; border-radius: 12px;
+  font-size: 13px; line-height: 1.5;
+}
+.bubbleIn {
+  composes: bubble;
+  background: var(--color-white);
+  border: 1px solid var(--border-color);
+  border-bottom-left-radius: 4px;
+  color: var(--color-gray-900);
+}
+.bubbleOut {
+  composes: bubble;
+  background: var(--color-primary);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.bubbleNote {
+  max-width: 80%; padding: 8px 14px; border-radius: 8px;
+  font-size: 12px; line-height: 1.5;
+  background: #fef9c3; border: 1px solid #fde68a; color: #78350f;
+}
+.noteLabel {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: #92400e; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 4px;
+}
+.bubbleMeta {
+  font-size: 10px; color: var(--color-gray-400); margin-top: 4px;
+}
+.bubbleMetaOut { color: rgba(255,255,255,0.65); }
+
+.msgDateSep {
+  text-align: center; font-size: 11px; color: var(--color-gray-400);
+  margin: 10px 0 6px; display: flex; align-items: center; gap: 10px;
+}
+.msgDateSep::before, .msgDateSep::after {
+  content: ''; flex: 1; height: 1px; background: var(--border-color);
+}
+
+.threadEmpty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--color-gray-400); font-size: var(--font-size-sm);
+}
+
+/* ── Bottom area (linked record + composer) ───────── */
+.bottomArea {
+  border-top: 1px solid var(--border-color);
+  background: var(--color-white);
+  flex-shrink: 0;
+}
+.linkedRecordBar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--color-gray-50);
+  font-size: 12px; color: var(--color-gray-600);
+  flex-wrap: wrap;
+}
+.linkedRecordBadge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 999px;
+  background: #ede9fe; color: #6d28d9;
+  font-size: 11px; font-weight: 600; border: 1px solid #c4b5fd;
+}
+.createRecordBtns { display: flex; gap: 6px; margin-left: auto; }
+.createRecordBtn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: var(--border-radius);
+  border: 1px solid var(--border-color); background: white;
+  font-size: 11px; font-weight: 500; color: var(--color-gray-700);
+  cursor: pointer; transition: all var(--transition-fast);
+}
+.createRecordBtn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); }
+
+/* ── Composer ─────────────────────────────────────── */
+.composer { padding: 12px 16px; }
+.composerTabs {
+  display: flex; gap: 2px; margin-bottom: 10px;
+  border-bottom: 2px solid var(--border-color);
+}
+.composerTab {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; font-size: 12px; font-weight: 500;
+  color: var(--color-gray-500); background: none; border: none;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: all var(--transition-fast);
+}
+.composerTab:hover { color: var(--color-gray-800); }
+.composerTabActive { color: var(--color-primary) !important; border-bottom-color: var(--color-primary) !important; }
+
+.composerTextarea {
+  width: 100%; box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  font-size: 13px; font-family: inherit;
+  color: var(--color-gray-900);
+  background: var(--color-gray-50);
+  resize: none; line-height: 1.5;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.composerTextarea:focus {
+  outline: none; border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+  background: var(--color-white);
+}
+.composerTextareaNoteStyle {
+  composes: composerTextarea;
+  border-color: #fde68a; background: #fffbeb;
+}
+.composerTextareaNoteStyle:focus { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
+
+.composerRow {
+  display: flex; align-items: flex-end; gap: 8px; margin-top: 8px;
+}
+.composerSend {
+  display: flex; align-items: center; gap: 5px;
+  padding: 8px 16px; border: none; border-radius: var(--border-radius-lg);
+  background: var(--color-primary); color: white;
+  font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  transition: opacity var(--transition-fast);
+}
+.composerSend:hover { opacity: 0.9; }
+.composerSendNote {
+  composes: composerSend;
+  background: #d97706;
+}
+
+.templateSelect {
+  flex: 1; padding: 8px 10px;
+  border: 1px solid var(--border-color); border-radius: var(--border-radius);
+  font-size: 13px; background: var(--color-gray-50); color: var(--color-gray-900);
+}
+.templateSelect:focus { outline: none; border-color: var(--color-primary); }
+
+.mergeVarRow { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.mergeVarField { display: flex; align-items: center; gap: 8px; }
+.mergeVarLabel {
+  font-size: 11px; font-weight: 600; color: var(--color-gray-600);
+  min-width: 100px; font-family: 'JetBrains Mono', monospace;
+}
+.mergeVarInput {
+  flex: 1; padding: 5px 8px;
+  border: 1px solid var(--border-color); border-radius: var(--border-radius);
+  font-size: 12px; background: var(--color-gray-50);
+}
+.mergeVarInput:focus { outline: none; border-color: var(--color-primary); }
+.templatePreview {
+  margin-top: 6px; padding: 8px 10px;
+  background: var(--color-gray-50); border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-size: 12px; color: var(--color-gray-600);
+  line-height: 1.6; white-space: pre-wrap; max-height: 80px; overflow-y: auto;
+}
+.templatePreviewMerge { color: var(--color-primary); font-weight: 600; font-family: monospace; }
+
+/* ── Inline create record form ─────────────────────── */
+.createModal {
+  position: absolute; bottom: 0; left: 300px; right: 0;
+  background: var(--color-white); border-top: 2px solid var(--color-primary);
+  padding: 16px 20px; z-index: 10; box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+}
+.createModalTitle {
+  font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900); margin: 0 0 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.createModalFields {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.createModalField { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px; }
+.createModalLabel { font-size: 11px; font-weight: 500; color: var(--color-gray-600); }
+.createModalInput {
+  padding: 6px 10px; border: 1px solid var(--border-color);
+  border-radius: var(--border-radius); font-size: 13px;
+  background: var(--color-gray-50);
+}
+.createModalInput:focus { outline: none; border-color: var(--color-primary); }
+.createModalActions { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+.createModalCancel {
+  padding: 6px 14px; border: 1px solid var(--border-color); border-radius: var(--border-radius);
+  background: none; cursor: pointer; font-size: 13px; color: var(--color-gray-600);
+}
+.createModalSubmit {
+  padding: 6px 14px; border: none; border-radius: var(--border-radius);
+  background: var(--color-primary); color: white;
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}

@@ -102,6 +102,22 @@ const validateAccount = asyncHandler(async (req, res) => {
   );
 });
 
+const testWebhook = asyncHandler(async (req, res) => {
+  const { kind = 'message', from = '+27820000000' } = req.body || {};
+  const result = await channelService.fireTestEvent({
+    tenantId: req.tenantId,
+    id: req.params.id,
+    kind,
+    from,
+  });
+  sendSuccess(
+    res,
+    { data: result },
+    result.duplicate ? 'Duplicate event — no new record created' : 'Test event fired successfully',
+    result.duplicate ? 200 : 201,
+  );
+});
+
 // Public inbound webhook: authenticated by signature, not by session.
 const webhook = asyncHandler(async (req, res) => {
   const account = await channelService.resolveWebhookAccount({
@@ -150,4 +166,5 @@ export {
   deleteAccount,
   validateAccount,
   webhook,
+  testWebhook,
 };

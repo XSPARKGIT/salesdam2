@@ -377,6 +377,36 @@ const resolveWebhookAccount = async ({ channel, accountId, req }) => {
   return account;
 };
 
+/**
+ * Fire a synthetic test event for a channel account — no HTTP round-trip,
+ * no signature required, safe for dev/UAT demos.
+ */
+const fireTestEvent = async ({ tenantId, id, kind = 'message', from = '+27820000000' }) => {
+  const account = await ChannelAccount.findOne({ _id: id, tenantId });
+  if (!account) throw new AppError('Channel account not found.', 404);
+  const externalMessageId = `test-${kind}-${Date.now()}`;
+  const payload =
+    kind === 'call'
+      ? {
+          kind: 'call',
+          direction: 'inbound',
+          from,
+          to: '+27110000000',
+          status: 'completed',
+          durationSeconds: 60,
+          startedAt: new Date().toISOString(),
+          externalMessageId,
+        }
+      : {
+          kind: 'message',
+          direction: 'inbound',
+          from: { identifier: from },
+          body: 'This is a test message from the Salesdam channel test tool.',
+          externalMessageId,
+        };
+  return ingest({ account, payload });
+};
+
 export { getAdapter };
 export default {
   listAccounts,
@@ -390,4 +420,5 @@ export default {
   findMatchingRecord,
   ingest,
   resolveWebhookAccount,
+  fireTestEvent,
 };

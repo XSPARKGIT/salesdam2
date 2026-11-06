@@ -1,0 +1,7 @@
+{
+  "kind": "message",
+  "direction": "inbound",
+  "from": "+27821234567",
+  "body": "Hello, I need help",
+  "externalMessageId": "msg-001"
+}

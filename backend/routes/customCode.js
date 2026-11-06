@@ -13,5 +13,7 @@ router.post('/:name/versions', checkAppPermission('canManageCustomCode'), cc.add
 router.post('/:name/activate', checkAppPermission('canDeployCustomCode'), cc.activate);
 router.post('/:name/restore', checkAppPermission('canDeployCustomCode'), cc.restore);
 router.post('/:name/execute', checkAppPermission('canDeployCustomCode'), cc.execute);
+router.patch('/:name', checkAppPermission('canManageCustomCode'), cc.update);
+router.patch('/:name/versions/:version', checkAppPermission('canManageCustomCode'), cc.updateVersion);
 router.delete('/:name', checkAppPermission('canManageCustomCode'), cc.remove);
 export default router;

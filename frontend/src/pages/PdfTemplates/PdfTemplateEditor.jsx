@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import {
@@ -326,6 +326,13 @@ function DatatableConfig({ config, onConfig, inputs }) {
       ...config,
       columns: config.columns.filter((_, idx) => idx !== i),
     });
+  const moveCol = (i, dir) => {
+    const cols = [...(config.columns || [])];
+    const j = i + dir;
+    if (j < 0 || j >= cols.length) return;
+    [cols[i], cols[j]] = [cols[j], cols[i]];
+    onConfig({ ...config, columns: cols });
+  };
 
   return (
     <div className={styles.blockCfg}>
@@ -351,6 +358,20 @@ function DatatableConfig({ config, onConfig, inputs }) {
         <div className={styles.columnList}>
           {(config.columns || []).map((col, i) => (
             <div key={i} className={styles.columnRow}>
+              <div className={styles.colMoveButtons}>
+                <button
+                  className={styles.colMoveBtn}
+                  onClick={() => moveCol(i, -1)}
+                  disabled={i === 0}
+                  title="Move column up"
+                >▲</button>
+                <button
+                  className={styles.colMoveBtn}
+                  onClick={() => moveCol(i, 1)}
+                  disabled={i >= (config.columns?.length ?? 0) - 1}
+                  title="Move column down"
+                >▼</button>
+              </div>
               <select
                 className={styles.cfgSelect}
                 value={col.fieldApiName || ''}
@@ -625,7 +646,7 @@ function BlockPreview({ block, inputs }) {
       <div className={styles.previewText} style={textStyle}>
         {config.content || (
           <span className={styles.previewPlaceholder}>
-            Empty text block — double-click to edit
+            Empty text block — click to configure in panel →
           </span>
         )}
       </div>
@@ -839,6 +860,10 @@ export default function PdfTemplateEditor() {
   const [selectedBlockId, setSelectedBlockId] = useState(null);
   const [rightPanel, setRightPanel] = useState('settings'); // 'settings' | 'inputs'
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateRecordId, setGenerateRecordId] = useState('');
+  const rightPanelRef = useRef(null);
+  const blockConfigRef = useRef(null);
 
   // Load objects and template
   useEffect(() => {
@@ -913,23 +938,38 @@ export default function PdfTemplateEditor() {
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
 
-  const handleGenerate = async () => {
-    const recordId = window.prompt('Enter record ID to generate PDF (leave blank for template only):');
-    if (recordId === null) return;
+  // When a block is selected, switch to settings panel and scroll to config
+  useLayoutEffect(() => {
+    if (!selectedBlockId) return;
+    setRightPanel('settings');
+    const timer = setTimeout(() => {
+      blockConfigRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [selectedBlockId]);
+
+  const handleGenerate = () => {
+    setGenerateRecordId('');
+    setGenerateOpen(true);
+  };
+
+  const doGenerate = async () => {
+    setGenerateOpen(false);
     try {
       const res = await api.get(`/pdf-templates/${id}/render`, {
-        params: recordId ? { recordId } : {},
+        params: generateRecordId.trim() ? { recordId: generateRecordId.trim() } : {},
         responseType: 'blob',
       });
       const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${template?.apiName || 'document'}.pdf`;
+      a.download = `${apiName || 'document'}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success('PDF generated and downloaded');
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'PDF generation failed');
+      const msg = err?.response?.data?.message || 'PDF generation failed';
+      toast.error(msg);
     }
   };
   const handleSave = async () => {
@@ -967,6 +1007,39 @@ export default function PdfTemplateEditor() {
       setSaving(false);
     }
   };
+
+  // Generate PDF modal — rendered inside the editor
+  const GenerateModal = generateOpen ? (
+    <div className={styles.modalBackdrop} onClick={() => setGenerateOpen(false)}>
+      <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <span>Generate PDF</span>
+          <button className={styles.modalClose} onClick={() => setGenerateOpen(false)}><X size={15} /></button>
+        </div>
+        <div className={styles.modalBody}>
+          <p className={styles.modalHint}>
+            Leave the record ID blank to generate a template preview with placeholder values.
+            Enter a record ID to populate the PDF with real data.
+          </p>
+          <label className={styles.modalLabel}>Record ID <span className={styles.modalOpt}>(optional)</span></label>
+          <input
+            className={styles.modalInput}
+            placeholder="e.g. 6b3a2f1e9c0d..."
+            value={generateRecordId}
+            onChange={e => setGenerateRecordId(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && doGenerate()}
+            autoFocus
+          />
+        </div>
+        <div className={styles.modalFooter}>
+          <button className={styles.modalBtnSecondary} onClick={() => setGenerateOpen(false)}>Cancel</button>
+          <button className={styles.modalBtnPrimary} onClick={doGenerate}>
+            <FileText size={14} /> Generate PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   if (loading)
     return (
@@ -1087,13 +1160,11 @@ export default function PdfTemplateEditor() {
                             <div
                               ref={drag.innerRef}
                               {...drag.draggableProps}
+                              {...drag.dragHandleProps}
                               className={`${styles.blockWrap} ${selectedBlockId === block.id ? styles.blockSelected : ''} ${snapshot.isDragging ? styles.blockDragging : ''}`}
                               onClick={() => setSelectedBlockId(block.id)}
                             >
-                              <div
-                                {...drag.dragHandleProps}
-                                className={styles.dragHandle}
-                              >
+                              <div className={styles.dragHandle}>
                                 <GripVertical size={14} />
                               </div>
                               <div className={styles.blockContent}>
@@ -1121,7 +1192,7 @@ export default function PdfTemplateEditor() {
           </div>
 
           {/* Right panel */}
-          <div className={styles.rightPanel}>
+          <div className={styles.rightPanel} ref={rightPanelRef}>
             {rightPanel === 'settings' && (
               <div className={styles.panelSection}>
                 <div className={styles.panelTitle}>Template settings</div>
@@ -1245,7 +1316,7 @@ export default function PdfTemplateEditor() {
 
                 {selectedBlock && (
                   <>
-                    <div className={styles.sectionDivider} />
+                    <div className={styles.sectionDivider} ref={blockConfigRef} />
                     <div className={styles.panelTitle}>
                       {BLOCK_TYPES[selectedBlock.type]?.label ||
                         selectedBlock.type}
@@ -1338,6 +1409,7 @@ export default function PdfTemplateEditor() {
           </div>
         </div>
       </div>
+      {GenerateModal}
     </Layout>
   );
 }

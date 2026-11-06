@@ -129,20 +129,24 @@
 .canvasWrap {
   flex: 1;
   overflow-y: auto;
-  background: var(--color-background);
+  background: #d9dde3;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 32px 16px;
+  padding: 32px 16px 48px;
+}
+@media (prefers-color-scheme: dark) {
+  .canvasWrap { background: #22272e; }
 }
 .canvasPage {
   width: 720px;
   max-width: 100%;
   min-height: 900px;
   background: #fff;
-  box-shadow: 0 2px 16px rgba(0,0,0,.1);
-  border-radius: 4px;
+  box-shadow: 0 4px 32px rgba(0,0,0,.22), 0 1px 4px rgba(0,0,0,.08);
+  border-radius: 2px;
   position: relative;
+  color: #111827;
 }
 .canvasEmpty {
   display: flex;
@@ -168,19 +172,21 @@
   cursor: pointer;
 }
 .blockWrap:hover { border-color: var(--color-border); }
-.blockSelected  { border-color: var(--color-primary) !important; }
+.blockSelected  { border-color: var(--color-primary) !important; background: rgba(99,102,241,0.03) !important; }
 .blockDragging  { box-shadow: 0 4px 16px rgba(0,0,0,.15); background: #fff; opacity: 0.95; }
 
 .dragHandle {
   padding: 4px 2px;
   color: var(--color-text-muted);
   cursor: grab;
-  opacity: 0;
+  opacity: 0.2;
   flex-shrink: 0;
   align-self: flex-start;
   margin-top: 2px;
+  transition: opacity 0.12s;
 }
-.blockWrap:hover .dragHandle { opacity: 1; }
+.blockWrap:hover .dragHandle { opacity: 0.7; }
+.blockSelected .dragHandle { opacity: 0.7; }
 .blockContent { flex: 1; min-width: 0; padding: 4px 2px; }
 .blockDelete {
   padding: 4px;
@@ -320,6 +326,20 @@
 
 .columnList { display: flex; flex-direction: column; gap: 6px; }
 .columnRow  { display: flex; gap: 6px; align-items: center; }
+.colMoveButtons { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.colMoveBtn {
+  padding: 1px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-background);
+  color: var(--color-text-muted);
+  font-size: 8px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.1s, color 0.1s;
+}
+.colMoveBtn:hover:not(:disabled) { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+.colMoveBtn:disabled { opacity: 0.3; cursor: default; }
 
 .addBtn {
   padding: 6px 10px;
@@ -405,3 +425,58 @@
 .inputRowMeta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .inputApiName { font-size: 11px; font-family: monospace; color: var(--color-text-muted); }
 .requiredCheck { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--color-text-muted); cursor: pointer; margin-left: auto; }
+
+/* ─── Generate PDF modal ──────────────────────────────── */
+.modalBackdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.modalBox {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  width: 420px; max-width: 95vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,.18);
+  overflow: hidden;
+}
+.modalHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px; font-weight: 600; color: var(--color-text);
+}
+.modalClose {
+  background: none; border: none; cursor: pointer;
+  color: var(--color-text-muted); display: flex; align-items: center;
+  padding: 4px; border-radius: 4px;
+}
+.modalClose:hover { background: var(--color-background); color: var(--color-text); }
+.modalBody { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.modalHint { font-size: 13px; color: var(--color-text-muted); margin: 0; line-height: 1.5; }
+.modalLabel { font-size: 13px; font-weight: 500; color: var(--color-text); }
+.modalOpt { font-weight: 400; color: var(--color-text-muted); font-size: 11px; }
+.modalInput {
+  padding: 8px 12px; border: 1px solid var(--color-border);
+  border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box;
+  background: var(--color-background); color: var(--color-text);
+  font-family: 'JetBrains Mono', monospace;
+}
+.modalInput:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-light, rgba(99,102,241,.15)); }
+.modalFooter {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 14px 18px; border-top: 1px solid var(--color-border);
+  background: var(--color-background);
+}
+.modalBtnSecondary {
+  padding: 7px 14px; border: 1px solid var(--color-border); border-radius: 6px;
+  background: none; cursor: pointer; font-size: 13px; color: var(--color-text);
+}
+.modalBtnSecondary:hover { background: var(--color-border); }
+.modalBtnPrimary {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border: none; border-radius: 6px;
+  background: var(--color-primary); color: white; cursor: pointer;
+  font-size: 13px; font-weight: 500;
+}
+.modalBtnPrimary:hover { opacity: 0.9; }

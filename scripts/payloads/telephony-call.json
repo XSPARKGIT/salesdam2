@@ -1,0 +1,10 @@
+{
+  "kind": "call",
+  "direction": "inbound",
+  "from": "+27821234567",
+  "to": "+27110000000",
+  "status": "completed",
+  "durationSeconds": 120,
+  "startedAt": "2026-11-04T10:00:00Z",
+  "externalMessageId": "call-001"
+}

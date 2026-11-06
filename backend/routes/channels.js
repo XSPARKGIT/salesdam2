@@ -9,6 +9,7 @@ import {
   deleteAccount,
   validateAccount,
   webhook,
+  testWebhook,
 } from '../controllers/channelController.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
@@ -27,6 +28,7 @@ router.use(requireAuth, enforceTenant, checkAppPermission('canManageCommunicatio
 router.get('/', listAccounts);
 router.post('/', createAccount);
 router.post('/:id/validate', validateAccount);
+router.post('/:id/test-webhook', testWebhook);
 router.get('/:id', getAccount);
 router.put('/:id', updateAccount);
 router.delete('/:id', deleteAccount);

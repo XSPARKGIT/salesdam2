@@ -187,4 +187,33 @@ export const restoreVersion = async (tenantId, name, version, user) => {
   return doc;
 };
 
-export default { getActiveCode, executeCustomCode, createCustomCode, addVersion, activateVersion, restoreVersion };
+/**
+ * Update snippet metadata (description).
+ */
+export const updateSnippet = async (tenantId, name, { description }, user) => {
+  const doc = await CustomCode.findOne({ tenantId, name });
+  if (!doc) throw new AppError(`Custom code "${name}" not found.`, 404);
+  if (description !== undefined) doc.description = description;
+  doc.lastModifiedBy = user?._id;
+  await doc.save();
+  return doc;
+};
+
+/**
+ * Update the code/inputs of an existing draft version.
+ */
+export const updateVersionCode = async (tenantId, name, version, { code, inputs, changeNote }, user) => {
+  const doc = await CustomCode.findOne({ tenantId, name });
+  if (!doc) throw new AppError(`Custom code "${name}" not found.`, 404);
+  const v = doc.versions.find((x) => x.version === version);
+  if (!v) throw new AppError(`Version ${version} not found.`, 404);
+  if (v.status !== 'draft') throw new AppError(`Only draft versions can be edited directly.`, 400);
+  if (code) v.code = code;
+  if (inputs !== undefined) v.inputs = inputs;
+  if (changeNote !== undefined) v.changeNote = changeNote;
+  doc.lastModifiedBy = user?._id;
+  await doc.save();
+  return doc;
+};
+
+export default { getActiveCode, executeCustomCode, createCustomCode, addVersion, activateVersion, restoreVersion, updateSnippet, updateVersionCode };

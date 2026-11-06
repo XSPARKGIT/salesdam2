@@ -1,19 +1,41 @@
 import React, { useEffect, useState } from 'react';
-import Layout from '../../layout/Layout';
-import Button from '../../components/common/Button/Button';
+import {
+  MessageSquare, Plus, Mail, Phone, Globe, Radio,
+  Check, X, Trash2, Copy, AlertCircle, ShieldCheck, Wifi,
+  Zap, CheckCircle2, AlertTriangle,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getChannelAccounts, getProviders, createChannelAccount,
   updateChannelAccount, deleteChannelAccount, validateChannelAccount,
+  testChannelWebhook,
 } from '../../services/api/channels';
+import Button from '../../components/common/Button/Button';
+import Layout from '../../layout/Layout';
+import styles from './ChannelAccounts.module.css';
 
 const CHANNELS = ['whatsapp', 'facebook', 'instagram', 'email', 'sms', 'telephony', 'webchat', 'other'];
+
+const CHANNEL_META = {
+  whatsapp:  { label: 'WhatsApp',  icon: MessageSquare, bg: '#dcfce7', color: '#16a34a' },
+  facebook:  { label: 'Facebook',  icon: MessageSquare, bg: '#dbeafe', color: '#1d4ed8' },
+  instagram: { label: 'Instagram', icon: MessageSquare, bg: '#fce7f3', color: '#be185d' },
+  email:     { label: 'Email',     icon: Mail,          bg: '#ede9fe', color: '#7c3aed' },
+  sms:       { label: 'SMS',       icon: MessageSquare, bg: '#ccfbf1', color: '#0d9488' },
+  telephony: { label: 'Telephony', icon: Phone,         bg: '#f1f5f9', color: '#475569' },
+  webchat:   { label: 'Web Chat',  icon: Globe,         bg: '#fef3c7', color: '#b45309' },
+  other:     { label: 'Other',     icon: Radio,         bg: '#f1f5f9', color: '#6b7280' },
+};
+
+const EMPTY_FORM = { channel: 'whatsapp', name: '', provider: '', webhookSecret: '', credentials: '{}', defaultOwnerId: '' };
 
 export default function ChannelAccountsPage() {
   const [accounts, setAccounts] = useState([]);
   const [providers, setProviders] = useState([]);
-  const [form, setForm] = useState({ channel: 'whatsapp', name: '', provider: '', webhookSecret: '', credentials: '{}', defaultOwnerId: '' });
+  const [form, setForm] = useState({ ...EMPTY_FORM });
   const [validation, setValidation] = useState({});
+  const [creating, setCreating] = useState(false);
+  const [testPanel, setTestPanel] = useState({});   // { [accId]: { open, kind, from, sending, result } }
 
   const load = async () => {
     try {
@@ -31,17 +53,23 @@ export default function ChannelAccountsPage() {
     if (!form.name) return toast.error('Name is required');
     let credentials = {};
     try { credentials = JSON.parse(form.credentials); } catch { return toast.error('Credentials must be valid JSON'); }
+    setCreating(true);
     try {
       await createChannelAccount({
-        channel: form.channel, name: form.name, provider: form.provider || undefined,
-        webhookSecret: form.webhookSecret || undefined, credentials,
+        channel: form.channel,
+        name: form.name,
+        provider: form.provider || undefined,
+        webhookSecret: form.webhookSecret || undefined,
+        credentials,
         defaultOwnerId: form.defaultOwnerId || undefined,
       });
       toast.success('Channel account created');
-      setForm({ ...form, name: '', webhookSecret: '', credentials: '{}' });
+      setForm({ ...EMPTY_FORM });
       load();
     } catch (e) {
       toast.error(e.message || 'Create failed');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -75,72 +103,281 @@ export default function ChannelAccountsPage() {
     }
   };
 
-  const webhookUrlFor = (acc) => `${window.location.origin.replace(/:\d+$/, ':5002')}/api/v1/channels/webhook/${acc.channel}/${acc._id}`;
+  const webhookUrlFor = (acc) =>
+    `${window.location.origin.replace(/:\d+$/, ':5002')}/api/v1/channels/webhook/${acc.channel}/${acc._id}`;
+
+  const copyWebhook = (acc) => {
+    navigator.clipboard.writeText(webhookUrlFor(acc)).then(() => toast.success('Webhook URL copied'));
+  };
+
+  const openTestPanel = (acc) => setTestPanel((prev) => ({
+    ...prev,
+    [acc._id]: { open: true, kind: 'message', from: '+27820000000', sending: false, result: null },
+  }));
+  const closeTestPanel = (id) => setTestPanel((prev) => ({ ...prev, [id]: { ...prev[id], open: false } }));
+  const updateTest = (id, patch) => setTestPanel((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+
+  const sendTest = async (acc) => {
+    const t = testPanel[acc._id];
+    if (!t) return;
+    updateTest(acc._id, { sending: true, result: null });
+    try {
+      const res = await testChannelWebhook(acc._id, { kind: t.kind, from: t.from });
+      updateTest(acc._id, {
+        sending: false,
+        result: {
+          ok: true,
+          duplicate: res.data?.duplicate,
+          conversationId: res.data?.conversation?._id,
+          message: res.message,
+        },
+      });
+      toast.success(res.data?.duplicate ? 'Duplicate detected — no new record' : 'Test event sent!');
+    } catch (e) {
+      updateTest(acc._id, { sending: false, result: { ok: false, message: e.message || 'Test failed' } });
+      toast.error(e.message || 'Test failed');
+    }
+  };
+
+  const channelProviders = providers.filter((p) => p.channel === form.channel);
+  const selectedProvider = providers.find((p) => p.provider === form.provider);
 
   return (
     <Layout title="Channel Accounts" description="Connect WhatsApp, Messenger, Instagram, email and other messaging channels">
-      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <section>
-          <h3>Connect a Channel</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, maxWidth: 600 }}>
-            <label style={{ fontSize: 13 }}>Channel</label>
-            <select value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })}>
-              {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <input placeholder="Account name (e.g. Support WhatsApp)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <label style={{ fontSize: 13 }}>Provider</label>
-            <select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}>
-              <option value="">— select —</option>
-              {providers.filter((p) => p.channel === form.channel).map((p) => (
-                <option key={p.provider} value={p.provider}>{p.label}</option>
-              ))}
-            </select>
-            {providers.find((p) => p.provider === form.provider)?.requiredCredentials?.length > 0 && (
-              <p style={{ fontSize: 12, color: '#666' }}>
-                Required credential keys: {providers.find((p) => p.provider === form.provider).requiredCredentials.join(', ')}
-              </p>
-            )}
-            <input placeholder="Webhook signing secret" value={form.webhookSecret} onChange={(e) => setForm({ ...form, webhookSecret: e.target.value })} />
-            <textarea rows={3} placeholder='Credentials JSON (e.g. {"accessToken":"...","phoneNumberId":"..."})' value={form.credentials} onChange={(e) => setForm({ ...form, credentials: e.target.value })} style={{ fontFamily: 'monospace' }} />
-            <input placeholder="Default owner user id (optional, for auto-assignment)" value={form.defaultOwnerId} onChange={(e) => setForm({ ...form, defaultOwnerId: e.target.value })} />
-            <Button onClick={create}>Create Channel Account</Button>
+      <div className={styles.page}>
+        <div className={styles.pageHeader}>
+          <div>
+            <h1 className={styles.pageTitle}>Channel Accounts</h1>
+            <p className={styles.pageDesc}>Connect and manage your messaging channel integrations.</p>
           </div>
-        </section>
+        </div>
 
-        <section>
-          <h3>Connected Channels</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th>Channel</th><th>Name</th><th>Provider</th><th>Status</th><th>Webhook URL</th><th>Actions</th></tr></thead>
-            <tbody>
-              {accounts.map((acc) => {
+        <div className={styles.layout}>
+          {/* ── Create form ── */}
+          <div className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <Plus size={14} />
+              Connect a Channel
+            </div>
+            <div className={styles.panelBody}>
+              <div className={styles.field}>
+                <label className={styles.label}>Channel type</label>
+                <select
+                  className={styles.select}
+                  value={form.channel}
+                  onChange={(e) => setForm({ ...form, channel: e.target.value, provider: '' })}
+                >
+                  {CHANNELS.map((c) => (
+                    <option key={c} value={c}>{CHANNEL_META[c]?.label || c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={styles.field}>
+                <label className={styles.label}>Account name</label>
+                <input
+                  className={styles.input}
+                  placeholder="e.g. Support WhatsApp"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label className={styles.label}>Provider</label>
+                <select
+                  className={styles.select}
+                  value={form.provider}
+                  onChange={(e) => setForm({ ...form, provider: e.target.value })}
+                >
+                  <option value="">— select provider —</option>
+                  {channelProviders.map((p) => (
+                    <option key={p.provider} value={p.provider}>{p.label}</option>
+                  ))}
+                </select>
+                {selectedProvider?.requiredCredentials?.length > 0 && (
+                  <p className={styles.hint}>
+                    Required credential keys: <strong>{selectedProvider.requiredCredentials.join(', ')}</strong>
+                  </p>
+                )}
+              </div>
+
+              <div className={styles.field}>
+                <label className={styles.label}>Webhook signing secret</label>
+                <input
+                  className={styles.input}
+                  placeholder="Optional — for validating inbound webhooks"
+                  value={form.webhookSecret}
+                  onChange={(e) => setForm({ ...form, webhookSecret: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label className={styles.label}>Credentials JSON</label>
+                <textarea
+                  className={styles.codeInput}
+                  rows={3}
+                  placeholder={'{"accessToken":"...","phoneNumberId":"..."}'}
+                  value={form.credentials}
+                  onChange={(e) => setForm({ ...form, credentials: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label className={styles.label}>Default owner user ID <span style={{ fontWeight: 400, color: 'var(--color-gray-400)', fontSize: 11 }}>(optional)</span></label>
+                <input
+                  className={styles.input}
+                  placeholder="For automatic conversation assignment"
+                  value={form.defaultOwnerId}
+                  onChange={(e) => setForm({ ...form, defaultOwnerId: e.target.value })}
+                />
+              </div>
+
+              <Button icon={<Plus size={14} />} loading={creating} onClick={create}>
+                Create Channel Account
+              </Button>
+            </div>
+          </div>
+
+          {/* ── Accounts list ── */}
+          <div className={styles.listPanel}>
+            <div className={styles.listHeader}>
+              <span className={styles.listTitle}>Connected Channels</span>
+              <span className={styles.listCount}>{accounts.length} account{accounts.length !== 1 ? 's' : ''}</span>
+            </div>
+
+            {accounts.length === 0 ? (
+              <div className={styles.empty}>
+                <Wifi size={36} className={styles.emptyIcon} />
+                <p className={styles.emptyTitle}>No channels connected yet</p>
+                <p>Use the form to connect your first messaging channel.</p>
+              </div>
+            ) : (
+              accounts.map((acc) => {
+                const meta = CHANNEL_META[acc.channel] || CHANNEL_META.other;
+                const Icon = meta.icon;
                 const v = validation[acc._id];
                 return (
-                  <tr key={acc._id}>
-                    <td>{acc.channel}</td>
-                    <td>{acc.name}</td>
-                    <td>{acc.provider}</td>
-                    <td>
-                      {acc.isActive ? 'Active' : 'Inactive'}
+                  <div key={acc._id} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.channelIcon} style={{ background: meta.bg, color: meta.color }}>
+                        <Icon size={16} />
+                      </div>
+                      <div className={styles.cardInfo}>
+                        <div className={styles.cardName}>{acc.name}</div>
+                        <div className={styles.cardMeta}>
+                          {meta.label}{acc.provider ? ` · ${acc.provider}` : ''}
+                        </div>
+                      </div>
+                      <div className={styles.cardRight}>
+                        <span className={`${styles.pill} ${acc.isActive ? styles.pillActive : styles.pillInactive}`}>
+                          {acc.isActive ? <><Check size={10} /> Active</> : <><X size={10} /> Inactive</>}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={styles.cardBody}>
+                      <div className={styles.webhookRow}>
+                        <span className={styles.webhookUrl}>{webhookUrlFor(acc)}</span>
+                        <button className={styles.copyBtn} title="Copy webhook URL" onClick={() => copyWebhook(acc)}>
+                          <Copy size={11} />
+                        </button>
+                      </div>
                       {v && (
-                        <div style={{ fontSize: 12, color: v.valid ? '#16a34a' : '#dc2626' }}>
-                          {v.valid ? 'Provider config complete' : `Missing: ${v.missing.join(', ')}`}
+                        <div className={v.valid ? styles.validResult : styles.invalidResult}>
+                          {v.valid
+                            ? <><ShieldCheck size={12} /> Provider config complete</>
+                            : <><AlertCircle size={12} /> Missing: {v.missing.join(', ')}</>
+                          }
                         </div>
                       )}
-                    </td>
-                    <td style={{ fontSize: 11, fontFamily: 'monospace', maxWidth: 260, overflowWrap: 'break-word' }}>{webhookUrlFor(acc)}</td>
-                    <td>
-                      <Button size="sm" variant="secondary" onClick={() => validate(acc)} style={{ marginRight: 4 }}>Check Config</Button>
-                      <Button size="sm" variant="secondary" onClick={() => toggleActive(acc)} style={{ marginRight: 4 }}>
+                    </div>
+
+                    <div className={styles.actions}>
+                      <Button size="sm" variant="secondary" onClick={() => validate(acc)}>
+                        Check Config
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => toggleActive(acc)}>
                         {acc.isActive ? 'Deactivate' : 'Activate'}
                       </Button>
-                      <Button size="sm" onClick={() => remove(acc)}>Delete</Button>
-                    </td>
-                  </tr>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<Zap size={12} />}
+                        onClick={() => openTestPanel(acc)}
+                      >
+                        Send Test
+                      </Button>
+                      <Button size="sm" variant="danger" icon={<Trash2 size={12} />} onClick={() => remove(acc)}>
+                        Delete
+                      </Button>
+                    </div>
+
+                    {testPanel[acc._id]?.open && (
+                      <div className={styles.testPanel}>
+                        <div className={styles.testPanelHeader}>
+                          <Zap size={12} /> Send a Test Event
+                          <button className={styles.testPanelClose} onClick={() => closeTestPanel(acc._id)}>
+                            <X size={12} />
+                          </button>
+                        </div>
+                        <div className={styles.testPanelBody}>
+                          <div className={styles.testKindRow}>
+                            <button
+                              className={`${styles.testKindBtn} ${testPanel[acc._id]?.kind === 'message' ? styles.testKindActive : ''}`}
+                              onClick={() => updateTest(acc._id, { kind: 'message' })}
+                            >
+                              Message
+                            </button>
+                            <button
+                              className={`${styles.testKindBtn} ${testPanel[acc._id]?.kind === 'call' ? styles.testKindActive : ''}`}
+                              onClick={() => updateTest(acc._id, { kind: 'call' })}
+                            >
+                              Call
+                            </button>
+                          </div>
+                          <div className={styles.testFromRow}>
+                            <label className={styles.testFromLabel}>From number</label>
+                            <input
+                              className={styles.testFromInput}
+                              placeholder="+27820000000"
+                              value={testPanel[acc._id]?.from ?? '+27820000000'}
+                              onChange={(e) => updateTest(acc._id, { from: e.target.value })}
+                            />
+                          </div>
+                          <Button
+                            icon={<Zap size={12} />}
+                            loading={testPanel[acc._id]?.sending}
+                            onClick={() => sendTest(acc)}
+                          >
+                            Send Test {testPanel[acc._id]?.kind === 'call' ? 'Call' : 'Message'}
+                          </Button>
+                        </div>
+                        {testPanel[acc._id]?.result && (
+                          <div className={
+                            testPanel[acc._id].result.duplicate
+                              ? styles.testResultDup
+                              : testPanel[acc._id].result.ok
+                                ? styles.testResultOk
+                                : styles.testResultErr
+                          }>
+                            {testPanel[acc._id].result.duplicate ? (
+                              <><AlertTriangle size={12} /> Duplicate — conversation already exists, no new record created</>
+                            ) : testPanel[acc._id].result.ok ? (
+                              <><CheckCircle2 size={12} /> Event sent — check Inbox for the new conversation</>
+                            ) : (
+                              <><X size={12} /> {testPanel[acc._id].result.message}</>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
-              })}
-            </tbody>
-          </table>
-        </section>
+              })
+            )}
+          </div>
+        </div>
       </div>
     </Layout>
   );

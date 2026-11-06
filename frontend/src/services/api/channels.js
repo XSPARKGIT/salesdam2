@@ -9,3 +9,5 @@ export const createChannelAccount = async (payload) => (await api.post('/channel
 export const updateChannelAccount = async (id, payload) => (await api.put(`/channels/${id}`, payload)).data.data;
 export const deleteChannelAccount = async (id) => (await api.delete(`/channels/${id}`)).data;
 export const validateChannelAccount = async (id) => (await api.post(`/channels/${id}/validate`)).data.data;
+export const testChannelWebhook = async (id, { kind = 'message', from = '+27820000000' } = {}) =>
+  (await api.post(`/channels/${id}/test-webhook`, { kind, from })).data;
