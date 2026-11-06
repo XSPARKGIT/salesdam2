@@ -362,6 +362,45 @@ const executeNode = async (node, allNodes, record, ctx, tenantId) => {
       await executeCreateRecord(node.config, record, ctx, tenantId);
       break;
 
+    case 'action_generate_pdf': {
+      const { templateId, inputMappings = {}, fileName, saveToFiles = true, outputVariable } = node.config || {};
+      if (!templateId) break;
+      try {
+        const { renderPdfTemplate } = await import('./pdfRenderService.js');
+        const { default: File } = await import('../models/File.js');
+        const buffer = await renderPdfTemplate(tenantId, templateId, null);
+        if (saveToFiles !== false) {
+          const tmpl = await (await import('../models/PdfTemplate.js')).default.findById(templateId);
+          const recordData = record.data instanceof Map ? Object.fromEntries(record.data) : (record.data || {});
+          const resolvedFileName = (fileName || tmpl?.apiName || 'document').replace(/\{(\w+)\.(\w+)\}/g, (_, inputName, fieldApiName) => {
+            if (inputName === 'record') return recordData[fieldApiName] ?? '';
+            return '';
+          });
+          const name = resolvedFileName + (resolvedFileName.toLowerCase().endsWith('.pdf') ? '' : '.pdf');
+          const file = await File.create({
+            tenantId,
+            createdBy: ctx._userId || null,
+            lastModifiedBy: ctx._userId || null,
+            name,
+            mimeType: 'application/pdf',
+            data: buffer.toString('base64'),
+            sizeBytes: buffer.length,
+            relatedTo: { objectApiName: record.objectApiName, recordId: record._id },
+            scanStatus: 'skipped',
+            scanResult: 'Generated document',
+            isAvailable: true,
+            version: 1,
+            pdfTemplateId: templateId,
+          });
+          if (outputVariable) ctx.variables[outputVariable] = String(file._id);
+        }
+      } catch (err) {
+        logger.error(`PDF generation node failed: ${err.message}`);
+        throw err;
+      }
+      break;
+    }
+
     case 'custom_code': {
       const { name: ccName, inputs: ccInputs = {}, outputVariable } = node.config || {};
       if (ccName) {

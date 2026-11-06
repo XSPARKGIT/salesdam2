@@ -49,7 +49,7 @@ export const renderPdfTemplate = async (tenantId, templateId, recordId) => {
   for (const block of blocks) {
     switch (block.type) {
       case 'text': {
-        const content = (block.config?.content || '').replace(/\{(\w+)\.(\w+)\}/g, (_, inputName, fieldApiName) => {
+        const content = (block.config?.content || '').replace(/\{\{?(\w+)\.(\w+)\}?\}/g, (_, inputName, fieldApiName) => {
           if (inputName === 'record') return recordData[fieldApiName] ?? '';
           return '';
         });
