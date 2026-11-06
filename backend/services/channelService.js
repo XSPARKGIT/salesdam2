@@ -384,7 +384,8 @@ const resolveWebhookAccount = async ({ channel, accountId, req }) => {
 const fireTestEvent = async ({ tenantId, id, kind = 'message', from = '+27820000000' }) => {
   const account = await ChannelAccount.findOne({ _id: id, tenantId });
   if (!account) throw new AppError('Channel account not found.', 404);
-  const externalMessageId = `test-${kind}-${Date.now()}`;
+  // Stable per-account+kind ID so the second click always detects a duplicate.
+  const externalMessageId = `test-${kind}-${id}`;
   const payload =
     kind === 'call'
       ? {

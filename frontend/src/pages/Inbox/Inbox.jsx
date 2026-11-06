@@ -110,6 +110,9 @@ export default function InboxPage() {
       if (assignedFilter === 'unassigned') params.assigned = 'unassigned';
       const { items } = await getConversations(params);
       setConversations(items);
+      // Clear detail panel if the selected conversation is no longer in the filtered list
+      setSelectedId((prev) => (prev && items.some((c) => c._id === prev) ? prev : null));
+      setSelected((prev) => (prev && items.some((c) => c._id === prev._id) ? prev : null));
     } catch (e) {
       toast.error(e.message || 'Failed to load conversations');
     }
@@ -350,9 +353,15 @@ export default function InboxPage() {
                       </div>
                     </div>
                     <div className={styles.convActions}>
-                      <button className={styles.actionBtnPrimary} onClick={acceptConversation}>
-                        <UserCheck size={13} /> Accept
-                      </button>
+                      {selected.assignedTo?._id === user?._id || selected.assignedTo?.id === user?._id || String(selected.assignedTo?._id) === String(user?._id) ? (
+                        <span className={styles.assignedToMeBadge}>
+                          <UserCheck size={12} /> Assigned to me
+                        </span>
+                      ) : (
+                        <button className={styles.actionBtnPrimary} onClick={acceptConversation}>
+                          <UserCheck size={13} /> Accept
+                        </button>
+                      )}
                       {!showTransfer ? (
                         <button className={styles.actionBtn} onClick={() => setShowTransfer(true)}>
                           <ArrowRightLeft size={13} /> Transfer
