@@ -65,6 +65,16 @@
 
 .deleteModal p { margin: 0; font-size: var(--font-size-sm); color: var(--color-gray-600); }
 
+/* Chart enhancements */
+.chartTitle { font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-gray-700); margin: 0 0 var(--spacing-3) 0; }
+
+.chartTooltip { background: var(--color-white); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: var(--spacing-2) var(--spacing-3); box-shadow: 0 4px 12px rgba(0,0,0,0.08); font-size: var(--font-size-sm); min-width: 130px; }
+.chartTooltipLabel { font-weight: var(--font-weight-semibold); color: var(--color-gray-700); margin-bottom: var(--spacing-1); padding-bottom: var(--spacing-1); border-bottom: 1px solid var(--border-color); }
+.chartTooltipRow { display: flex; align-items: center; gap: var(--spacing-2); padding: 2px 0; }
+.chartTooltipDot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.chartTooltipName { color: var(--color-gray-500); flex: 1; }
+.chartTooltipValue { font-weight: var(--font-weight-medium); color: var(--color-gray-800); }
+
 @media (max-width: 900px) {
   .builderLayout { grid-template-columns: 1fr; }
   .sidebar { max-height: none; }

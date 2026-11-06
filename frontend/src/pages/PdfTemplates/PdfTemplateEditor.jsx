@@ -913,6 +913,25 @@ export default function PdfTemplateEditor() {
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
 
+  const handleGenerate = async () => {
+    const recordId = window.prompt('Enter record ID to generate PDF (leave blank for template only):');
+    if (recordId === null) return;
+    try {
+      const res = await api.get(`/pdf-templates/${id}/render`, {
+        params: recordId ? { recordId } : {},
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${template?.apiName || 'document'}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('PDF generated and downloaded');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'PDF generation failed');
+    }
+  };
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error('Template name is required');
@@ -1002,6 +1021,13 @@ export default function PdfTemplateEditor() {
               disabled={saving}
             >
               {saving ? 'Saving…' : 'Save'}
+            </Button>
+            <Button
+              icon={<FileText size={14} />}
+              onClick={handleGenerate}
+              variant="secondary"
+            >
+              Generate PDF
             </Button>
           </div>
         </div>

@@ -83,6 +83,26 @@ export default function PdfTemplateList() {
     }
   };
 
+  const handleRender = async (tmpl) => {
+    const recordId = window.prompt('Enter record ID to generate PDF:');
+    if (!recordId) return;
+    try {
+      const res = await api.get(`/pdf-templates/${tmpl._id}/render`, {
+        params: { recordId },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${tmpl.apiName || 'document'}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('PDF generated and downloaded');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'PDF generation failed');
+    }
+  };
+
   const grouped = templates.reduce((acc, t) => {
     const cat = t.category || 'General';
     if (!acc[cat]) acc[cat] = [];
@@ -191,6 +211,13 @@ export default function PdfTemplateList() {
                         }
                       >
                         <Edit2 size={14} />
+                      </button>
+                      <button
+                        className={styles.actionBtn}
+                        title="Generate PDF"
+                        onClick={() => handleRender(tmpl)}
+                      >
+                        <FileText size={14} />
                       </button>
                       <button
                         className={styles.actionBtn}

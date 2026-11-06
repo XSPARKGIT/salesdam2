@@ -117,11 +117,16 @@ export const convertDatetimeToUTC = (formData, fields) => {
   fields.forEach((f) => {
     if (f.type === 'datetime' && converted[f.apiName]) {
       const localValue = converted[f.apiName];
-      // datetime-local input returns "YYYY-MM-DDTHH:mm" in local time
-      // new Date() interprets this as local time and stores it as UTC internally
-      // toISOString() returns the correct UTC representation
-      const localDate = new Date(`${localValue}:00`);
-      converted[f.apiName] = localDate.toISOString();
+      // A field the user never touched still holds the full ISO string the
+      // record was loaded with (e.g. "2026-11-10T14:30:00.000Z"), not the
+      // short "YYYY-MM-DDTHH:mm" a datetime-local input produces on change —
+      // only append seconds for the latter, or appending ":00" to an
+      // already-complete ISO string makes it unparsable.
+      const isShortLocalFormat = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(localValue);
+      const localDate = new Date(isShortLocalFormat ? `${localValue}:00` : localValue);
+      if (!Number.isNaN(localDate.getTime())) {
+        converted[f.apiName] = localDate.toISOString();
+      }
     }
   });
 

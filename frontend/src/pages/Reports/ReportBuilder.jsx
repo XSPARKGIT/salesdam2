@@ -50,6 +50,32 @@ const OPERATORS = [
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 
+const getAggLabel = (agg, fieldMap) => {
+  if (agg.alias) return agg.alias;
+  if (agg.func === 'count') return 'Count';
+  const fieldLabel = fieldMap.get(agg.field)?.label || agg.field || '';
+  const funcLabels = { sum: 'Sum', avg: 'Average', min: 'Min', max: 'Max' };
+  return `${funcLabels[agg.func] || agg.func} of ${fieldLabel}`.trim();
+};
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className={styles.chartTooltip}>
+      {label !== undefined && <div className={styles.chartTooltipLabel}>{label}</div>}
+      {payload.map((p, i) => (
+        <div key={i} className={styles.chartTooltipRow}>
+          <span className={styles.chartTooltipDot} style={{ background: p.color || p.fill }} />
+          <span className={styles.chartTooltipName}>{p.name}:</span>
+          <span className={styles.chartTooltipValue}>
+            {typeof p.value === 'number' ? p.value.toLocaleString() : (p.value ?? '—')}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const NUMERIC_TYPES = new Set(['number', 'currency', 'percent', 'rollup_summary']);
 const GROUPABLE_TYPES = new Set(['picklist', 'multipicklist', 'boolean', 'text', 'lookup', 'master_detail']);
 
@@ -411,6 +437,18 @@ export default function ReportBuilder() {
 
 function ResultsRenderer({ results, chartType, groupBy, aggregations, fields }) {
   const isGrouped = results.length > 0 && '_id' in results[0];
+  const fieldMap = new Map((fields || []).map((f) => [f.apiName, f]));
+  const groupLabel = (groupBy && fieldMap.get(groupBy)?.label) || groupBy || 'Category';
+
+  const aggDefs = (() => {
+    const defs = (aggregations || []).filter((a) => a.func).map((a) => ({
+      key: a.alias || `${a.func}_${a.field || 'all'}`,
+      label: getAggLabel(a, fieldMap),
+    }));
+    return defs.length ? defs : [{ key: 'count', label: 'Count' }];
+  })();
+
+  const aggLabelMap = new Map([...aggDefs.map((a) => [a.key, a.label]), ['count', 'Count']]);
 
   if (chartType === 'metric') {
     const firstAgg = aggregations[0];
@@ -420,23 +458,51 @@ function ResultsRenderer({ results, chartType, groupBy, aggregations, fields }) 
   }
 
   if (!isGrouped || chartType === 'table') {
-    return <TableResult results={results} fields={fields} isGrouped={isGrouped} aggregations={aggregations} />;
+    return <TableResult results={results} fields={fields} isGrouped={isGrouped} aggregations={aggregations} aggLabelMap={aggLabelMap} groupLabel={groupLabel} />;
   }
 
-  const data = results.map((r) => ({
-    label: r._id ?? 'Unknown',
-    value: r[aggregations[0]?.alias || `${aggregations[0]?.func}_${aggregations[0]?.field || 'all'}`] ?? r.count ?? 0,
-  }));
+  const data = results.map((r) => {
+    const row = { label: String(r._id ?? 'Unknown') };
+    aggDefs.forEach((a) => { row[a.key] = r[a.key] ?? r.count ?? 0; });
+    return row;
+  });
+
+  const hasMultiple = aggDefs.length > 1;
+  const yLabel = hasMultiple ? undefined : {
+    value: aggDefs[0].label,
+    angle: -90,
+    position: 'insideLeft',
+    offset: 10,
+    style: { textAnchor: 'middle', fontSize: 12, fill: '#6b7280' },
+  };
+  const leftMargin = hasMultiple ? 10 : 50;
 
   if (chartType === 'bar') {
     return (
-      <ResponsiveContainer width="100%" height={360}>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip />
-          <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+      <ResponsiveContainer width="100%" height={380}>
+        <BarChart data={data} margin={{ top: 10, right: 20, bottom: 85, left: leftMargin }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 12, fill: '#6b7280', dy: 4 }}
+            tickLine={false}
+            angle={-35}
+            textAnchor="end"
+            height={60}
+            label={{ value: groupLabel, position: 'insideBottom', offset: -55, style: { textAnchor: 'middle', fontSize: 12, fill: '#6b7280' } }}
+          />
+          <YAxis
+            tick={{ fontSize: 12, fill: '#6b7280' }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => typeof v === 'number' ? v.toLocaleString() : v}
+            label={yLabel}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 4 }} />
+          {aggDefs.map((a, i) => (
+            <Bar key={a.key} dataKey={a.key} name={a.label} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     );
@@ -444,44 +510,65 @@ function ResultsRenderer({ results, chartType, groupBy, aggregations, fields }) 
 
   if (chartType === 'line') {
     return (
-      <ResponsiveContainer width="100%" height={360}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip />
-          <Line type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} />
+      <ResponsiveContainer width="100%" height={380}>
+        <LineChart data={data} margin={{ top: 10, right: 20, bottom: 85, left: leftMargin }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 12, fill: '#6b7280', dy: 4 }}
+            tickLine={false}
+            angle={-35}
+            textAnchor="end"
+            height={60}
+            label={{ value: groupLabel, position: 'insideBottom', offset: -55, style: { textAnchor: 'middle', fontSize: 12, fill: '#6b7280' } }}
+          />
+          <YAxis
+            tick={{ fontSize: 12, fill: '#6b7280' }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => typeof v === 'number' ? v.toLocaleString() : v}
+            label={yLabel}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 4 }} />
+          {aggDefs.map((a, i) => (
+            <Line key={a.key} type="monotone" dataKey={a.key} name={a.label} stroke={COLORS[i % COLORS.length]} strokeWidth={2.5} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     );
   }
 
   if (chartType === 'pie' || chartType === 'donut') {
+    const key = aggDefs[0].key;
+    const pieData = data.map((d) => ({ name: d.label, value: d[key] }));
     return (
-      <ResponsiveContainer width="100%" height={360}>
+      <ResponsiveContainer width="100%" height={380}>
         <PieChart>
           <Pie
-            data={data}
+            data={pieData}
             dataKey="value"
-            nameKey="label"
+            nameKey="name"
             cx="50%" cy="50%"
             outerRadius={130}
-            innerRadius={chartType === 'donut' ? 70 : 0}
-            label={({ label, percent }) => `${label} (${(percent * 100).toFixed(0)}%)`}
+            innerRadius={chartType === 'donut' ? 65 : 0}
+            paddingAngle={2}
+            label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
+            labelLine={{ strokeWidth: 1 }}
           >
-            {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+            {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
           </Pie>
-          <Tooltip />
-          <Legend />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
         </PieChart>
       </ResponsiveContainer>
     );
   }
 
-  return <TableResult results={results} fields={fields} isGrouped={isGrouped} aggregations={aggregations} />;
+  return <TableResult results={results} fields={fields} isGrouped={isGrouped} aggregations={aggregations} aggLabelMap={aggLabelMap} groupLabel={groupLabel} />;
 }
 
-function TableResult({ results, fields, isGrouped, aggregations }) {
+function TableResult({ results, fields, isGrouped, aggregations, aggLabelMap, groupLabel }) {
   if (isGrouped) {
     const aggKeys = aggregations.map((a) => a.alias || `${a.func}_${a.field || 'all'}`);
     const valueKeys = Object.keys(results[0] || {}).filter((k) => k !== '_id');
@@ -492,14 +579,14 @@ function TableResult({ results, fields, isGrouped, aggregations }) {
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Group</th>
-              {cols.map((k) => <th key={k}>{k}</th>)}
+              <th>{groupLabel || 'Group'}</th>
+              {cols.map((k) => <th key={k}>{aggLabelMap?.get(k) || k}</th>)}
             </tr>
           </thead>
           <tbody>
             {results.map((r, i) => (
               <tr key={i}>
-                <td>{r._id ?? 'Unknown'}</td>
+                <td>{r._id ?? '—'}</td>
                 {cols.map((k) => <td key={k}>{typeof r[k] === 'number' ? r[k].toLocaleString() : (r[k] ?? '—')}</td>)}
               </tr>
             ))}

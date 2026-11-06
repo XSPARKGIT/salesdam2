@@ -71,6 +71,7 @@ import CollectionFilterElement from './Elements/CollectionFilterElement.jsx';
 import CollectionSortElement from './Elements/CollectionSortElement.jsx';
 import DeleteRecordsElement from './Elements/DeleteRecordsElement.jsx';
 import SubflowElement from './Elements/SubflowElement.jsx';
+import CustomCodeElement from './Elements/CustomCodeElement.jsx';
 import PauseElement from './Elements/PauseElement.jsx';
 import ScreenElement from './Elements/ScreenElement.jsx';
 import NavigateElement from './Elements/NavigateElement.jsx';
@@ -1389,6 +1390,8 @@ function StepCard({
         );
       case 'action_wait':
         return <WaitConfig config={c} onChange={setConfig} />;
+      case 'custom_code':
+        return <CustomCodeElement config={c} onChange={setConfig} />;
       case 'subflow':
         return (
           <SubflowElement

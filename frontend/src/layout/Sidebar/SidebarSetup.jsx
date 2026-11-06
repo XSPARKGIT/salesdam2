@@ -17,6 +17,7 @@ import {
   Package,
   Radio,
   MessageCircle,
+  FileCode,
 } from 'lucide-react';
 import SidebarNavItem from './SidebarNavItem';
 import SidebarNavGroup from './SidebarNavGroup';
@@ -216,6 +217,16 @@ const SidebarSetup = ({
           to="/admin/settings"
           icon={<Shield size={16} />}
           label="Admin Settings"
+          collapsed={sidebarCollapsed}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {isAdmin && (
+        <SidebarNavItem
+          to="/admin/custom-code"
+          icon={<FileCode size={15} />}
+          label="Custom Code"
           collapsed={sidebarCollapsed}
           onNavigate={onNavigate}
         />

@@ -233,7 +233,43 @@ router.post(
 
     pipeline.push({ $limit: Math.min(parseInt(limit) || 100, 1000) });
 
-    const results = await DynamicRecord.aggregate(pipeline);
+    let results = await DynamicRecord.aggregate(pipeline);
+
+    // If grouping by a lookup/master-detail field, resolve ObjectId _id values
+    // to the display name of the referenced record so charts show names, not IDs.
+    if (groupBy && results.length > 0) {
+      const groupByField = fieldMap.get(groupBy);
+      if (groupByField && (groupByField.type === 'lookup' || groupByField.type === 'master_detail')) {
+        const relatedObject = groupByField.lookupObjectApiName;
+        const rawIds = results.map((r) => r._id).filter(Boolean);
+        const objectIds = rawIds.map((id) => {
+          try { return mongoose.Types.ObjectId.createFromHexString(String(id)); } catch { return null; }
+        }).filter(Boolean);
+
+        if (objectIds.length > 0 && relatedObject) {
+          const relatedRecords = await DynamicRecord.find(
+            { _id: { $in: objectIds }, tenantId: tenantObjId, objectApiName: relatedObject, isDeleted: false },
+            { 'data.name': 1, 'data.firstName': 1, 'data.lastName': 1, 'data.title': 1 },
+          ).lean();
+
+          const nameMap = new Map();
+          for (const rec of relatedRecords) {
+            const d = rec.data || {};
+            const displayName =
+              d.name ||
+              (d.firstName || d.lastName ? `${d.firstName || ''} ${d.lastName || ''}`.trim() : null) ||
+              d.title ||
+              String(rec._id);
+            nameMap.set(String(rec._id), displayName);
+          }
+
+          results = results.map((r) => ({
+            ...r,
+            _id: nameMap.get(String(r._id)) ?? r._id,
+          }));
+        }
+      }
+    }
 
     sendSuccess(res, {
       data: {
