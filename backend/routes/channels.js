@@ -9,6 +9,7 @@ import {
   deleteAccount,
   validateAccount,
   webhook,
+  verifyWebhook,
   testWebhook,
 } from '../controllers/channelController.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -19,6 +20,7 @@ const router = express.Router();
 
 // Public inbound webhook: verified by the channel account's signing secret,
 // not by a session, so it must be reachable without authentication (§16.2).
+router.get('/webhook/:channel/:accountId', verifyWebhook);
 router.post('/webhook/:channel/:accountId', webhook);
 
 router.get('/capabilities', requireAuth, enforceTenant, capabilities);

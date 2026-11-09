@@ -118,6 +118,21 @@ const testWebhook = asyncHandler(async (req, res) => {
   );
 });
 
+// Meta webhook verification: GET with hub.mode=subscribe, hub.verify_token, hub.challenge.
+const verifyWebhook = asyncHandler(async (req, res) => {
+  const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = req.query;
+  if (mode !== 'subscribe' || !token || !challenge) {
+    return res.status(400).json({ error: 'Invalid verification request' });
+  }
+  const { default: ChannelAccount } = await import('../models/ChannelAccount.js');
+  const account = await ChannelAccount.findById(req.params.accountId).select('+webhookSecret').catch(() => null);
+  // Allow if no secret configured (open) or token matches the account's webhookSecret.
+  if (account && account.webhookSecret && account.webhookSecret !== token) {
+    return res.status(403).json({ error: 'Verify token mismatch' });
+  }
+  res.status(200).send(challenge);
+});
+
 // Public inbound webhook: authenticated by signature, not by session.
 const webhook = asyncHandler(async (req, res) => {
   const account = await channelService.resolveWebhookAccount({
@@ -166,5 +181,6 @@ export {
   deleteAccount,
   validateAccount,
   webhook,
+  verifyWebhook,
   testWebhook,
 };
