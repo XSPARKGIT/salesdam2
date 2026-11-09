@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
+import Privacy from './pages/Privacy';
 import Layout from './layout/Layout';
 import WorkspaceObjectGuard from './components/common/WorkspaceObjectGuard/WorkspaceObjectGuard';
 
@@ -154,6 +155,7 @@ export default function App() {
       />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/privacy" element={<Privacy />} />
       <Route
         path="/auth/verify"
         element={

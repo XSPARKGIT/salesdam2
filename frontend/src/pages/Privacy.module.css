@@ -1,0 +1,141 @@
+.page {
+  min-height: 100vh;
+  background: #fafaf8;
+  padding: 48px 16px 80px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #1a1a18;
+}
+
+.doc { max-width: 740px; margin: 0 auto; }
+
+.header {
+  padding-bottom: 36px;
+  border-bottom: 1px solid #d4d4cc;
+  margin-bottom: 40px;
+}
+
+.wordmark {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #1a4f8a;
+  margin-bottom: 20px;
+}
+
+.h1 {
+  font-family: Georgia, serif;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 12px;
+  color: #1a1a18;
+}
+
+.meta {
+  font-size: 13px;
+  color: #5c5c56;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.toc {
+  background: #e8f0fb;
+  border: 1px solid #e2e2dc;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 40px;
+}
+
+.tocTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5c5c56;
+  margin: 0 0 12px;
+}
+
+.tocList {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+
+.tocLink { color: #1a4f8a; text-decoration: none; font-size: 14px; }
+.tocLink:hover { text-decoration: underline; }
+
+.section { margin-bottom: 44px; }
+
+.h2 {
+  font-family: Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #1a1a18;
+  margin: 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.num {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #1a4f8a;
+  text-transform: uppercase;
+}
+
+.section p { margin: 0 0 14px; }
+.section p:last-child { margin-bottom: 0; }
+.section ul, .section ol { margin: 0 0 14px; padding-left: 20px; }
+.section li { margin-bottom: 6px; }
+.section a { color: #1a4f8a; }
+
+.highlight {
+  background: #e8f0fb;
+  border-left: 3px solid #1a4f8a;
+  border-radius: 0 6px 6px 0;
+  padding: 14px 18px;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
+.table th {
+  text-align: left; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: #5c5c56; padding: 8px 12px; border-bottom: 2px solid #d4d4cc;
+}
+.table td { padding: 10px 12px; border-bottom: 1px solid #e2e2dc; vertical-align: top; }
+.table tr:last-child td { border-bottom: none; }
+
+.contactCard {
+  background: #fff;
+  border: 1px solid #e2e2dc;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-top: 16px;
+}
+.contactCard strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.contactCard p { font-size: 14px; color: #5c5c56; margin: 0 0 4px; }
+.email { font-family: monospace; font-size: 14px; color: #1a4f8a; user-select: all; }
+
+.footer {
+  border-top: 1px solid #d4d4cc;
+  padding-top: 28px;
+  font-size: 13px;
+  color: #5c5c56;
+  margin-top: 60px;
+}
+
+@media (max-width: 480px) {
+  .meta { flex-direction: column; gap: 4px; }
+  .table { font-size: 13px; }
+  .table th, .table td { padding: 8px; }
+}
