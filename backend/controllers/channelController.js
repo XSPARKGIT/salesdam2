@@ -120,9 +120,10 @@ const testWebhook = asyncHandler(async (req, res) => {
 
 // Meta webhook verification: GET with hub.mode=subscribe, hub.verify_token, hub.challenge.
 const verifyWebhook = asyncHandler(async (req, res) => {
-  const mode = req.query['hub.mode'] || req.query?.hub?.mode;
-  const token = req.query['hub.verify_token'] || req.query?.hub?.verify_token;
-  const challenge = req.query['hub.challenge'] || req.query?.hub?.challenge;
+  const qs = new URLSearchParams(req.url.split('?')[1] || '');
+  const mode = qs.get('hub.mode');
+  const token = qs.get('hub.verify_token');
+  const challenge = qs.get('hub.challenge');
   if (mode !== 'subscribe' || !token || !challenge) {
     return res.status(400).json({ error: 'Invalid verification request' });
   }
