@@ -103,8 +103,10 @@ export default function ChannelAccountsPage() {
     }
   };
 
-  const webhookUrlFor = (acc) =>
-    `${window.location.origin.replace(/:\d+$/, ':5002')}/api/v1/channels/webhook/${acc.channel}/${acc._id}`;
+  const webhookUrlFor = (acc) => {
+    const apiBase = import.meta.env.VITE_API_URL || window.location.origin.replace(/:\d+$/, ':5002');
+    return `${apiBase}/api/v1/channels/webhook/${acc.channel}/${acc._id}`;
+  };
 
   const copyWebhook = (acc) => {
     navigator.clipboard.writeText(webhookUrlFor(acc)).then(() => toast.success('Webhook URL copied'));
