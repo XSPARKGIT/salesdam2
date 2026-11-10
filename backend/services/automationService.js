@@ -882,27 +882,43 @@ function buildContext(record, extraVars, tenantId) {
 
 function interpolate(template, record, ctx = {}) {
   if (!template) return '';
-  return String(template).replace(/\{([^}]+)\}/g, (match, key) => {
-    // 1. Try record data map
+  return String(template).replace(/\{([^}]+)\}/g, (match, raw) => {
+    // Strip leading $ (variable syntax: {$varName} or {$varName.prop})
+    const key = raw.startsWith('$') ? raw.slice(1) : raw;
+
+    // Helper: resolve dot-notation path on a value
+    const resolvePath = (obj, path) => {
+      if (obj == null) return undefined;
+      const parts = path.split('.');
+      let cur = obj;
+      for (const p of parts) {
+        if (cur == null || typeof cur !== 'object') return undefined;
+        cur = cur[p];
+      }
+      return cur;
+    };
+
+    // 1. Variables (support dot-notation: {$leadTag.tag})
+    if (ctx.variables) {
+      const [varName, ...rest] = key.split('.');
+      if (varName in ctx.variables) {
+        const val = rest.length ? resolvePath(ctx.variables[varName], rest.join('.')) : ctx.variables[varName];
+        if (val != null) return typeof val === 'object' ? JSON.stringify(val) : String(val);
+      }
+    }
+    // 2. Try record data map
     if (record.data instanceof Map) {
       const v = record.data.get(key);
       if (v != null) return String(v);
     }
-    // 2. Try flat record data object
-    if (
-      record.data &&
-      typeof record.data === 'object' &&
-      record.data[key] != null
-    ) {
+    // 3. Try flat record data object
+    if (record.data && typeof record.data === 'object' && record.data[key] != null) {
       return String(record.data[key]);
     }
-    // 3. System fields
+    // 4. System fields
     if (key === 'id' || key === '_id') return String(record._id || '');
     if (key === 'objectApiName') return record.objectApiName || '';
     if (key === 'ownerId') return String(record.ownerId || '');
-    // 4. Variables
-    if (ctx.variables && key in ctx.variables)
-      return String(ctx.variables[key] ?? '');
     // 5. context.record
     if (ctx.record && key in ctx.record) return String(ctx.record[key] ?? '');
     return match;
