@@ -41,6 +41,7 @@ import {
   FileText,
   FileCode,
   MessageCircle,
+  Lock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -1918,7 +1919,7 @@ function TriggerPanel({ form, setForm, objects, fields, onFieldsChange, flowId, 
               Flow type is locked after creation.
             </span>
           </div>
-          <span className={styles.lockIcon}>🔒</span>
+          <span className={styles.lockIcon}><Lock size={13} /></span>
         </div>
       </div>
 
