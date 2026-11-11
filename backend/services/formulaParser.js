@@ -521,8 +521,8 @@ function run(node, ctx, calls = { n: 0 }) {
     case '||': return run(node.l, ctx, calls) || run(node.r, ctx, calls);
     case '&&': return run(node.l, ctx, calls) && run(node.r, ctx, calls);
 
-    case TT.EQ:  { const [l, r] = [run(node.l, ctx, calls), run(node.r, ctx, calls)]; return l == r; }  // loose equality intentional for null checks
-    case TT.NEQ: { const [l, r] = [run(node.l, ctx, calls), run(node.r, ctx, calls)]; return l != r; }
+    case TT.EQ:  { const [l, r] = [run(node.l, ctx, calls), run(node.r, ctx, calls)]; if (typeof l === 'string' && typeof r === 'string') return l.toLowerCase() === r.toLowerCase(); return l == r; }
+    case TT.NEQ: { const [l, r] = [run(node.l, ctx, calls), run(node.r, ctx, calls)]; if (typeof l === 'string' && typeof r === 'string') return l.toLowerCase() !== r.toLowerCase(); return l != r; }
     case TT.GT:  return toNum(run(node.l, ctx, calls)) >  toNum(run(node.r, ctx, calls));
     case TT.GTE: return toNum(run(node.l, ctx, calls)) >= toNum(run(node.r, ctx, calls));
     case TT.LT:  return toNum(run(node.l, ctx, calls)) <  toNum(run(node.r, ctx, calls));

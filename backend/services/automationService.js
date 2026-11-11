@@ -74,7 +74,8 @@ const fireAutomations = async (event, objectApiName, record, tenantId, prev = nu
       try {
         // BRD 7.1: only run for records that meet the entry conditions. On
         // update, `prev` (the values before the save) feeds ISCHANGED().
-        if (!(await entryConditionMet(automation, record, tenantId, event === 'update' ? prev : null))) {
+        const condMet = await entryConditionMet(automation, record, tenantId, event === 'update' ? prev : null);
+        if (!condMet) {
           _exit(tenantId, autoId);
           continue;
         }
@@ -223,17 +224,20 @@ const evaluateConditions = (conditions, record, logic = 'all', prev = null) => {
         ? record.data.get(cond.field)
         : record.data?.[cond.field];
 
+    const fvStr = typeof fieldValue === 'string' ? fieldValue.toLowerCase() : fieldValue;
+    const cvStr = typeof cond.value === 'string' ? cond.value.toLowerCase() : cond.value;
+
     switch (cond.operator) {
       case 'equals':
-        return fieldValue == cond.value;
+        return (typeof fieldValue === 'string' && typeof cond.value === 'string') ? fvStr === cvStr : fieldValue == cond.value;
       case 'not_equals':
-        return fieldValue != cond.value;
+        return (typeof fieldValue === 'string' && typeof cond.value === 'string') ? fvStr !== cvStr : fieldValue != cond.value;
       case 'contains':
-        return String(fieldValue || '').includes(cond.value);
+        return String(fieldValue || '').toLowerCase().includes(String(cond.value || '').toLowerCase());
       case 'starts_with':
-        return String(fieldValue || '').startsWith(cond.value);
+        return String(fieldValue || '').toLowerCase().startsWith(String(cond.value || '').toLowerCase());
       case 'ends_with':
-        return String(fieldValue || '').endsWith(cond.value);
+        return String(fieldValue || '').toLowerCase().endsWith(String(cond.value || '').toLowerCase());
       case 'greater_than':
         return parseFloat(fieldValue) > parseFloat(cond.value);
       case 'less_than':
