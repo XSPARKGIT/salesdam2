@@ -555,6 +555,94 @@ const createRecordFromConversation = async ({
   };
 };
 
+/**
+ * Copy a conversation and its messages to another tenant. The target tenant
+ * must have an active channel account for the same channel. The source
+ * conversation is closed by default and marked with transfer metadata.
+ */
+const transferToTenant = async ({ fromTenantId, conversationId, targetTenantId, closeSource = true }) => {
+  if (!targetTenantId) throw new AppError('targetTenantId is required.', 400);
+  if (String(fromTenantId) === String(targetTenantId)) {
+    throw new AppError('Source and target tenant are the same.', 400);
+  }
+
+  const sourceConv = await Conversation.findOne({ _id: conversationId, tenantId: fromTenantId });
+  if (!sourceConv) throw new AppError('Conversation not found.', 404);
+
+  const targetAccount = await ChannelAccount.findOne({
+    tenantId: targetTenantId,
+    channel: sourceConv.channel,
+    isActive: true,
+  });
+  if (!targetAccount) {
+    throw new AppError(
+      `No active ${sourceConv.channel} channel account in the target tenant.`,
+      400,
+    );
+  }
+
+  const externalThreadId = `transfer:${String(sourceConv._id)}`;
+  let targetConv = await Conversation.findOne({
+    tenantId: targetTenantId,
+    channelAccountId: targetAccount._id,
+    externalThreadId,
+  });
+  if (!targetConv) {
+    targetConv = await Conversation.create({
+      tenantId: targetTenantId,
+      channel: sourceConv.channel,
+      channelAccountId: targetAccount._id,
+      externalThreadId,
+      contactIdentifier: sourceConv.contactIdentifier,
+      contactName: sourceConv.contactName,
+      subject: sourceConv.subject,
+      status: 'open',
+      metadata: {
+        transferredFrom: String(sourceConv._id),
+        transferredFromTenant: String(fromTenantId),
+      },
+    });
+  }
+
+  const sourceMessages = await Message.find({ tenantId: fromTenantId, conversationId: sourceConv._id })
+    .sort({ occurredAt: 1 })
+    .lean();
+
+  let messagesCopied = 0;
+  if (sourceMessages.length > 0) {
+    const copiedMessages = sourceMessages.map(({ _id, tenantId: _t, conversationId: _cid, channelAccountId: _ca, externalMessageId: _eid, ...rest }) => ({
+      ...rest,
+      tenantId: targetTenantId,
+      conversationId: targetConv._id,
+      channelAccountId: targetAccount._id,
+      metadata: { ...(rest.metadata || {}), originalMessageId: String(_id), originalTenantId: String(fromTenantId) },
+    }));
+    await Message.insertMany(copiedMessages, { ordered: false });
+    messagesCopied = copiedMessages.length;
+    const lastMsg = sourceMessages[sourceMessages.length - 1];
+    targetConv.lastMessageAt = lastMsg.occurredAt || lastMsg.createdAt;
+    await targetConv.save();
+  }
+
+  if (closeSource) {
+    sourceConv.status = 'closed';
+    sourceConv.closedAt = new Date();
+    sourceConv.metadata = {
+      ...(sourceConv.metadata || {}),
+      transferredTo: String(targetConv._id),
+      transferredToTenant: String(targetTenantId),
+    };
+    await sourceConv.save();
+  }
+
+  return {
+    sourceConversationId: String(sourceConv._id),
+    targetConversationId: String(targetConv._id),
+    targetTenantId: String(targetTenantId),
+    messagesCopied,
+  };
+};
+
 export default {
   listConversations,
   getConversation,
@@ -568,4 +656,5 @@ export default {
   createRecordFromConversation,
   sendEmailToRecord,
   sendTemplateToRecord,
+  transferToTenant,
 };

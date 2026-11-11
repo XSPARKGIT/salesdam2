@@ -34,7 +34,7 @@ const PROVIDER_STATUS_PILL = {
   '':         styles.pillNeutral,
 };
 
-const EMPTY_FORM = { name: '', channel: 'whatsapp', subject: '', body: '', language: 'en' };
+const EMPTY_FORM = { name: '', channel: 'whatsapp', subject: '', body: '', language: 'en', providerTemplateId: '' };
 
 export default function MessageTemplatesPage() {
   const [templates, setTemplates] = useState([]);
@@ -102,7 +102,7 @@ export default function MessageTemplatesPage() {
 
   const startEdit = (tpl) => {
     setEditTpl(tpl);
-    setEditForm({ name: tpl.name, channel: tpl.channel, subject: tpl.subject || '', body: tpl.body, language: tpl.language || 'en' });
+    setEditForm({ name: tpl.name, channel: tpl.channel, subject: tpl.subject || '', body: tpl.body, language: tpl.language || 'en', providerTemplateId: tpl.providerTemplateId || '' });
   };
 
   const cancelEdit = () => { setEditTpl(null); setEditForm({}); };
@@ -229,6 +229,24 @@ export default function MessageTemplatesPage() {
                     : setForm({ ...form, language: e.target.value })}
                 />
               </div>
+
+              {(editTpl ? editForm.channel : form.channel) === 'whatsapp' && (
+                <div className={styles.field}>
+                  <label className={styles.label}>
+                    Meta template name{' '}
+                    <span style={{ fontWeight: 400, color: 'var(--color-gray-400)', fontSize: 11 }}>(providerTemplateId)</span>
+                  </label>
+                  <input
+                    className={styles.input}
+                    placeholder="e.g. order_confirmation"
+                    value={editTpl ? editForm.providerTemplateId : form.providerTemplateId}
+                    onChange={(e) => editTpl
+                      ? setEditForm({ ...editForm, providerTemplateId: e.target.value })
+                      : setForm({ ...form, providerTemplateId: e.target.value })}
+                  />
+                  <p className={styles.hint}>The exact template name registered in WhatsApp Business Manager. Required to send via the Meta API.</p>
+                </div>
+              )}
 
               {editTpl ? (
                 <div style={{ display: 'flex', gap: 8 }}>

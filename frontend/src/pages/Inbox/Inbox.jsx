@@ -11,6 +11,7 @@ import { useAuth } from '../../hooks/useAuth';
 import {
   getConversations, getConversation, getMessages, assignConversation, setConversationStatus,
   replyToConversation, replyWithTemplate, addConversationNote, createRecordFromConversation,
+  transferConversationToTenant,
 } from '../../services/api/conversations';
 import { getMessageTemplates } from '../../services/api/messageTemplates';
 import styles from './Inbox.module.css';
@@ -93,9 +94,15 @@ export default function InboxPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [mergeVars, setMergeVars] = useState({});
 
-  // Transfer inline state
+  // Transfer (agent) inline state
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferUserId, setTransferUserId] = useState('');
+
+  // Cross-tenant transfer state
+  const [showTenantTransfer, setShowTenantTransfer] = useState(false);
+  const [tenantTransferTargetId, setTenantTransferTargetId] = useState('');
+  const [tenantTransferClose, setTenantTransferClose] = useState(true);
+  const [tenantTransferring, setTenantTransferring] = useState(false);
 
   // Create record state
   const [showCreateRecord, setShowCreateRecord] = useState(false);
@@ -130,6 +137,8 @@ export default function InboxPage() {
     setSelectedId(id);
     setShowTransfer(false);
     setTransferUserId('');
+    setShowTenantTransfer(false);
+    setTenantTransferTargetId('');
     setShowCreateRecord(false);
     setReplyBody('');
     setNoteBody('');
@@ -177,6 +186,22 @@ export default function InboxPage() {
       refreshSelected();
     } catch (e) {
       toast.error(e.message || 'Transfer failed');
+    }
+  };
+
+  const doTenantTransfer = async () => {
+    if (!tenantTransferTargetId.trim()) return toast.error('Enter a target Tenant ID');
+    setTenantTransferring(true);
+    try {
+      const result = await transferConversationToTenant(selectedId, tenantTransferTargetId.trim(), tenantTransferClose);
+      toast.success(`Transferred — ${result.messagesCopied} message(s) copied to target tenant`);
+      setShowTenantTransfer(false);
+      setTenantTransferTargetId('');
+      refreshSelected();
+    } catch (e) {
+      toast.error(e.message || 'Tenant transfer failed');
+    } finally {
+      setTenantTransferring(false);
     }
   };
 
@@ -379,6 +404,39 @@ export default function InboxPage() {
                           />
                           <button className={styles.actionBtn} onClick={doTransfer}><ChevronRight size={13} /></button>
                           <button className={styles.actionBtn} onClick={() => setShowTransfer(false)}><X size={13} /></button>
+                        </>
+                      )}
+                      {user?.role?.name?.toLowerCase() === 'superuser' && (
+                        <>
+                          <div className={styles.actionSep} />
+                          {!showTenantTransfer ? (
+                            <button className={styles.actionBtn} onClick={() => setShowTenantTransfer(true)}>
+                              <ArrowRightLeft size={13} /> Transfer Tenant
+                            </button>
+                          ) : (
+                            <>
+                              <input
+                                className={styles.mergeVarInput}
+                                style={{ width: 180 }}
+                                placeholder="Target Tenant ID..."
+                                value={tenantTransferTargetId}
+                                onChange={(e) => setTenantTransferTargetId(e.target.value)}
+                                autoFocus
+                              />
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-gray-500)', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={tenantTransferClose}
+                                  onChange={(e) => setTenantTransferClose(e.target.checked)}
+                                />
+                                Close source
+                              </label>
+                              <button className={styles.actionBtn} disabled={tenantTransferring} onClick={doTenantTransfer}>
+                                {tenantTransferring ? '…' : <ChevronRight size={13} />}
+                              </button>
+                              <button className={styles.actionBtn} onClick={() => setShowTenantTransfer(false)}><X size={13} /></button>
+                            </>
+                          )}
                         </>
                       )}
                       <div className={styles.actionSep} />

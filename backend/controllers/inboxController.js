@@ -149,6 +149,18 @@ const createRecordFromConversation = asyncHandler(async (req, res) => {
   }
 });
 
+const transferToTenant = asyncHandler(async (req, res) => {
+  const { targetTenantId, closeSource = true } = req.body || {};
+  if (!targetTenantId) throw new AppError('targetTenantId is required.', 400);
+  const result = await inboxService.transferToTenant({
+    fromTenantId: req.tenantId,
+    conversationId: req.params.id,
+    targetTenantId,
+    closeSource,
+  });
+  sendSuccess(res, { data: result }, 'Conversation transferred to tenant', 201);
+});
+
 export {
   listConversations,
   getConversation,
@@ -160,4 +172,5 @@ export {
   replyWithTemplate,
   addNote,
   createRecordFromConversation,
+  transferToTenant,
 };

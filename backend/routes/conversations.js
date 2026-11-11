@@ -10,8 +10,9 @@ import {
   replyWithTemplate,
   addNote,
   createRecordFromConversation,
+  transferToTenant,
 } from '../controllers/inboxController.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireSuperuser } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 
 const router = express.Router();
@@ -28,5 +29,6 @@ router.post('/:id/reply', reply);
 router.post('/:id/reply-template', replyWithTemplate);
 router.post('/:id/notes', addNote);
 router.post('/:id/create-record', createRecordFromConversation);
+router.post('/:id/transfer-tenant', requireSuperuser, transferToTenant);
 
 export default router;

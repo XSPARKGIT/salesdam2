@@ -23,3 +23,5 @@ export const addConversationNote = async (id, body) =>
   (await api.post(`/conversations/${id}/notes`, { body })).data.data;
 export const createRecordFromConversation = async (id, objectApiName, data) =>
   (await api.post(`/conversations/${id}/create-record`, { objectApiName, data })).data.data;
+export const transferConversationToTenant = async (id, targetTenantId, closeSource = true) =>
+  (await api.post(`/conversations/${id}/transfer-tenant`, { targetTenantId, closeSource })).data.data;
