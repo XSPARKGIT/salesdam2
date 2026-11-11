@@ -1714,6 +1714,246 @@ function EntryConditionSection({ form, setTrig, fields, hint }) {
 }
 
 // Scheduled / time-based trigger (BRD 7.1): N days before/after/on a date
+// ─── CronBuilder ─────────────────────────────────────────────────────────────
+const CRON_DAYS = [
+  { label: 'Sunday',    short: 'Su', value: 0 },
+  { label: 'Monday',    short: 'Mo', value: 1 },
+  { label: 'Tuesday',   short: 'Tu', value: 2 },
+  { label: 'Wednesday', short: 'We', value: 3 },
+  { label: 'Thursday',  short: 'Th', value: 4 },
+  { label: 'Friday',    short: 'Fr', value: 5 },
+  { label: 'Saturday',  short: 'Sa', value: 6 },
+];
+
+function parseCronForUI(cron) {
+  const def = { preset: 'daily', customTime: '09:00', dow: 1, dom: 1, minute: 0, customDays: [1], customMode: 'builder', rawCron: '' };
+  if (!cron) return def;
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return { ...def, preset: 'custom', customMode: 'expression', rawCron: cron };
+  const [min, hour, dom, month, dow] = parts;
+  const minN = parseInt(min, 10), hourN = parseInt(hour, 10), domN = parseInt(dom, 10), dowN = parseInt(dow, 10);
+  const timeStr = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+  if (hour === '*' && dom === '*' && month === '*' && dow === '*' && /^\d+$/.test(min))
+    return { ...def, preset: 'hourly', minute: minN };
+  if (dom === '*' && month === '*' && dow === '*' && /^\d+$/.test(hour) && /^\d+$/.test(min))
+    return { ...def, preset: 'daily', customTime: timeStr(hourN, minN) };
+  if (dom === '*' && month === '*' && /^\d+$/.test(hour) && /^\d+$/.test(min) && /^\d+$/.test(dow))
+    return { ...def, preset: 'weekly', dow: dowN, customTime: timeStr(hourN, minN) };
+  if (dow === '*' && month === '*' && /^\d+$/.test(hour) && /^\d+$/.test(min) && /^\d+$/.test(dom))
+    return { ...def, preset: 'monthly', dom: domN, customTime: timeStr(hourN, minN) };
+  // multi-day: "0 9 * * 1,3,5"
+  if (dom === '*' && month === '*' && /^\d+$/.test(hour) && /^\d+$/.test(min)) {
+    const days = dow.split(',').map(Number).filter(n => !isNaN(n) && n >= 0 && n <= 6);
+    if (days.length > 1) return { ...def, preset: 'custom', customMode: 'builder', customDays: days, customTime: timeStr(hourN, minN) };
+  }
+  return { ...def, preset: 'custom', customMode: 'expression', rawCron: cron };
+}
+
+function buildCronFromUI(state) {
+  const [hStr = '9', mStr = '0'] = (state.customTime || '09:00').split(':');
+  const h = Math.min(23, Math.max(0, parseInt(hStr, 10) || 0));
+  const m = Math.min(59, Math.max(0, parseInt(mStr, 10) || 0));
+  switch (state.preset) {
+    case 'hourly':  return `${state.minute ?? 0} * * * *`;
+    case 'daily':   return `${m} ${h} * * *`;
+    case 'weekly':  return `${m} ${h} * * ${state.dow ?? 1}`;
+    case 'monthly': return `${m} ${h} ${state.dom ?? 1} * *`;
+    case 'custom':
+      if (state.customMode === 'builder') {
+        const days = [...(state.customDays || [1])].sort((a, b) => a - b).join(',');
+        return `${m} ${h} * * ${days || '*'}`;
+      }
+      return state.rawCron || '';
+    default: return state.rawCron || '';
+  }
+}
+
+function describeCronUI(state) {
+  const [hStr = '9', mStr = '0'] = (state.customTime || '09:00').split(':');
+  const h = parseInt(hStr, 10) || 0;
+  const m = parseInt(mStr, 10) || 0;
+  const t = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const dayName = (d) => CRON_DAYS.find(x => x.value === d)?.label ?? String(d);
+  switch (state.preset) {
+    case 'hourly':  return `Every hour at minute ${state.minute ?? 0}`;
+    case 'daily':   return `Every day at ${t}`;
+    case 'weekly':  return `Every ${dayName(state.dow ?? 1)} at ${t}`;
+    case 'monthly': return `Monthly on day ${state.dom ?? 1} at ${t}`;
+    case 'custom':
+      if (state.customMode === 'builder' && (state.customDays || []).length > 0)
+        return `Every ${[...state.customDays].sort((a,b)=>a-b).map(dayName).join(', ')} at ${t}`;
+      return state.rawCron || 'Custom schedule';
+    default: return 'Custom schedule';
+  }
+}
+
+function CronBuilder({ value, onChange }) {
+  const [ui, setUi] = React.useState(() => parseCronForUI(value));
+
+  // Sync inbound changes (e.g. load from saved automation)
+  React.useEffect(() => {
+    setUi(parseCronForUI(value));
+  }, [value]);
+
+  const update = (patch) => {
+    const next = { ...ui, ...patch };
+    setUi(next);
+    onChange(buildCronFromUI(next));
+  };
+
+  const PRESETS = [
+    { value: 'hourly',  label: 'Hourly'   },
+    { value: 'daily',   label: 'Daily'    },
+    { value: 'weekly',  label: 'Weekly'   },
+    { value: 'monthly', label: 'Monthly'  },
+    { value: 'custom',  label: 'Custom'   },
+  ];
+
+  const pillStyle = (active) => ({
+    padding: '5px 16px',
+    borderRadius: 20,
+    border: `1.5px solid ${active ? 'var(--color-primary,#6366f1)' : 'var(--color-border,#e5e7eb)'}`,
+    background: active ? 'var(--color-primary,#6366f1)' : 'transparent',
+    color: active ? '#fff' : 'inherit',
+    fontSize: 13,
+    fontWeight: active ? 600 : 400,
+    cursor: 'pointer',
+    transition: 'all .15s',
+  });
+
+  const tabStyle = (active) => ({
+    padding: '3px 12px',
+    borderRadius: 4,
+    border: `1px solid ${active ? 'var(--color-primary,#6366f1)' : 'var(--color-border,#e5e7eb)'}`,
+    background: active ? '#eef2ff' : 'transparent',
+    color: active ? 'var(--color-primary,#6366f1)' : 'inherit',
+    fontSize: 12,
+    cursor: 'pointer',
+  });
+
+  const dayBtnStyle = (active) => ({
+    width: 36, height: 36,
+    borderRadius: '50%',
+    border: `1.5px solid ${active ? 'var(--color-primary,#6366f1)' : 'var(--color-border,#e5e7eb)'}`,
+    background: active ? 'var(--color-primary,#6366f1)' : 'transparent',
+    color: active ? '#fff' : 'inherit',
+    fontSize: 11, fontWeight: 600,
+    cursor: 'pointer',
+    flexShrink: 0,
+  });
+
+  const cron = buildCronFromUI(ui);
+
+  return (
+    <div>
+      {/* ── Frequency pills ── */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+        {PRESETS.map(p => (
+          <button key={p.value} type="button" style={pillStyle(ui.preset === p.value)}
+            onClick={() => update({ preset: p.value })}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Hourly ── */}
+      {ui.preset === 'hourly' && (
+        <Row label="At minute" hint="0–59, e.g. 0 fires at :00, 30 fires at :30">
+          <input type="number" className={styles.inp} style={{ width: 80 }} min={0} max={59}
+            value={ui.minute ?? 0}
+            onChange={e => update({ minute: Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)) })} />
+        </Row>
+      )}
+
+      {/* ── Daily / Weekly / Monthly shared time ── */}
+      {['daily', 'weekly', 'monthly'].includes(ui.preset) && (
+        <Row label="At time">
+          <input type="time" className={styles.inp} value={ui.customTime || '09:00'}
+            onChange={e => update({ customTime: e.target.value })} />
+        </Row>
+      )}
+
+      {/* ── Weekly ── */}
+      {ui.preset === 'weekly' && (
+        <Row label="On day">
+          <select className={styles.inp} value={ui.dow ?? 1}
+            onChange={e => update({ dow: parseInt(e.target.value, 10) })}>
+            {CRON_DAYS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </select>
+        </Row>
+      )}
+
+      {/* ── Monthly ── */}
+      {ui.preset === 'monthly' && (
+        <Row label="Day of month">
+          <select className={styles.inp} value={ui.dom ?? 1}
+            onChange={e => update({ dom: parseInt(e.target.value, 10) })}>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+              <option key={d} value={d}>{d}{d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th'}</option>
+            ))}
+          </select>
+        </Row>
+      )}
+
+      {/* ── Custom ── */}
+      {ui.preset === 'custom' && (
+        <div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            {[{ v: 'builder', label: 'Day picker' }, { v: 'expression', label: 'Cron expression' }].map(opt => (
+              <button key={opt.v} type="button" style={tabStyle(ui.customMode === opt.v)}
+                onClick={() => update({ customMode: opt.v })}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {ui.customMode === 'builder' && (
+            <>
+              <Row label="Run on">
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {CRON_DAYS.map(d => {
+                    const active = (ui.customDays || []).includes(d.value);
+                    return (
+                      <button key={d.value} type="button" title={d.label} style={dayBtnStyle(active)}
+                        onClick={() => {
+                          const days = ui.customDays || [];
+                          update({ customDays: active ? days.filter(x => x !== d.value) : [...days, d.value] });
+                        }}>
+                        {d.short}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Row>
+              <Row label="At time">
+                <input type="time" className={styles.inp} value={ui.customTime || '09:00'}
+                  onChange={e => update({ customTime: e.target.value })} />
+              </Row>
+            </>
+          )}
+
+          {ui.customMode === 'expression' && (
+            <Row label="Expression" hint="min hour day-of-month month day-of-week">
+              <Inp value={ui.rawCron || ''} onChange={v => update({ rawCron: v })}
+                placeholder="e.g. 0 9 * * 1,3,5" />
+            </Row>
+          )}
+        </div>
+      )}
+
+      {/* ── Human-readable preview ── */}
+      <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--color-surface-2,#f8fafc)', borderRadius: 6, fontSize: 13 }}>
+        <span style={{ color: 'var(--color-gray-500)' }}>Runs: </span>
+        <strong>{describeCronUI(ui)}</strong>
+        {(ui.preset !== 'custom' || ui.customMode !== 'expression') && cron && (
+          <code style={{ marginLeft: 10, fontSize: 11, color: 'var(--color-gray-400)' }}>{cron}</code>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // field, or a repeating cron schedule.
 function ScheduleSection({ form, setTrig, objects, fields, onFieldsChange, flowId, isActive }) {
   const schedule = form.trigger?.schedule || {};
@@ -1830,18 +2070,15 @@ function ScheduleSection({ form, setTrig, objects, fields, onFieldsChange, flowI
         </div>
       ) : (
         <div className={styles.section}>
-          <div className={styles.sectionTitle}>Cron schedule</div>
-          <Inp
+          <div className={styles.sectionTitle}>Schedule</div>
+          <CronBuilder
             value={schedule.cron || ''}
             onChange={(v) => setSchedule({ cron: v })}
-            placeholder="e.g. 0 9 * * 1  (every Monday 9am)"
           />
-          <p className={styles.hint} style={{ marginTop: 6 }}>
-            <code>min hour day month weekday</code> · <code>0 * * * *</code>{' '}
-            hourly · <code>0 9 * * *</code> daily 9am.{' '}
+          <p className={styles.hint} style={{ marginTop: 8 }}>
             {form.trigger?.objectApiName
-              ? 'Each run processes every matching record of the object.'
-              : 'With no object, the flow runs once per scheduled time.'}
+              ? 'Each run processes every matching record of the selected object.'
+              : 'With no object selected, the flow runs once per scheduled time.'}
           </p>
         </div>
       )}
