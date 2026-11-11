@@ -787,10 +787,9 @@ async function executeUpdateRecord(config, record, ctx, tenantId) {
 }
 
 async function executeUpdateRelatedRecords(config, record, ctx, tenantId) {
-  const { objectApiName, lookupField, fields = {} } = config || {};
+  const { objectApiName, lookupField, fields = {}, lookupDirection = 'children' } = config || {};
   if (!objectApiName || !lookupField || Object.keys(fields).length === 0) return;
 
-  const parentId = String(record._id);
   const updates = {};
   const values = {};
   Object.entries(fields).forEach(([field, value]) => {
@@ -798,8 +797,28 @@ async function executeUpdateRelatedRecords(config, record, ctx, tenantId) {
     updates[`data.${field}`] = values[field];
   });
 
-  // Each related record is held to the validation rules; any that fail are
-  // left unchanged and reported as one Flow Error after the rest are updated.
+  if (lookupDirection === 'parent') {
+    // lookupField is on the triggering record — resolve the parent ID from it
+    const rawId = record.data instanceof Map
+      ? record.data.get(lookupField)
+      : (record.data || {})[lookupField];
+    const targetId = rawId ? String(rawId) : null;
+    if (!targetId) return;
+
+    const target = await DynamicRecord.findOne({ _id: targetId, tenantId, isDeleted: false }).catch(() => null);
+    if (!target) return;
+    const prev = target.toDataObject();
+    await assertRulesPass(tenantId, target.objectApiName, { ...prev, ...values }, prev, 'Update');
+    await DynamicRecord.updateOne({ _id: targetId, tenantId }, { $set: updates });
+    logger.info(
+      { objectApiName, lookupField, targetId },
+      'action_update_related_records (parent) complete',
+    );
+    return;
+  }
+
+  // Default: children — find records whose lookupField points to the triggering record
+  const parentId = String(record._id);
   const related = await DynamicRecord.find({
     tenantId, objectApiName, isDeleted: false, [`data.${lookupField}`]: parentId,
   });
