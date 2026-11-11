@@ -764,9 +764,18 @@ async function executeUpdateRecord(config, record, ctx, tenantId) {
     updates[`data.${field}`] = values[field];
   });
 
-  const targetId = config.targetRecordId
-    ? interpolate(config.targetRecordId, record, ctx)
-    : record._id;
+  let targetId;
+  const recordMode = config.recordMode || 'trigger';
+  if (recordMode === 'variable' && config.recordVariable) {
+    const varRecord = ctx.variables?.[config.recordVariable];
+    targetId = varRecord?._id || varRecord?.id || varRecord;
+  } else if (recordMode === 'id' && config.recordId) {
+    targetId = interpolate(config.recordId, record, ctx);
+  } else if (config.targetRecordId) {
+    targetId = interpolate(config.targetRecordId, record, ctx);
+  } else {
+    targetId = record._id;
+  }
 
   const target = await DynamicRecord.findOne({ _id: targetId, tenantId, isDeleted: false }).catch(() => null);
   if (target) {
