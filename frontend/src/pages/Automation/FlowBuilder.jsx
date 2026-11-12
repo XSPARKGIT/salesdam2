@@ -1954,13 +1954,62 @@ function CronBuilder({ value, onChange }) {
   );
 }
 
+const TIMEZONE_OPTIONS = [
+  // Africa
+  { value: 'Africa/Abidjan', label: 'Africa/Abidjan (UTC+0)' },
+  { value: 'Africa/Cairo', label: 'Africa/Cairo (UTC+2)' },
+  { value: 'Africa/Johannesburg', label: 'Africa/Johannesburg (UTC+2)' },
+  { value: 'Africa/Lagos', label: 'Africa/Lagos (UTC+1)' },
+  { value: 'Africa/Nairobi', label: 'Africa/Nairobi (UTC+3)' },
+  // Americas
+  { value: 'America/Chicago', label: 'America/Chicago (UTC-6/-5)' },
+  { value: 'America/Denver', label: 'America/Denver (UTC-7/-6)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (UTC-8/-7)' },
+  { value: 'America/New_York', label: 'America/New_York (UTC-5/-4)' },
+  { value: 'America/Phoenix', label: 'America/Phoenix (UTC-7)' },
+  { value: 'America/Sao_Paulo', label: 'America/Sao_Paulo (UTC-3)' },
+  { value: 'America/Toronto', label: 'America/Toronto (UTC-5/-4)' },
+  // Asia
+  { value: 'Asia/Colombo', label: 'Asia/Colombo (UTC+5:30)' },
+  { value: 'Asia/Dubai', label: 'Asia/Dubai (UTC+4)' },
+  { value: 'Asia/Hong_Kong', label: 'Asia/Hong_Kong (UTC+8)' },
+  { value: 'Asia/Karachi', label: 'Asia/Karachi (UTC+5)' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata (UTC+5:30)' },
+  { value: 'Asia/Riyadh', label: 'Asia/Riyadh (UTC+3)' },
+  { value: 'Asia/Seoul', label: 'Asia/Seoul (UTC+9)' },
+  { value: 'Asia/Shanghai', label: 'Asia/Shanghai (UTC+8)' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore (UTC+8)' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo (UTC+9)' },
+  // Atlantic / Pacific
+  { value: 'Atlantic/Reykjavik', label: 'Atlantic/Reykjavik (UTC+0)' },
+  { value: 'Pacific/Auckland', label: 'Pacific/Auckland (UTC+12/+13)' },
+  { value: 'Pacific/Sydney', label: 'Pacific/Sydney (UTC+10/+11)' },
+  // Europe
+  { value: 'Europe/Amsterdam', label: 'Europe/Amsterdam (UTC+1/+2)' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin (UTC+1/+2)' },
+  { value: 'Europe/Istanbul', label: 'Europe/Istanbul (UTC+3)' },
+  { value: 'Europe/London', label: 'Europe/London (UTC+0/+1)' },
+  { value: 'Europe/Moscow', label: 'Europe/Moscow (UTC+3)' },
+  { value: 'Europe/Paris', label: 'Europe/Paris (UTC+1/+2)' },
+  // UTC
+  { value: 'UTC', label: 'UTC (UTC+0)' },
+];
+
 // field, or a repeating cron schedule.
 function ScheduleSection({ form, setTrig, objects, fields, onFieldsChange, flowId, isActive }) {
   const schedule = form.trigger?.schedule || {};
   const mode = schedule.mode || (schedule.cron ? 'cron' : 'relative_date');
-  const setSchedule = (patch) => setTrig('schedule', { ...schedule, mode, ...patch });
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const setSchedule = (patch) => setTrig('schedule', { ...schedule, mode, timezone: schedule.timezone || browserTz, ...patch });
   const dateFields = fields.filter((f) => f.type === 'date' || f.type === 'datetime');
   const [running, setRunning] = useState(false);
+
+  // Auto-initialise timezone to browser local on first render when not set or left at the UTC default
+  useEffect(() => {
+    if (!schedule.timezone || schedule.timezone === 'UTC') {
+      setTrig('schedule', { ...schedule, mode, timezone: browserTz });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const dateLabel = dateFields.find((f) => f.apiName === schedule.dateField)?.label || 'date field';
   const days = Number(schedule.days ?? 0);
   const when = schedule.when || 'before';
@@ -2085,10 +2134,10 @@ function ScheduleSection({ form, setTrig, objects, fields, onFieldsChange, flowI
 
       <div className={styles.section}>
         <div className={styles.sectionTitle}>Time zone</div>
-        <Inp
-          value={schedule.timezone || 'UTC'}
+        <Sel
+          value={schedule.timezone || browserTz}
           onChange={(v) => setSchedule({ timezone: v })}
-          placeholder="e.g. Africa/Johannesburg"
+          options={TIMEZONE_OPTIONS}
         />
       </div>
 
