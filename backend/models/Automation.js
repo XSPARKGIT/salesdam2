@@ -116,6 +116,10 @@ const automationSchema = new mongoose.Schema(
       // Validation Rules (ISCHANGED, CONFIG, AND/OR/NOT). The flow only runs
       // for a record when it is true. Empty = always.
       entryCondition: { type: String, trim: true, default: '' },
+      // Screen flows only: 'embedded' surfaces the flow as a tab on the
+      // object's record page (GET /automations/screen-flows filters on this).
+      entryPoint: { type: String, enum: ['manual', 'embedded'], default: 'manual' },
+      order: { type: Number, default: 0 }, // tab order among embedded screen flows
       schedule: {
         // for scheduled flows
         // 'relative_date': once per record, N days before/after/on a date

@@ -17,7 +17,16 @@ import {
 import { audit } from '../utils/auditLogger.js';
 import mongoose from 'mongoose';
 import { checkRecordRules } from '../services/validationService.js';
-import { entryConditionMet } from '../services/automationService.js';
+import {
+  entryConditionMet,
+  evaluateConditions,
+  debugFlow,
+  castFormulaValue,
+  applyTransform,
+  compareForSort,
+  MAX_LOOP_ITERATIONS,
+} from '../services/automationService.js';
+import { evaluateFormula } from '../services/formulaParser.js';
 import { validateFlowDefinition } from '../services/flowDefinitionService.js';
 import { runScheduledFlow } from '../services/scheduledFlowService.js';
 
@@ -235,6 +244,95 @@ async function runFlowUntilScreen(
       };
     cur = nodeMap[trigger.nextNodes?.[0]?.nodeId];
   }
+
+  // Runs one inline step — the steps nested inside a Decision outcome or a
+  // Loop body. Shared so both places support the same step types.
+  const runInlineStep = async (inlineStep, ownerLabel) => {
+              const sc = inlineStep.config || {};
+              try {
+                switch (inlineStep.type) {
+                  case 'action_toast':
+                    toasts.push({
+                      message: interp(sc.message || 'Done'),
+                      type: sc.type || 'success',
+                    });
+                    break;
+                  case 'action_update_record': {
+                    if (!sc.fields) break;
+                    const iMode = sc.recordMode || 'trigger';
+                    let tid;
+                    if (iMode === 'trigger') {
+                      if (!rec) break;
+                      tid = rec._id;
+                    } else if (iMode === 'variable') {
+                      tid = ctx[sc.recordVariable]?._id;
+                    } else {
+                      tid = interp(String(sc.recordId || ''));
+                    }
+                    if (!tid) break;
+                    const iUpd = {};
+                    const iValues = {};
+                    Object.entries(sc.fields).forEach(([k, v]) => {
+                      iValues[k] = interp(String(v ?? ''));
+                      iUpd[`data.${k}`] = iValues[k];
+                    });
+                    const iFailures = await flowUpdateRuleFailures(tenantId, tid, iValues);
+                    if (iFailures.length) {
+                      errors.push(blockedMessage('Update', iFailures));
+                      break;
+                    }
+                    await DynamicRecord.updateOne(
+                      { _id: tid, tenantId },
+                      { $set: iUpd },
+                    );
+                    updatedCount++;
+                    break;
+                  }
+                  case 'action_create_record': {
+                    if (!sc.objectApiName) break;
+                    const iObj = await ObjectMeta.findOne({
+                      tenantId,
+                      apiName: sc.objectApiName,
+                    });
+                    if (!iObj) break;
+                    const iMap = new Map();
+                    Object.entries(sc.fields || {}).forEach(([k, v]) =>
+                      iMap.set(k, interp(String(v ?? ''))),
+                    );
+                    const iCreateFailures = await flowCreateRuleFailures(tenantId, sc.objectApiName, Object.fromEntries(iMap));
+                    if (iCreateFailures.length) {
+                      errors.push(blockedMessage('Create', iCreateFailures));
+                      break;
+                    }
+                    const iCreated = await DynamicRecord.create({
+                      tenantId,
+                      objectId: iObj._id,
+                      objectApiName: sc.objectApiName,
+                      data: iMap,
+                      createdBy: userId,
+                      ownerId: userId,
+                    });
+                    createdCount++;
+                    if (sc.outputVariable) {
+                      const iD =
+                        iCreated.data instanceof Map
+                          ? Object.fromEntries(iCreated.data)
+                          : iCreated.data || {};
+                      ctx[sc.outputVariable] = {
+                        _id: String(iCreated._id),
+                        objectApiName: sc.objectApiName,
+                        ...iD,
+                      };
+                    }
+                    break;
+                  }
+                }
+              } catch (err) {
+                errors.push(
+                  `${ownerLabel} step "${inlineStep.label || inlineStep.type}": ${err.message}`,
+                );
+              }
+  };
 
   const visited = new Set();
   const toasts = [];
@@ -470,6 +568,171 @@ async function runFlowUntilScreen(
           break;
         }
 
+        // ── Formula ─────────────────────────────────────────────────────
+        case 'formula': {
+          if (!cfg.formula || !cfg.outputVariable) break;
+          // Screen flows keep variables flat on ctx, so the expression sees
+          // the record's fields and every variable set so far.
+          ctx[cfg.outputVariable] = castFormulaValue(
+            evaluateFormula(cfg.formula, { ...recFlat(), ...ctx }),
+            cfg.dataType,
+          );
+          break;
+        }
+
+        // ── Transform Data ──────────────────────────────────────────────
+        case 'transform': {
+          if (!cfg.inputVariable || !cfg.outputVariable) break;
+          const tIn = ctx[cfg.inputVariable];
+          if (tIn == null) break;
+          const maps = cfg.mappings || [];
+          const mapOne = (item) => {
+            const src = item && typeof item === 'object' ? item : {};
+            if (!maps.length) return { ...src }; // no mappings = copy as-is
+            const o = {};
+            for (const m of maps) {
+              if (!m.target) continue;
+              o[m.target] = applyTransform(src[m.source], m.transform);
+            }
+            return o;
+          };
+          ctx[cfg.outputVariable] = Array.isArray(tIn) ? tIn.map(mapOne) : mapOne(tIn);
+          break;
+        }
+
+        // ── Collection Filter ───────────────────────────────────────────
+        case 'collection_filter': {
+          if (!cfg.inputVariable || !cfg.outputVariable) break;
+          const cfIn = ctx[cfg.inputVariable];
+          if (!Array.isArray(cfIn)) break;
+          // evaluateConditions reads off record.data, so wrap each item.
+          const kept = cfIn.filter((item) =>
+            evaluateConditions(cfg.conditions || [], { data: item }, cfg.logic || 'all'),
+          );
+          ctx[cfg.outputVariable] = kept;
+          ctx[`${cfg.outputVariable}_count`] = kept.length;
+          break;
+        }
+
+        // ── Collection Sort ─────────────────────────────────────────────
+        case 'collection_sort': {
+          if (!cfg.inputVariable || !cfg.outputVariable) break;
+          const csIn = ctx[cfg.inputVariable];
+          if (!Array.isArray(csIn)) break;
+          const active = (cfg.sortFields || []).filter((s) => s && s.field);
+          const nullsLast = cfg.nullsLast !== false;
+          ctx[cfg.outputVariable] = [...csIn].sort((a, b) => {
+            for (const s of active) {
+              const av = a?.[s.field];
+              const bv = b?.[s.field];
+              const aE = av == null || av === '';
+              const bE = bv == null || bv === '';
+              if (aE || bE) {
+                if (aE && bE) continue;
+                return (aE ? 1 : -1) * (nullsLast ? 1 : -1);
+              }
+              const c = compareForSort(av, bv);
+              if (c !== 0) return s.direction === 'desc' ? -c : c;
+            }
+            return 0;
+          });
+          ctx[`${cfg.outputVariable}_count`] = csIn.length;
+          break;
+        }
+
+        // ── Loop ────────────────────────────────────────────────────────
+        case 'loop': {
+          if (!cfg.collectionVariable || !cfg.iterationVariable) break;
+          const coll = ctx[cfg.collectionVariable];
+          if (!Array.isArray(coll)) break;
+          const ordered =
+            cfg.direction === 'last_to_first' ? [...coll].reverse() : coll;
+          const items = ordered.slice(0, MAX_LOOP_ITERATIONS);
+          for (let i = 0; i < items.length; i++) {
+            ctx[cfg.iterationVariable] = items[i];
+            ctx[`${cfg.iterationVariable}_index`] = i;
+            for (const inner of cfg.steps || []) {
+              await runInlineStep(inner, 'Loop');
+            }
+          }
+          break;
+        }
+
+        // ── Delete Records ──────────────────────────────────────────────
+        // Soft-delete, matching the rest of the app: the row stays and is
+        // filtered out by isDeleted, so it stays recoverable.
+        case 'delete_records': {
+          const dMode = cfg.mode || 'trigger_record';
+          const soft = { isDeleted: true, deletedAt: new Date() };
+          let delCount = 0;
+          if (dMode === 'trigger_record') {
+            if (!rec?._id) break;
+            const r = await DynamicRecord.updateOne(
+              { _id: rec._id, tenantId, isDeleted: false },
+              { $set: soft },
+            );
+            delCount = r.modifiedCount || 0;
+          } else if (dMode === 'collection') {
+            const items = ctx[cfg.collectionVariable];
+            if (!Array.isArray(items)) break;
+            const ids = items.map((i) => i?._id).filter(Boolean);
+            if (ids.length) {
+              const r = await DynamicRecord.updateMany(
+                { _id: { $in: ids }, tenantId, isDeleted: false },
+                { $set: soft },
+              );
+              delCount = r.modifiedCount || 0;
+            }
+          } else if (dMode === 'query') {
+            const usable = (cfg.filters || []).filter((f) => f && f.field);
+            // An unfiltered query would wipe the whole object — refuse it.
+            if (!cfg.objectApiName || !usable.length) break;
+            const q = { tenantId, objectApiName: cfg.objectApiName, isDeleted: false };
+            usable.forEach((f) => {
+              q[`data.${f.field}`] = interp(String(f.value ?? ''));
+            });
+            const r = await DynamicRecord.updateMany(q, { $set: soft });
+            delCount = r.modifiedCount || 0;
+          }
+          ctx.deletedCount = delCount;
+          break;
+        }
+
+        // ── Subflow ─────────────────────────────────────────────────────
+        case 'subflow': {
+          if (!cfg.automationId) break;
+          const sub = await Automation.findOne({
+            _id: cfg.automationId,
+            tenantId,
+          });
+          if (!sub) break;
+          // Its own variable scope; only outputMappings come back.
+          const subCtx = {};
+          for (const m of cfg.inputMappings || []) {
+            if (!m.target) continue;
+            subCtx[m.target] = interp(String(m.source ?? ''));
+          }
+          const subRes = await runFlowUntilScreen(
+            sub, rec, subCtx, contextData, null, tenantId, userId, userObj,
+          );
+          toasts.push(...(subRes.toasts || []));
+          errors.push(...(subRes.errors || []));
+          updatedCount += subRes.updatedCount || 0;
+          createdCount += subRes.createdCount || 0;
+          for (const m of cfg.outputMappings || []) {
+            if (!m.source || !m.target) continue;
+            ctx[m.target] = subRes.ctx?.[m.source];
+          }
+          break;
+        }
+
+        // ── Pause ───────────────────────────────────────────────────────
+        case 'pause':
+          // Same limitation as Wait / Delay: suspending and resuming a run
+          // needs a durable job queue, which this server doesn't have.
+          // Carry on rather than stalling the user's screen.
+          break;
+
         case 'decision': {
           const outcomes = cfg.outcomes || [];
 
@@ -535,90 +798,7 @@ async function runFlowUntilScreen(
 
           // Execute the inline steps of the matched outcome
           for (const inlineStep of matched?.steps || []) {
-            const sc = inlineStep.config || {};
-            try {
-              switch (inlineStep.type) {
-                case 'action_toast':
-                  toasts.push({
-                    message: interp(sc.message || 'Done'),
-                    type: sc.type || 'success',
-                  });
-                  break;
-                case 'action_update_record': {
-                  if (!sc.fields) break;
-                  const iMode = sc.recordMode || 'trigger';
-                  let tid;
-                  if (iMode === 'trigger') {
-                    if (!rec) break;
-                    tid = rec._id;
-                  } else if (iMode === 'variable') {
-                    tid = ctx[sc.recordVariable]?._id;
-                  } else {
-                    tid = interp(String(sc.recordId || ''));
-                  }
-                  if (!tid) break;
-                  const iUpd = {};
-                  const iValues = {};
-                  Object.entries(sc.fields).forEach(([k, v]) => {
-                    iValues[k] = interp(String(v ?? ''));
-                    iUpd[`data.${k}`] = iValues[k];
-                  });
-                  const iFailures = await flowUpdateRuleFailures(tenantId, tid, iValues);
-                  if (iFailures.length) {
-                    errors.push(blockedMessage('Update', iFailures));
-                    break;
-                  }
-                  await DynamicRecord.updateOne(
-                    { _id: tid, tenantId },
-                    { $set: iUpd },
-                  );
-                  updatedCount++;
-                  break;
-                }
-                case 'action_create_record': {
-                  if (!sc.objectApiName) break;
-                  const iObj = await ObjectMeta.findOne({
-                    tenantId,
-                    apiName: sc.objectApiName,
-                  });
-                  if (!iObj) break;
-                  const iMap = new Map();
-                  Object.entries(sc.fields || {}).forEach(([k, v]) =>
-                    iMap.set(k, interp(String(v ?? ''))),
-                  );
-                  const iCreateFailures = await flowCreateRuleFailures(tenantId, sc.objectApiName, Object.fromEntries(iMap));
-                  if (iCreateFailures.length) {
-                    errors.push(blockedMessage('Create', iCreateFailures));
-                    break;
-                  }
-                  const iCreated = await DynamicRecord.create({
-                    tenantId,
-                    objectId: iObj._id,
-                    objectApiName: sc.objectApiName,
-                    data: iMap,
-                    createdBy: userId,
-                    ownerId: userId,
-                  });
-                  createdCount++;
-                  if (sc.outputVariable) {
-                    const iD =
-                      iCreated.data instanceof Map
-                        ? Object.fromEntries(iCreated.data)
-                        : iCreated.data || {};
-                    ctx[sc.outputVariable] = {
-                      _id: String(iCreated._id),
-                      objectApiName: sc.objectApiName,
-                      ...iD,
-                    };
-                  }
-                  break;
-                }
-              }
-            } catch (err) {
-              errors.push(
-                `Decision step "${inlineStep.label || inlineStep.type}": ${err.message}`,
-              );
-            }
+            await runInlineStep(inlineStep, 'Decision');
           }
           break;
         }
@@ -849,9 +1029,18 @@ router.post(
 );
 
 // ─── POST /:id/debug ─────────────────────────────────────────────────────────
-// Test-run with step-by-step trace. Body: { recordId?, objectApiName?, event?, dryRun? }
-// dryRun=true  → evaluates logic / reads, skips writes/sends
-// dryRun=false → full live execution
+// Test-run a flow and return a step-by-step trace.
+// Body: { recordId?, objectApiName?, event?, dryRun? }
+//
+// This runs the flow through the production executor (debugFlow → executeFlow)
+// rather than a separate simulator. An earlier version walked the nodes itself,
+// which meant the panel could report a step as fine while the real runtime did
+// nothing with it — the trace has to come from the code that actually runs.
+//
+//   dryRun=true  → reads, conditions, formulas and branches all evaluate for
+//                  real; writes, sends, HTTP calls and custom code describe
+//                  themselves instead of happening
+//   dryRun=false → full live execution
 router.post(
   '/:id/debug',
   asyncHandler(async (req, res) => {
@@ -861,15 +1050,10 @@ router.post(
     });
     if (!automation) throw new AppError('Automation not found.', 404);
 
-    const {
-      recordId,
-      objectApiName,
-      event = 'create',
-      dryRun = true,
-    } = req.body;
+    const { recordId, objectApiName, event = 'create', dryRun = true } = req.body;
     const objName = objectApiName || automation.trigger?.objectApiName;
 
-    // Resolve record
+    // ── Resolve the record the flow runs against ────────────────────────────
     let record = null;
     if (recordId) {
       record = await DynamicRecord.findOne({
@@ -887,422 +1071,69 @@ router.post(
         .lean();
     }
 
-    const flatRec = (r) => {
-      if (!r) return {};
-      const data =
-        r.data instanceof Map ? Object.fromEntries(r.data) : r.data || {};
-      return {
-        _id: String(r._id),
-        id: String(r._id),
-        objectApiName: r.objectApiName || objName,
-        ...data,
-      };
-    };
-
-    const ctx = {};
-    const recFlat = flatRec(record);
-
-    const interp = (str) => {
-      if (!str || typeof str !== 'string') return str ?? '';
-      return str.replace(/\{(\$?[\w.]+)\}/g, (_, k) => {
-        if (k.startsWith('$')) return String(ctx[k.slice(1)] ?? ctx[k] ?? '');
-        const parts = k.split('.');
-        if (parts.length === 2)
-          return String(
-            ctx[parts[0]]?.[parts[1]] ?? recFlat[parts[0]]?.[parts[1]] ?? '',
-          );
-        return String(recFlat[k] ?? ctx[k] ?? '');
-      });
-    };
-
-    const evalConds = (conditions = []) => {
-      if (!conditions.length) return true;
-      return conditions.every((c) => {
-        const v = String(recFlat[c.field] ?? '');
-        switch (c.operator) {
-          case 'equals':
-            return v === String(c.value ?? '');
-          case 'not_equals':
-            return v !== String(c.value ?? '');
-          case 'contains':
-            return v.includes(String(c.value ?? ''));
-          case 'starts_with':
-            return v.startsWith(String(c.value ?? ''));
-          case 'ends_with':
-            return v.endsWith(String(c.value ?? ''));
-          case 'greater_than':
-            return Number(v) > Number(c.value);
-          case 'less_than':
-            return Number(v) < Number(c.value);
-          case 'gte':
-            return Number(v) >= Number(c.value);
-          case 'lte':
-            return Number(v) <= Number(c.value);
-          case 'is_null':
-            return !recFlat[c.field] && recFlat[c.field] !== 0;
-          case 'is_not_null':
-            return !!recFlat[c.field] || recFlat[c.field] === 0;
-          default:
-            return true;
-        }
-      });
-    };
-
-    const trace = [];
-    const globalStart = Date.now();
-
-    // Entry conditions check
-    if (automation.trigger?.runWhen === 'conditions_met') {
-      const pass = evalConds(automation.trigger.conditions);
-      trace.push({
-        id: 'trigger',
-        type: 'trigger',
-        label: 'Trigger',
-        status: pass ? 'success' : 'skipped',
-        output: pass
-          ? 'Entry conditions met'
-          : 'Entry conditions NOT met — flow would be skipped',
-        duration: 0,
-        contextSnapshot: {},
-      });
-      if (!pass)
-        return sendSuccess(res, {
-          data: {
-            trace,
-            context: ctx,
-            duration: Date.now() - globalStart,
-            record: recFlat,
-            success: false,
-            skipped: true,
-            dryRun,
-          },
-        });
-    } else {
-      trace.push({
-        id: 'trigger',
-        type: 'trigger',
-        label: 'Trigger',
-        status: 'success',
-        output: 'Runs every time',
-        duration: 0,
-        contextSnapshot: {},
-      });
-    }
-
-    const nodeMap = Object.fromEntries(
-      (automation.nodes || []).map((n) => [n.id, n]),
-    );
-    let cur = (automation.nodes || []).find((n) => n.type === 'trigger');
-    const visited = new Set();
-    if (cur) cur = nodeMap[cur.nextNodes?.[0]?.nodeId];
-
-    while (cur && !visited.has(cur.id) && cur.type !== 'end') {
-      visited.add(cur.id);
-      const cfg = cur.config || {};
-      const t0 = Date.now();
-      const step = {
-        id: cur.id,
-        type: cur.type,
-        label: cur.label || cur.type,
-        status: 'success',
-        output: '',
-        error: null,
-        duration: 0,
-        contextSnapshot: null,
-      };
-      let stop = false;
-
-      try {
-        switch (cur.type) {
-          case 'condition': {
-            const pass = evalConds(cfg.conditions || []);
-            step.output = pass
-              ? `Passed (${cfg.logic || 'all'} conditions met)`
-              : 'NOT met — flow stops here';
-            if (!pass) {
-              step.status = 'skipped';
-              stop = true;
-            }
-            break;
-          }
-          case 'decision': {
-            const outcomes = cfg.outcomes || [];
-            let m = outcomes.find(
-              (o) => !o.isDefault && evalConds(o.conditions || []),
-            );
-            if (!m) m = outcomes.find((o) => o.isDefault);
-            step.output = m ? `Outcome: "${m.label}"` : 'No matching outcome';
-            break;
-          }
-          case 'get_records': {
-            if (!cfg.objectApiName || !cfg.variableName) {
-              step.status = 'warning';
-              step.output = 'Not configured';
-              break;
-            }
-            const q = {
-              tenantId: req.tenantId,
-              objectApiName: cfg.objectApiName,
-              isDeleted: false,
-            };
-            (cfg.filters || []).forEach((f) => {
-              if (!f.field) return;
-              q[f.field === '_id' ? '_id' : `data.${f.field}`] = interp(
-                String(f.value ?? ''),
-              );
-            });
-            const recs = await DynamicRecord.find(q)
-              .limit(cfg.limit || 10)
-              .lean();
-            ctx[cfg.variableName] = recs.map((r) => ({
-              _id: String(r._id),
-              ...(r.data instanceof Map
-                ? Object.fromEntries(r.data)
-                : r.data || {}),
-            }));
-            step.output = `Found ${recs.length} record(s) → stored in {$${cfg.variableName}}`;
-            break;
-          }
-          case 'assignment': {
-            const results = [];
-            (cfg.assignments || []).forEach((a) => {
-              if (!a.variable) return;
-              const v = interp(String(a.value ?? ''));
-              ctx[a.variable] = v;
-              results.push(`{$${a.variable}} = "${v}"`);
-            });
-            step.output = results.length
-              ? results.join(' · ')
-              : 'No assignments';
-            break;
-          }
-          case 'formula':
-            step.output = cfg.outputVariable
-              ? `Formula → {$${cfg.outputVariable}} (not evaluated in debug)`
-              : 'Not configured';
-            if (!cfg.outputVariable) step.status = 'warning';
-            break;
-          case 'transform':
-            step.output = cfg.outputVariable
-              ? `→ {$${cfg.outputVariable}}`
-              : 'Not configured';
-            break;
-          case 'collection_filter':
-            step.output = `Filter {$${cfg.inputVariable || '?'}} → {$${cfg.outputVariable || '?'}}`;
-            break;
-          case 'collection_sort':
-            step.output = `Sort {$${cfg.inputVariable || '?'}} → {$${cfg.outputVariable || '?'}}`;
-            break;
-          case 'loop':
-            step.output = `Loop over {$${cfg.collectionVariable || '?'}} — ${Array.isArray(ctx[cfg.collectionVariable]) ? ctx[cfg.collectionVariable].length : '?'} items`;
-            break;
-          case 'action_update_record': {
-            const pairs = Object.entries(cfg.fields || {})
-              .map(([k, v]) => `${k}="${interp(String(v ?? ''))}"`)
-              .join(', ');
-            const mode = cfg.recordMode || 'trigger';
-            let targetId;
-            if (mode === 'trigger') {
-              targetId = record?._id;
-            } else if (mode === 'variable') {
-              targetId = ctx[cfg.recordVariable]?._id;
-            } else {
-              targetId = interp(String(cfg.recordId || ''));
-            }
-            const targetLabel =
-              mode === 'trigger'
-                ? 'trigger record'
-                : mode === 'variable'
-                  ? `{$${cfg.recordVariable}}`
-                  : cfg.recordId || '?';
-            if (dryRun) {
-              step.output = `[DRY RUN] Would update ${targetLabel}: ${pairs || '(no fields)'}`;
-              break;
-            }
-            if (!targetId) {
-              step.output = `No record to update (${targetLabel})`;
-              step.status = 'warning';
-              break;
-            }
-            const upd = {};
-            const tValues = {};
-            Object.entries(cfg.fields || {}).forEach(([k, v]) => {
-              tValues[k] = interp(String(v ?? ''));
-              upd[`data.${k}`] = tValues[k];
-            });
-            const tFailures = await flowUpdateRuleFailures(req.tenantId, targetId, tValues);
-            if (tFailures.length) {
-              step.status = 'failed';
-              step.output = blockedMessage(`Update of ${targetLabel}`, tFailures);
-              break;
-            }
-            await DynamicRecord.updateOne(
-              { _id: targetId, tenantId: req.tenantId },
-              { $set: upd },
-            );
-            step.output = `Updated ${targetLabel}: ${pairs}`;
-            break;
-          }
-          case 'action_create_record': {
-            if (!cfg.objectApiName) {
-              step.status = 'warning';
-              step.output = 'Not configured';
-              break;
-            }
-            const pairs = Object.entries(cfg.fields || {})
-              .map(([k, v]) => `${k}="${interp(String(v ?? ''))}"`)
-              .join(', ');
-            if (dryRun) {
-              step.output = `[DRY RUN] Would create ${cfg.objectApiName}: ${pairs || '(defaults)'}${cfg.outputVariable ? ` → {$${cfg.outputVariable}}` : ''}`;
-              break;
-            }
-            const obj = await ObjectMeta.findOne({
-              tenantId: req.tenantId,
-              apiName: cfg.objectApiName,
-            });
-            if (!obj) {
-              step.status = 'failed';
-              step.output = `Object "${cfg.objectApiName}" not found`;
-              break;
-            }
-            const dm = new Map();
-            Object.entries(cfg.fields || {}).forEach(([k, v]) =>
-              dm.set(k, interp(String(v ?? ''))),
-            );
-            const tCreateFailures = await flowCreateRuleFailures(req.tenantId, cfg.objectApiName, Object.fromEntries(dm));
-            if (tCreateFailures.length) {
-              step.status = 'failed';
-              step.output = blockedMessage(`Create ${cfg.objectApiName}`, tCreateFailures);
-              break;
-            }
-            const cr = await DynamicRecord.create({
-              tenantId: req.tenantId,
-              objectId: obj._id,
-              objectApiName: cfg.objectApiName,
-              data: dm,
-              createdBy: req.user._id,
-              ownerId: req.user._id,
-            });
-            if (cfg.outputVariable) {
-              const crData =
-                cr.data instanceof Map
-                  ? Object.fromEntries(cr.data)
-                  : cr.data || {};
-              ctx[cfg.outputVariable] = {
-                _id: String(cr._id),
-                objectApiName: cfg.objectApiName,
-                ...crData,
-              };
-            }
-            step.output = `Created ${cfg.objectApiName} — id: ${cr._id}${cfg.outputVariable ? ` → stored in {$${cfg.outputVariable}}` : ''}`;
-            break;
-          }
-          case 'delete_records':
-            step.output = dryRun
-              ? `[DRY RUN] Would delete (mode: ${cfg.mode || 'trigger_record'})`
-              : `Deleted (mode: ${cfg.mode || 'trigger_record'})`;
-            break;
-          case 'action_send_email':
-            step.output = dryRun
-              ? `[DRY RUN] Email → ${cfg.toField ? `[field:${cfg.toField}]` : interp(cfg.to || '?')} | "${interp(cfg.subject || '')}"`
-              : `Email sent`;
-            break;
-          case 'action_send_notification':
-            step.output = dryRun
-              ? `[DRY RUN] Notification: "${interp(cfg.title || '')}"`
-              : `Notification sent`;
-            break;
-          case 'action_toast':
-            step.output = `Toast (${cfg.type || 'success'}): "${interp(cfg.message || '')}"`;
-            break;
-          case 'action_wait':
-            step.output = `Wait ${cfg.amount || 1} ${cfg.unit || 'minutes'} — skipped`;
-            break;
-          case 'action_http_request': {
-            const url = interp(cfg.url || '');
-            if (dryRun) {
-              step.output = `[DRY RUN] ${cfg.method || 'POST'} ${url || '(no URL)'}`;
-              break;
-            }
-            const headers = {
-              'Content-Type': 'application/json',
-              ...(cfg.headers || {}),
-            };
-            let reqUrl = url;
-            if (cfg.externalObjectId) {
-              const ext = await ExternalObject.findById(
-                cfg.externalObjectId,
-              ).select('+credentials');
-              if (ext) {
-                if (!reqUrl.startsWith('http'))
-                  reqUrl =
-                    ext.baseUrl.replace(/\/$/, '') +
-                    '/' +
-                    reqUrl.replace(/^\//, '');
-                if (ext.authType === 'bearer' && ext.credentials?.token)
-                  headers['Authorization'] = `Bearer ${ext.credentials.token}`;
-              }
-            }
-            const resp = await axios({
-              method: (cfg.method || 'POST').toUpperCase(),
-              url: reqUrl,
-              headers,
-              data: cfg.body ? JSON.parse(interp(cfg.body)) : undefined,
-              timeout: cfg.timeout || 10000,
-            });
-            (cfg.responseMapping || []).forEach((m) => {
-              if (m.variable && m.path)
-                ctx[m.variable] = m.path
-                  .split('.')
-                  .reduce((o, k) => o?.[k], resp.data);
-            });
-            step.output = `HTTP ${resp.status} · ${(cfg.method || 'POST').toUpperCase()} ${reqUrl}`;
-            break;
-          }
-          case 'subflow':
-            step.output = `[DEBUG] Would call subflow (id: ${cfg.automationId || 'not set'})`;
-            break;
-          case 'pause':
-            step.output = `Pause (${cfg.resumeType === 'time' ? `${cfg.duration || 1} ${cfg.unit || 'hours'}` : 'condition-based'}) — skipped`;
-            break;
-          case 'screen':
-            step.output = cfg.title ? `Screen: "${cfg.title}"` : 'Screen';
-            break;
-          default:
-            step.output = `"${cur.type}" — not evaluated`;
-            step.status = 'warning';
-        }
-      } catch (err) {
-        step.status = 'failed';
-        step.error = err.message;
-        step.output = err.message;
+    // A scheduled flow with no object runs once against no record at all, the
+    // same shape scheduledFlowService gives it.
+    const usedFallbackRecord = !recordId && !!record;
+    if (!record) {
+      if (automation.type !== 'scheduled' && objName) {
+        throw new AppError(
+          `No ${objName} records exist to test against. Create one first, or pick a record.`,
+          400,
+        );
       }
-
-      step.duration = Date.now() - t0;
-      step.contextSnapshot = { ...ctx };
-      trace.push(step);
-      if (stop) break;
-      cur = nodeMap[cur.nextNodes?.[0]?.nodeId];
+      record = { _id: null, objectApiName: null, data: {} };
     }
 
-    trace.push({
-      id: 'end',
-      type: 'end',
-      label: 'End',
-      status: 'success',
-      output: 'Flow completed',
-      duration: 0,
-      contextSnapshot: { ...ctx },
+    // ── Warn when the chosen event could not fire this flow in production ───
+    const warnings = [];
+    if (automation.type === 'record_triggered') {
+      const events = automation.trigger?.events || [];
+      if (events.length && !events.includes(event) && !events.includes('all')) {
+        warnings.push(
+          `This flow is only triggered by ${events.join(', ')} — a real "${event}" would not run it.`,
+        );
+      }
+    }
+    if (!automation.isActive) {
+      warnings.push('This flow is inactive, so it would not run on its own.');
+    }
+    if (usedFallbackRecord) {
+      warnings.push(
+        `No record chosen — used the most recent ${record.objectApiName} record.`,
+      );
+    }
+    // Only worth saying when the flow actually has a screen to step over.
+    const hasScreen = (automation.nodes || []).some((n) => n.type === 'screen');
+    if (hasScreen) {
+      warnings.push(
+        'Screen steps are stepped over in a test run — nobody is there to fill them in.',
+      );
+    }
+
+    const result = await debugFlow(automation, record, req.tenantId, {
+      dryRun: dryRun !== false,
+      event,
+      userId: req.user?._id || null,
     });
+
+    const flatRecord =
+      record._id == null
+        ? {}
+        : {
+            _id: String(record._id),
+            objectApiName: record.objectApiName,
+            ...(record.data instanceof Map
+              ? Object.fromEntries(record.data)
+              : record.data || {}),
+          };
 
     sendSuccess(res, {
       data: {
-        trace,
-        context: ctx,
-        record: recFlat,
-        duration: Date.now() - globalStart,
-        success: !trace.some((s) => s.status === 'failed'),
-        dryRun,
+        ...result,
+        record: flatRecord,
+        warnings,
+        flowType: automation.type,
+        dryRun: dryRun !== false,
       },
     });
   }),

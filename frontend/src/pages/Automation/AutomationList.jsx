@@ -78,7 +78,10 @@ export default function AutomationList() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/automations');
+      // The list groups by type client-side and has no pager, so it must ask
+      // for every automation. The API defaults to 50, which silently hid the
+      // tail of the list (19 of 69 flows in the demo tenant).
+      const res = await api.get('/automations', { params: { limit: 500 } });
       setAutomations(res.data.data || []);
     } catch {
       toast.error('Failed to load automations.');

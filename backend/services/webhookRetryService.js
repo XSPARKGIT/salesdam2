@@ -12,7 +12,9 @@ export const processWebhookRetries = async () => {
   const now = new Date();
   const due = await WebhookDeliveryLog.find({
     status: { $in: ['failed', 'retrying'] },
-    attempt: { $lt: '$maxAttempts' },
+    // Field-to-field comparison needs $expr; in a plain query '$maxAttempts'
+    // is just a string and Mongoose fails to cast it to the Number path.
+    $expr: { $lt: ['$attempt', '$maxAttempts'] },
     $or: [{ nextRetryAt: { $lte: now } }, { nextRetryAt: null }],
   }).limit(50);
 
@@ -74,5 +76,3 @@ export const processWebhookRetries = async () => {
 };
 
 export default { processWebhookRetries };
-EOF
-echo "created"

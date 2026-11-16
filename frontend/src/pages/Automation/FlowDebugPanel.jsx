@@ -39,6 +39,11 @@ const TYPE_META = {
   action_http_request: { color: '#f59e0b', label: 'HTTP Request' },
   action_toast: { color: '#f59e0b', label: 'Toast' },
   action_wait: { color: '#64748b', label: 'Wait' },
+  action_update_related_records: { color: '#10b981', label: 'Update Related Records' },
+  action_generate_pdf: { color: '#ef4444', label: 'Generate PDF' },
+  action_webhook: { color: '#f59e0b', label: 'Webhook' },
+  custom_code: { color: '#475569', label: 'Custom Code' },
+  navigate: { color: '#ec4899', label: 'Navigate' },
   subflow: { color: '#0ea5e9', label: 'Subflow' },
   pause: { color: '#64748b', label: 'Pause' },
   screen: { color: '#ec4899', label: 'Screen' },
@@ -66,6 +71,9 @@ function TraceStep({ step, index }) {
   return (
     <div
       className={`${styles.traceStep} ${styles[`traceStep_${step.status}`]}`}
+      /* Steps inside a Loop body, a Decision outcome or a Subflow come back
+         with a depth, so the trace shows the shape of the flow, not a flat list. */
+      style={step.depth ? { marginLeft: `${Math.min(step.depth, 4) * 18}px` } : undefined}
     >
       <div
         className={styles.traceStepHeader}
@@ -109,6 +117,9 @@ function RecordPicker({ objectApiName, value, onChange }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  // Bumped to re-fetch when the query itself has not changed — after clearing a
+  // selected record, for instance, where the list has to come back on its own.
+  const [reloadKey, setReloadKey] = useState(0);
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -117,23 +128,52 @@ function RecordPicker({ objectApiName, value, onChange }) {
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await api.get('/records', {
-          params: { objectApiName, limit: 8, search: query },
+        // Records live at /records/:objectApiName and come back flattened —
+        // `id` at the top level with the field values beside it, not nested
+        // under `data`. The list is filtered here rather than with the API's
+        // `search`, which is a $text query and needs an index the object may
+        // not have, so typing a record number would quietly match everything.
+        const res = await api.get(`/records/${objectApiName}`, {
+          params: { limit: 50 },
         });
-        setResults(res.data.data?.records || res.data.data || []);
+        const body = res.data.data;
+        const rows = Array.isArray(body) ? body : body?.records || [];
+        const needle = query.trim().toLowerCase();
+        const matches = needle
+          ? rows.filter((r) =>
+              Object.entries(r).some(
+                ([k, v]) =>
+                  !['createdBy', 'lastModifiedBy', 'ownerId'].includes(k) &&
+                  (typeof v === 'string' || typeof v === 'number') &&
+                  String(v).toLowerCase().includes(needle),
+              ),
+            )
+          : rows;
+        setResults(matches.slice(0, 8));
         setOpen(true);
       } catch {
         setResults([]);
       }
       setLoading(false);
     }, 300);
-  }, [query, objectApiName]);
+  }, [query, objectApiName, reloadKey]);
 
+  const recordId = (r) => String(r?.id || r?._id || '');
+
+  // Name a record the way a person would recognise it, falling back through
+  // the usual label fields before giving up and showing a short id.
   const displayName = (r) => {
-    const data = r.data || {};
-    return data.name || data.title || data.firstName
-      ? `${data.firstName ? data.firstName + ' ' : ''}${data.lastName || data.name || data.title || ''}`
-      : String(r._id).slice(-8);
+    if (!r) return '';
+    const named = [
+      r.name,
+      r.title,
+      [r.firstName, r.lastName].filter(Boolean).join(' ') || null,
+      r.claim_number,
+      r.deal_name,
+      r.subject,
+      r.reference,
+    ].find((v) => typeof v === 'string' && v.trim());
+    return named || recordId(r).slice(-8);
   };
 
   return (
@@ -150,6 +190,9 @@ function RecordPicker({ objectApiName, value, onChange }) {
               onChange(null);
               setQuery('');
               setOpen(false);
+              // Re-list immediately so the picker is usable the moment the
+              // chosen record is cleared, without having to type first.
+              setReloadKey((n) => n + 1);
             }}
           >
             ×
@@ -164,7 +207,9 @@ function RecordPicker({ objectApiName, value, onChange }) {
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => {
               if (results.length) setOpen(true);
-              else if (objectApiName) setQuery((q) => q + '');
+              // Setting query to the same string is a no-op React bails on, so
+              // the list has to be asked for explicitly.
+              else if (objectApiName) setReloadKey((n) => n + 1);
             }}
             placeholder={
               objectApiName
@@ -181,7 +226,7 @@ function RecordPicker({ objectApiName, value, onChange }) {
         <div className={styles.recordDropdown}>
           {results.map((r) => (
             <button
-              key={r._id}
+              key={recordId(r)}
               className={styles.recordOption}
               onClick={() => {
                 onChange(r);
@@ -192,7 +237,7 @@ function RecordPicker({ objectApiName, value, onChange }) {
               <Database size={12} />
               <span className={styles.recordOptionName}>{displayName(r)}</span>
               <span className={styles.recordOptionId}>
-                {String(r._id).slice(-8)}
+                {recordId(r).slice(-8)}
               </span>
             </button>
           ))}
@@ -221,6 +266,8 @@ export default function FlowDebugPanel({
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
   const [skipped, setSkipped] = useState(false);
+  const [warnings, setWarnings] = useState([]);
+  const [runError, setRunError] = useState(null);
   const resultsRef = useRef(null);
 
   useEffect(() => {
@@ -236,7 +283,10 @@ export default function FlowDebugPanel({
     setTrace([]);
     try {
       const res = await api.post(`/automations/${automationId}/debug`, {
-        recordId: record?._id,
+        // The list API returns `id`; older callers used `_id`. Accept either,
+        // otherwise a record the user picked is sent as undefined and the run
+        // silently falls back to the most recent record instead.
+        recordId: record?.id || record?._id,
         objectApiName: record?.objectApiName || triggerObjectApiName,
         event,
         dryRun,
@@ -247,13 +297,21 @@ export default function FlowDebugPanel({
       setDuration(d.duration || 0);
       setSuccess(d.success);
       setSkipped(d.skipped || false);
+      // Things that are true of the run but belong to no single step — an
+      // inactive flow, an event that could not fire it, a fallback record.
+      setWarnings(d.warnings || []);
+      setRunError(d.error || null);
       setPhase('results');
       setTimeout(
         () => resultsRef.current?.scrollTo({ top: 0, behavior: 'smooth' }),
         50,
       );
     } catch (err) {
-      setError(err.message || 'Test run failed');
+      // The API explains refusals properly ("No claim records exist to test
+      // against…"); axios' own message is just the status code.
+      setError(
+        err.response?.data?.message || err.message || 'Test run failed',
+      );
       setPhase('config');
     }
   };
@@ -334,17 +392,22 @@ export default function FlowDebugPanel({
                 </div>
               )}
 
-              {/* Record picker */}
-              {(isRecordTriggered || isScheduled) && (
+              {/* Record picker — every flow type runs against a record, so a
+                  button or screen flow needs one picked here too. */}
+              {triggerObjectApiName && (
                 <div className={styles.field}>
                   <label className={styles.fieldLabel}>
                     {isRecordTriggered
                       ? 'Trigger record'
-                      : 'Sample record (optional)'}
+                      : isScheduled
+                        ? 'Sample record (optional)'
+                        : 'Run against record'}
                     <span className={styles.fieldHint}>
                       {isRecordTriggered
                         ? 'The record the flow will run against'
-                        : 'Used to populate {field} merge tokens'}
+                        : isScheduled
+                          ? 'Used to populate {field} merge tokens'
+                          : 'The record this flow would be launched from'}
                     </span>
                   </label>
                   <RecordPicker
@@ -447,6 +510,19 @@ export default function FlowDebugPanel({
                   </span>
                 </div>
               </div>
+
+              {/* Anything true of the run as a whole rather than of one step */}
+              {runError && (
+                <div className={styles.errorBanner}>
+                  <XCircle size={14} /> {runError}
+                </div>
+              )}
+              {warnings.map((w) => (
+                <div key={w} className={styles.liveWarning}>
+                  <AlertTriangle size={13} />
+                  {w}
+                </div>
+              ))}
 
               {/* Trace steps */}
               <div className={styles.traceList}>
