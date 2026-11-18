@@ -27,6 +27,7 @@ import toast from 'react-hot-toast';
 import { useObjectPermissions } from '../../../hooks/useObjectPermissions';
 import { withoutHelperFields } from '../../../utils/fieldVisibility';
 import { extractServerErrors } from '../../../utils/serverErrors';
+import DuplicateWarningModal from '../../records/DuplicateWarningModal/DuplicateWarningModal';
 
 // ─── Build sections from form fields ──────────────────────────────────────
 const buildModalSections = (fields) => {
@@ -151,6 +152,7 @@ const RelatedList = ({
   const [editFormData, setEditFormData] = useState({});
   const [editErrors, setEditErrors] = useState({});
   const [isCreating, setIsCreating] = useState(false);
+  const [duplicates, setDuplicates] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const PAGE_SIZE = 5;
 
@@ -355,6 +357,15 @@ const RelatedList = ({
       queryClient.invalidateQueries({ queryKey: relatedQueryKey });
       setPage(1);
     } catch (err) {
+      // A blocking duplicate rule comes back as a 409 carrying the records it
+      // matched. A toast alone cannot show those, so hand them to the same
+      // modal the full record form uses.
+      const status = err?.response?.status ?? err?.status;
+      const serverDuplicates = err?.response?.data?.duplicates ?? err?.data?.duplicates;
+      if (status === 409 && serverDuplicates?.length) {
+        setDuplicates({ action: 'block', matches: serverDuplicates });
+        return;
+      }
       // Highlight whatever the server pinned to a field (duplicate value on a
       // unique field, bad email, failed regex) instead of only showing a toast.
       const { fieldErrors, message } = extractServerErrors(
@@ -956,6 +967,17 @@ const RelatedList = ({
       >
         <p>Are you sure you want to delete this {relatedObjectMeta?.label}? This action cannot be undone.</p>
       </Modal>
+
+      <DuplicateWarningModal
+        isOpen={!!duplicates}
+        action={duplicates?.action}
+        matches={duplicates?.matches}
+        fields={formBundle?.fields || []}
+        objectApiName={relatedObjectMeta?.apiName}
+        objectLabel={relatedObjectMeta?.label?.toLowerCase()}
+        onSelectMatch={(recordId) => navigate(`/o/${relatedObjectMeta?.apiName}/${recordId}`)}
+        onClose={() => setDuplicates(null)}
+      />
     </div>
   );
 };

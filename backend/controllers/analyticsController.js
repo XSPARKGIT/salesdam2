@@ -63,6 +63,9 @@ const runReport = asyncHandler(async (req, res) => {
     apiName: objectApiName,
   });
   if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
+  if (obj.allowReports === false) {
+    throw new AppError(`Reporting is turned off for ${obj.label}.`, 403);
+  }
 
   // Reports follow object permissions, not the App Switcher (BRD 5.3): a
   // Role with Read on an object can report on it from any App, and only on

@@ -535,6 +535,13 @@ const DetailsTab = ({ objForm, onChange, isEdit, onIconChange, fields = [] }) =>
               </span>
             </label>
             <label className={styles.checkboxLabel}>
+              <input type="checkbox" name="allowReports" checked={objForm.allowReports !== false} onChange={onChange} />
+              <span>
+                <strong>Allow Reports</strong>
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-gray-500)', marginTop: 1 }}>Include in Analytics and report building (BRD §3.1.1)</span>
+              </span>
+            </label>
+            <label className={styles.checkboxLabel}>
               <input type="checkbox" name="isJunctionObject" checked={!!objForm.isJunctionObject} onChange={onChange} />
               <span>
                 <strong>Junction Object</strong>

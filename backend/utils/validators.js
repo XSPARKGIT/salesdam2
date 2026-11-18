@@ -92,6 +92,25 @@ const createObjectSchema = Joi.object({
     enabled: Joi.boolean().default(false),
     fieldApiName: Joi.string().allow('').default(''),
   }).default({ enabled: false, fieldApiName: '' }),
+
+  // Object-level settings (BRD §3.1.1.6). Without these the validator strips
+  // them from the body and the toggles silently revert to schema defaults.
+  // No .default() here: an omitted key stays undefined so the controller lets
+  // the Mongoose default stand, rather than forcing a value the caller never
+  // sent.
+  hasRecordTypes: Joi.boolean(),
+  enableActivities: Joi.boolean(),
+  enableNotes: Joi.boolean(),
+  enableFiles: Joi.boolean(),
+  searchable: Joi.boolean(),
+  allowReports: Joi.boolean(),
+  isJunctionObject: Joi.boolean(),
+  isActive: Joi.boolean(),
+  calendarConfig: Joi.object({
+    enabled: Joi.boolean().default(false),
+    dateFieldApiName: Joi.string().allow('').default(''),
+    titleFieldApiName: Joi.string().allow('').default(''),
+  }),
 });
 
 // ─── Custom Field ─────────────────────────────────────────────────────────────
@@ -192,6 +211,10 @@ const createFieldSchema = Joi.object({
   isSearchable: Joi.boolean(),
   isFilterable: Joi.boolean(),
   isSortable: Joi.boolean(),
+  // BRD §3.2.1.7 — the visibility every existing profile gets for this field
+  // at the moment it is created. Not stored on the field itself; the
+  // controller turns it into role field permissions.
+  fieldLevelSecurity: Joi.string().valid('hidden', 'read_only', 'visible').default('hidden'),
 });
 
 // ─── Generic validator helper ─────────────────────────────────────────────────

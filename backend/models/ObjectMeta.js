@@ -48,6 +48,10 @@ const objectMetaSchema = new mongoose.Schema({
   enableNotes: { type: Boolean, default: true },
   enableFiles: { type: Boolean, default: true },
 
+  // BRD 3.1.1.6: when false the object is excluded from Analytics/report
+  // building, even for users who can otherwise read its records.
+  allowReports: { type: Boolean, default: true },
+
   // Search
   searchable: { type: Boolean, default: true },
   searchFields: [{ type: String }], // field api names to include in search

@@ -8,7 +8,10 @@ const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); r
 
 const resolveDefault = (field) => {
   const raw = field.defaultValue;
-  if (raw === undefined || raw === null) return undefined;
+  // A blank default is no default. Returning '' here meant a picklist whose
+  // default lives on the value itself (including one synced from a Global
+  // Value Set) was treated as already resolved, and never pre-selected.
+  if (raw === undefined || raw === null || raw === '') return undefined;
   const token = String(raw).trim().toUpperCase();
 
   if (field.type === 'date') {
@@ -38,9 +41,14 @@ export const initializeFormData = (fields, record, user, isEdit) => {
     const resolved = resolveDefault(f);
     if (resolved !== undefined && resolved !== null) {
       defaults[f.apiName] = resolved;
-    } else if (f.type === 'picklist') {
-      const pv = f.picklistValues?.find((p) => p.isDefault);
-      if (pv) defaults[f.apiName] = pv.value;
+    } else if (f.type === 'picklist' || f.type === 'multipicklist') {
+      const flagged = (f.picklistValues || []).filter(
+        (p) => p.isDefault && p.isActive !== false,
+      );
+      if (flagged.length > 0) {
+        defaults[f.apiName] =
+          f.type === 'multipicklist' ? flagged.map((p) => p.value) : flagged[0].value;
+      }
     } else if (
       f.type === 'lookup' &&
       f.lookupObjectApiName === 'user' &&

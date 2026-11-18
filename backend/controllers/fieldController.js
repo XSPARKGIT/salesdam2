@@ -350,8 +350,12 @@ const createField = asyncHandler(async (req, res) => {
     req,
   });
 
-  // BRD §9.1 secure-by-default: add a hidden field permission to every role
-  // that already has an object permission for this object.
+  // BRD §9.1 secure-by-default: add a field permission to every role that
+  // already has an object permission for this object. Hidden unless the admin
+  // explicitly chose otherwise on the field form (BRD §3.2.1.7).
+  const fls = ['hidden', 'read_only', 'visible'].includes(req.body.fieldLevelSecurity)
+    ? req.body.fieldLevelSecurity
+    : 'hidden';
   try {
     await Role.updateMany(
       { tenantId: req.tenantId, 'objectPermissions.objectApiName': objectApiName },
@@ -359,8 +363,8 @@ const createField = asyncHandler(async (req, res) => {
         $push: {
           'objectPermissions.$[perm].fieldPermissions': {
             fieldApiName: field.apiName,
-            canView: false,
-            canEdit: false,
+            canView: fls !== 'hidden',
+            canEdit: fls === 'visible',
           },
         },
       },

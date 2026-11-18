@@ -82,16 +82,22 @@ const RecordForm = () => {
   }, [bundle, record, isEdit, fields, user, cloneFrom, cloneSource]);
 
   const [formData, setFormData] = useState(initialFormData);
-  const isInitialMount = useRef(true);
+  const seeded = useRef(false);
 
-  // Sync formData when initialFormData changes (on component mount or data reload)
+  // Seed the form once, and only once the metadata it depends on has actually
+  // arrived. On the first render the bundle is still loading, so
+  // initialFormData is {} — seeding from that dropped every configured default
+  // (and every value marked default on a picklist or Global Value Set).
+  // Seeding once also means a background refetch cannot overwrite what the
+  // user has typed.
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
+    if (seeded.current) return;
+    if (!bundle) return;
+    if (isEdit && !record) return;
+    if (cloneFrom && !cloneSource) return;
+    seeded.current = true;
     setFormData(initialFormData);
-  }, [initialFormData]);
+  }, [bundle, record, cloneSource, isEdit, cloneFrom, initialFormData]);
 
   const loading = bundleLoading || (isEdit && recordLoading) || (!!cloneFrom && cloneLoading);
 

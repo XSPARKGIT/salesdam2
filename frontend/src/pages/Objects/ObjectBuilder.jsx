@@ -81,6 +81,7 @@ const ObjectBuilder = () => {
     enableActivities: true,
     enableNotes: true,
     searchable: true,
+    allowReports: true,
     hasRecordTypes: false,
     isJunctionObject: false,
   });
@@ -156,6 +157,7 @@ const ObjectBuilder = () => {
       enableActivities: objectData.enableActivities !== false,
       enableNotes: objectData.enableNotes !== false,
       searchable: objectData.searchable !== false,
+      allowReports: objectData.allowReports !== false,
       hasRecordTypes: objectData.hasRecordTypes || false,
       isJunctionObject: objectData.isJunctionObject || false,
     });

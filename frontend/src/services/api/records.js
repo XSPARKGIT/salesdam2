@@ -30,6 +30,10 @@ export const createRecord = async (objectApiName, data) => {
     const error = new Error(message);
     error.response = err.response;
     error.data = responseData;
+    // The interceptor has already unwrapped err.response, so without this the
+    // status is lost and callers cannot tell a blocking duplicate (409) from
+    // any other failed save.
+    error.status = err.response?.status ?? err.status;
     throw error;
   }
 };
@@ -44,6 +48,10 @@ export const updateRecord = async (objectApiName, id, data) => {
     const error = new Error(message);
     error.response = err.response;
     error.data = responseData;
+    // The interceptor has already unwrapped err.response, so without this the
+    // status is lost and callers cannot tell a blocking duplicate (409) from
+    // any other failed save.
+    error.status = err.response?.status ?? err.status;
     throw error;
   }
 };

@@ -75,6 +75,7 @@ const BLANK = {
   autoNumberStartAt: 1,
   validations: {},
   globalValueSetId: undefined,
+  fieldLevelSecurity: 'hidden',
 };
 
 const ROLLUP_TYPES = [
@@ -355,6 +356,26 @@ const FieldModal = ({
           />
         </div>
 
+        {!editingField && (
+          <div className={styles.formGroup}>
+            <label className={styles.label}>Field-Level Security</label>
+            <select
+              name="fieldLevelSecurity"
+              value={fieldForm.fieldLevelSecurity || 'hidden'}
+              onChange={handleChange}
+              className={styles.input}
+            >
+              <option value="hidden">Hidden — nobody sees it until granted</option>
+              <option value="read_only">Read-Only — visible, cannot be edited</option>
+              <option value="visible">Visible — readable and editable</option>
+            </select>
+            <p className={styles.hint}>
+              Applied to every existing profile when the field is created. Change it per profile
+              later under Roles.
+            </p>
+          </div>
+        )}
+
         <div className={styles.field}>
           <label className={styles.label}>Type *</label>
           <select
@@ -547,6 +568,14 @@ const FieldModal = ({
                   <input
                     value={picklistInput}
                     onChange={(e) => setPicklistInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      // Without this the keypress bubbles to the surrounding
+                      // form and submits the field instead of adding a value.
+                      e.preventDefault();
+                      addPicklistValue();
+                    }}
+                    placeholder="Type a value and press Enter"
                     className={styles.input}
                   />
                   <Button size="sm" onClick={addPicklistValue}>

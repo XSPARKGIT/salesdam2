@@ -149,6 +149,27 @@ const validateRecordData = async (inputData, fields, tenantId, recordId = null, 
     }
 
     if (isEmpty) {
+      // A picklist whose value set marks a default carries it on the value
+      // itself rather than in defaultValue — including values synced from a
+      // Global Value Set, where the admin never touches the field.
+      const hasExplicitDefault =
+        field.defaultValue !== undefined &&
+        field.defaultValue !== null &&
+        String(field.defaultValue) !== '';
+
+      if (!hasExplicitDefault && ['picklist', 'multipicklist'].includes(field.type)) {
+        const flagged = (field.picklistValues || []).filter(
+          (v) => v.isDefault && v.isActive !== false,
+        );
+        if (flagged.length > 0) {
+          cleanedData[field.apiName] =
+            field.type === 'multipicklist'
+              ? flagged.map((v) => v.value)
+              : flagged[0].value;
+          continue;
+        }
+      }
+
       // Apply default value if defined, evaluating date expression tokens at
       // record-create time so the stored value is the actual current date rather
       // than the literal string "TODAY()".

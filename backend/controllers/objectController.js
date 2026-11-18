@@ -300,6 +300,13 @@ const createObject = asyncHandler(async (req, res) => {
     autoNumberPrefix,
     autoNumberPadding,
     autoNumberStartAt,
+    hasRecordTypes,
+    enableActivities,
+    enableNotes,
+    enableFiles,
+    searchable,
+    allowReports,
+    isJunctionObject,
   } = req.body;
 
   // Normalise the name-field config once. Each value falls back to its default
@@ -381,6 +388,15 @@ const createObject = asyncHandler(async (req, res) => {
     showInNav,
     navOrder,
     sharingModel,
+    // Each falls back to the schema default only when the client omitted it,
+    // so an admin unticking a toggle on the create form is not silently undone.
+    ...(hasRecordTypes    === undefined ? {} : { hasRecordTypes }),
+    ...(enableActivities  === undefined ? {} : { enableActivities }),
+    ...(enableNotes       === undefined ? {} : { enableNotes }),
+    ...(enableFiles       === undefined ? {} : { enableFiles }),
+    ...(searchable        === undefined ? {} : { searchable }),
+    ...(allowReports      === undefined ? {} : { allowReports }),
+    ...(isJunctionObject  === undefined ? {} : { isJunctionObject }),
     kanbanConfig,
     calendarConfig: calendarConfig?.enabled
       ? await resolveCalendarConfig({ tenantId: req.tenantId, objectApiName: apiName, calendarConfig })
@@ -393,6 +409,26 @@ const createObject = asyncHandler(async (req, res) => {
   // Seed default system fields — pass name field config so the name field is
   // created with the label, API name, and type the user specified.
   await seedDefaultFields(obj, req.tenantId, req.user._id, nameFieldConfig);
+
+  // RTYPE-002: the "type" picklist is provisioned here as well as on update, so
+  // enabling it on the create form takes effect without a second save.
+  if (obj.hasRecordTypes) {
+    await FieldMeta.create({
+      tenantId: req.tenantId,
+      objectId: obj._id,
+      objectApiName: apiName,
+      apiName: 'type',
+      name: 'Type',
+      label: 'Type',
+      type: 'picklist',
+      isSystem: true,
+      isRequired: false,
+      isCustom: false,
+      picklistValues: [],
+      createdBy: req.user._id,
+      lastModifiedBy: req.user._id,
+    });
+  }
 
   // Add newly created custom object to tenant's allowedObjects if the list is configured
   if (req.tenant?.allowedObjects?.length > 0) {
@@ -476,6 +512,7 @@ const updateObject = asyncHandler(async (req, res) => {
     'navOrder',
     'sharingModel',
     'searchable',
+    'allowReports',
     'searchFields',
     'actionButtons',
     'validationRules',
