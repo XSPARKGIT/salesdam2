@@ -708,18 +708,51 @@ const deleteObject = asyncHandler(async (req, res) => {
     throw new AppError('System objects cannot be deleted.', 403);
 
   // Counted up front so the response can report what the cascade removed.
-  const [fieldCount, recordCount] = await Promise.all([
-    FieldMeta.countDocuments({ tenantId: req.tenantId, objectId: obj._id }),
-    DynamicRecord.countDocuments({
-      tenantId: req.tenantId,
-      objectApiName: apiName,
-    }),
+  // BRD §3.1.3.2 requires the admin be shown every piece of configuration that
+  // depends on the object — not just its own fields and records — before the
+  // deletion is allowed to go ahead.
+  const [Layout, Automation, ApprovalProcess] = await Promise.all([
+    import('../models/Layout.js').then((m) => m.default),
+    import('../models/Automation.js').then((m) => m.default),
+    import('../models/ApprovalProcess.js').then((m) => m.default),
   ]);
 
+  const [fieldCount, recordCount, layoutCount, flowCount, approvalCount] =
+    await Promise.all([
+      FieldMeta.countDocuments({ tenantId: req.tenantId, objectId: obj._id }),
+      DynamicRecord.countDocuments({
+        tenantId: req.tenantId,
+        objectApiName: apiName,
+      }),
+      Layout.countDocuments({ tenantId: req.tenantId, objectApiName: apiName }),
+      Automation.countDocuments({
+        tenantId: req.tenantId,
+        'trigger.objectApiName': apiName,
+      }),
+      ApprovalProcess.countDocuments({
+        tenantId: req.tenantId,
+        objectApiName: apiName,
+      }),
+    ]);
+
+  const validationRuleCount = (obj.validationRules || []).length;
+
   // LIFE-005: Block deletion when dependents exist unless ?force=true is passed.
-  if (req.query.force !== 'true' && (recordCount > 0 || fieldCount > 0)) {
+  const dependents = [
+    [recordCount, 'record'],
+    [fieldCount, 'field'],
+    [layoutCount, 'layout'],
+    [validationRuleCount, 'validation rule'],
+    [flowCount, 'flow'],
+    [approvalCount, 'approval process'],
+  ].filter(([n]) => n > 0);
+
+  if (req.query.force !== 'true' && dependents.length > 0) {
+    const listed = dependents
+      .map(([n, noun]) => `${n} ${noun}${n === 1 ? '' : 's'}`)
+      .join(', ');
     throw new AppError(
-      `Cannot delete object "${apiName}": it has ${recordCount} record(s) and ${fieldCount} field(s). ` +
+      `Cannot delete object "${apiName}": it has ${listed}. ` +
         `Add ?force=true to the request to confirm permanent deletion of all dependents.`,
       409,
     );

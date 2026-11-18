@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import DuplicateRule from '../models/DuplicateRule.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
+import FieldMeta from '../models/FieldMeta.js';
 
 /**
  * Duplicate detection & record matching (Core BRD §3.4).
@@ -29,6 +30,27 @@ const normalizeValue = (value, matchType) => {
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
+ * A date/datetime value is stored as a BSON Date, so comparing it against the
+ * caller's string ("1990-05-05") never matches. Build a query that compares
+ * dates as dates: a `date` field matches anywhere in the same calendar day,
+ * which is what "same date of birth" means (BRD §3.4.8); a `datetime` field
+ * keeps instant precision.
+ */
+const dateCondition = (path, rawValue, fieldType) => {
+  const parsed = rawValue instanceof Date ? rawValue : new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  if (fieldType === 'datetime') return { [path]: parsed };
+
+  const start = new Date(Date.UTC(
+    parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(),
+  ));
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { [path]: { $gte: start, $lt: end } };
+};
+
+/**
  * Find records on `objectApiName` that match any active rule.
  *
  * @returns {Promise<{ matches: Array, action: 'allow'|'warn'|'block' }>}
@@ -48,6 +70,23 @@ const check = async (tenantId, objectApiName, data, { excludeRecordId } = {}) =>
     .lean();
   const nameField = objMeta?.nameFieldApiName || 'name';
 
+  // Field types drive how a value is compared — a date cannot be matched as a
+  // string. Only the fields the rules actually reference are needed.
+  const referencedFields = [
+    ...new Set(rules.flatMap((r) => (r.conditions || []).map((c) => c.field))),
+  ];
+  const fieldTypes = new Map(
+    (
+      await FieldMeta.find({
+        tenantId,
+        objectApiName,
+        apiName: { $in: referencedFields },
+      })
+        .select('apiName type')
+        .lean()
+    ).map((f) => [f.apiName, f.type]),
+  );
+
   const matchesById = new Map();
   // action priority: block > trigger_flow > use_existing > present_matches > warn > allow
   const ACTION_PRIORITY = { block: 5, trigger_flow: 4, use_existing: 3, present_matches: 2, warn: 1, allow: 0 };
@@ -57,15 +96,28 @@ const check = async (tenantId, objectApiName, data, { excludeRecordId } = {}) =>
   for (const rule of rules) {
     const conditions = [];
     for (const cond of rule.conditions || []) {
-      const value = normalizeValue(data?.[cond.field], cond.matchType);
+      const raw = data?.[cond.field];
+      const fieldType = fieldTypes.get(cond.field);
+      const path = `data.${cond.field}`;
+
+      if (fieldType === 'date' || fieldType === 'datetime') {
+        conditions.push(
+          raw === null || raw === undefined || raw === ''
+            ? null
+            : dateCondition(path, raw, fieldType),
+        );
+        continue;
+      }
+
+      const value = normalizeValue(raw, cond.matchType);
       if (value === null) {
         conditions.push(null);
         continue;
       }
       conditions.push(
         cond.matchType === 'normalized'
-          ? { [`data.${cond.field}`]: { $regex: `^${escapeRegex(value)}$`, $options: 'i' } }
-          : { [`data.${cond.field}`]: value },
+          ? { [path]: { $regex: `^${escapeRegex(value)}$`, $options: 'i' } }
+          : { [path]: value },
       );
     }
 

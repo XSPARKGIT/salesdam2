@@ -158,9 +158,11 @@ try {
       ],
     },
   });
-  const orBase = await createRecord({ name: 'Zoe', first_name: 'Zoe', phone: '111', email: 'zoe@x.com' });
+  // Phone numbers must satisfy the default E.164-ish format (5–20 chars), or
+  // the record is rejected before duplicate detection ever runs.
+  const orBase = await createRecord({ name: 'Zoe', first_name: 'Zoe', phone: '0111111111', email: 'zoe@x.com' });
   check('OR rule: baseline record created', orBase.status === 201, `HTTP ${orBase.status}`);
-  const orMatch = await createRecord({ name: 'Zoe Two', first_name: 'Zoe', phone: '222', email: 'zoe2@x.com' });
+  const orMatch = await createRecord({ name: 'Zoe Two', first_name: 'Zoe', phone: '0222222222', email: 'zoe2@x.com' });
   check('OR rule: any matching condition is a duplicate', orMatch.status === 409, `HTTP ${orMatch.status}`);
 
   // ── Exact match is case-sensitive ───────────────────────────────────────

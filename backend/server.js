@@ -57,6 +57,22 @@ setInterval(async () => {
   }
 }, 30000);
 
+// Recycle bin purge (BRD 3.1.3.3) — drop records that have been in the bin
+// longer than the tenant's retention window. Hourly is frequent enough for a
+// window measured in days, and the first sweep runs a minute after boot so a
+// restart does not skip a day's purge.
+const RECYCLE_BIN_SWEEP_MS = 60 * 60 * 1000;
+const sweepRecycleBin = async () => {
+  try {
+    const { default: recycleBinService } = await import('./services/recycleBinService.js');
+    await recycleBinService.purgeExpiredRecords();
+  } catch (err) {
+    logger.error(`Recycle bin purge error: ${err.message}`);
+  }
+};
+setTimeout(sweepRecycleBin, 60000);
+setInterval(sweepRecycleBin, RECYCLE_BIN_SWEEP_MS);
+
 app.listen(PORT, () => {
   logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
