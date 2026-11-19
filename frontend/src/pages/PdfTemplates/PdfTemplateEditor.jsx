@@ -968,7 +968,7 @@ export default function PdfTemplateEditor() {
       URL.revokeObjectURL(url);
       toast.success('PDF generated and downloaded');
     } catch (err) {
-      const msg = err?.response?.data?.message || 'PDF generation failed';
+      const msg = err?.message || 'PDF generation failed';
       toast.error(msg);
     }
   };
@@ -1327,6 +1327,15 @@ export default function PdfTemplateEditor() {
                         <X size={12} />
                       </button>
                     </div>
+                    <label style={{ display: 'block', fontSize: 12, margin: '6px 0 2px' }}>
+                      Show only if (formula, optional)
+                    </label>
+                    <input
+                      style={{ width: '100%', padding: '6px 8px', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 6, marginBottom: 8 }}
+                      placeholder="e.g. monthly_premium > 0"
+                      value={selectedBlock.config?.showIf || ''}
+                      onChange={(e) => updateBlock(selectedBlock.id, 'config', { ...selectedBlock.config, showIf: e.target.value })}
+                    />
                     {selectedBlock.type === 'text' && (
                       <TextBlockConfig
                         config={selectedBlock.config}

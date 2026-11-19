@@ -44,7 +44,7 @@ export default function CustomCodePage() {
   const [inputs, setInputs] = useState('{\n  "x": 5\n}');
   const [changeNote, setChangeNote] = useState('');
   const [inputsError, setInputsError] = useState('');
-  const [testMode, setTestMode] = useState(false);
+  const [testMode, setTestMode] = useState(true);
 
   // async state
   const [executing, setExecuting] = useState(null);
@@ -141,7 +141,7 @@ export default function CustomCodePage() {
       setDescription('');
       await refreshList();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Create failed');
+      toast.error(e.message || 'Create failed');
     } finally { setSaving(false); }
   };
 
@@ -159,7 +159,7 @@ export default function CustomCodePage() {
       toast.success('Changes saved');
       await refreshList();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Save failed');
+      toast.error(e.message || 'Save failed');
     } finally { setSaving(false); }
   };
 
@@ -172,7 +172,7 @@ export default function CustomCodePage() {
       toast.success('Description updated');
       await refreshList();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Update failed');
+      toast.error(e.message || 'Update failed');
     } finally { setSaving(false); }
   };
 
@@ -188,7 +188,7 @@ export default function CustomCodePage() {
       setChangeNote('');
       await refreshList();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Add version failed');
+      toast.error(e.message || 'Add version failed');
     } finally { setSaving(false); }
   };
 
@@ -197,7 +197,15 @@ export default function CustomCodePage() {
       await api.post(`/custom-code/${snippetName}/activate`, { version: v });
       toast.success(`v${v} is now active`);
       await refreshList();
-    } catch (e) { toast.error(e.response?.data?.message || 'Activate failed'); }
+    } catch (e) { toast.error(e.message || 'Activate failed'); }
+  };
+
+  const setStatus = async (snippetName, v, status) => {
+    try {
+      await api.post(`/custom-code/${snippetName}/status`, { version: v, status });
+      toast.success(`v${v} is now ${status}`);
+      await refreshList();
+    } catch (e) { toast.error(e.message || 'Status change failed'); }
   };
 
   const restore = async (snippetName, v) => {
@@ -205,7 +213,7 @@ export default function CustomCodePage() {
       await api.post(`/custom-code/${snippetName}/restore`, { version: v });
       toast.success(`v${v} restored`);
       await refreshList();
-    } catch (e) { toast.error(e.response?.data?.message || 'Restore failed'); }
+    } catch (e) { toast.error(e.message || 'Restore failed'); }
   };
 
   const execute = async (snippetName) => {
@@ -214,12 +222,13 @@ export default function CustomCodePage() {
     try {
       const res = await api.post(`/custom-code/${snippetName}/execute`, {
         inputs: parsedInputs() ?? {}, testMode,
+        ...(editingVersion && editingVersionObj?.status !== 'active' ? { version: editingVersion } : {}),
       });
-      setExecResult({ name: snippetName, data: res.data?.data });
+      setExecResult({ name: snippetName, data: { inputs: parsedInputs() ?? {}, ...res.data?.data } });
       toast.success('Executed');
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Execute failed');
-      setExecResult({ name: snippetName, data: { error: e.response?.data?.message || 'Execution failed' } });
+      toast.error(e.message || 'Execute failed');
+      setExecResult({ name: snippetName, data: { success: false, inputs: parsedInputs() ?? {}, error: e.message || 'Execution failed' } });
     } finally { setExecuting(null); }
   };
 
@@ -231,7 +240,7 @@ export default function CustomCodePage() {
       if (execResult?.name === snippetName) setExecResult(null);
       if (selectedSnippet?.name === snippetName) cancelEdit();
       await refreshList();
-    } catch (e) { toast.error(e.response?.data?.message || 'Delete failed'); }
+    } catch (e) { toast.error(e.message || 'Delete failed'); }
   };
 
   const toggleCard = (snippetName) => {
@@ -239,7 +248,7 @@ export default function CustomCodePage() {
   };
 
   const editingVersionObj = selectedSnippet?.versions?.find(v => v.version === editingVersion);
-  const isEditingDraft = editingVersionObj?.status === 'draft';
+  const isEditingDraft = ['draft', 'test'].includes(editingVersionObj?.status);
 
   return (
     <Layout>
@@ -597,6 +606,16 @@ export default function CustomCodePage() {
                             onClick={() => activate(c.name, v.version)}
                           >
                             <CheckCircle size={12} /> Activate v{v.version}
+                          </Button>
+                        ))}
+                        {c.versions?.filter(v => v.status === 'draft').map(v => (
+                          <Button key={`tst-${v.version}`} size="sm" variant="secondary" onClick={() => setStatus(c.name, v.version, 'test')}>
+                            Mark v{v.version} Test
+                          </Button>
+                        ))}
+                        {c.versions?.filter(v => v.status === 'active').map(v => (
+                          <Button key={`ina-${v.version}`} size="sm" variant="secondary" onClick={() => setStatus(c.name, v.version, 'inactive')}>
+                            Make v{v.version} Inactive
                           </Button>
                         ))}
                         {c.versions?.map(v => (
