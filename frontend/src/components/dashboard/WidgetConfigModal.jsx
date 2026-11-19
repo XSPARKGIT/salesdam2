@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import Modal from '../common/Modal/Modal';
 import Button from '../common/Button/Button';
-import { useTenantContext } from '../../context/TenantContext';
 import api from '../../services/api';
 import styles from './WidgetConfigModal.module.css';
 
@@ -31,8 +30,8 @@ const AGG_FUNCS = [
   { value: 'count', label: 'Count' },
   { value: 'sum', label: 'Sum' },
   { value: 'avg', label: 'Average' },
-  { value: 'min', label: 'Minimum' },
-  { value: 'max', label: 'Maximum' },
+  { value: 'min', label: 'Min' },
+  { value: 'max', label: 'Max' },
 ];
 
 const SIZES = [
@@ -141,7 +140,14 @@ function FiltersSection({ fields, filters, onChange }) {
 }
 
 export default function WidgetConfigModal({ widget, isOpen, onClose, onSave }) {
-  const { objects } = useTenantContext();
+  // Widgets, like reports, can use any object the user may read (not only the current App's).
+  const [objects, setObjects] = useState([]);
+  useEffect(() => {
+    api
+      .get('/objects', { params: { scope: 'readable' } })
+      .then((res) => setObjects(Array.isArray(res.data?.data) ? res.data.data : res.data?.data?.objects || []))
+      .catch(() => setObjects([]));
+  }, []);
   const [form, setForm] = useState({});
   const [fields, setFields] = useState([]);
 

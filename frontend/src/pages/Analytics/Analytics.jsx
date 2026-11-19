@@ -43,6 +43,7 @@ export default function Analytics() {
   const [timeline, setTimeline] = useState([]);
   const [selectedObject, setSelectedObject] = useState('');
   const [reportData, setReportData] = useState([]);
+  const [reportError, setReportError] = useState('');
   const [loading, setLoading] = useState(true);
   // Cross-object reporting inputs
   const [relatedLookupField, setRelatedLookupField] = useState('');
@@ -70,6 +71,7 @@ export default function Analytics() {
 
   const runObjectReport = async (objectApiName) => {
     if (!objectApiName) return;
+    setReportError('');
     try {
       const payload = {
         objectApiName,
@@ -93,7 +95,10 @@ export default function Analytics() {
       }
       const res = await api.post('/analytics/report', payload);
       setReportData(res.data.data.results || []);
-    } catch (err) {}
+    } catch (err) {
+      setReportData([]);
+      setReportError(err?.data?.message || err?.response?.data?.message || err?.message || 'The report could not be run.');
+    }
   };
 
   useEffect(() => {
@@ -275,6 +280,7 @@ export default function Analytics() {
               />
             </div>
           </div>
+          {reportError && <p role="alert" style={{ color: 'var(--color-danger, #b42318)', marginTop: 8 }}>{reportError}</p>}
           {reportData.length > 0 && (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={reportData}>

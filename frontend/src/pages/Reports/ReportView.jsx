@@ -128,9 +128,9 @@ export default function ReportView() {
           ) : chartType === 'metric' ? (
             <MetricView results={results} aggregations={report.aggregations} />
           ) : !isGrouped || chartType === 'table' ? (
-            <TableView results={results} fields={fields} isGrouped={isGrouped} aggregations={report.aggregations} groupBy={report.groupBy} />
+            <TableView results={results} fields={fields} isGrouped={isGrouped} aggregations={report.aggregations} groupBy={(report.crossObject?.lookupField && report.crossObject?.relatedGroupBy) || report.groupBy} />
           ) : (
-            <ChartView results={results} chartType={chartType} aggregations={report.aggregations} groupBy={report.groupBy} fields={fields} reportName={report.name} />
+            <ChartView results={results} chartType={chartType} aggregations={report.aggregations} groupBy={(report.crossObject?.lookupField && report.crossObject?.relatedGroupBy) || report.groupBy} fields={fields} reportName={report.name} />
           )}
         </div>
       </div>

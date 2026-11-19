@@ -422,7 +422,7 @@ export default function ReportBuilder() {
                 <ResultsRenderer
                   results={results}
                   chartType={chartType}
-                  groupBy={groupBy || crossRelatedGroupBy}
+                  groupBy={(crossLookupField && crossRelatedGroupBy) || groupBy}
                   aggregations={aggregations}
                   fields={resultFields}
                 />
