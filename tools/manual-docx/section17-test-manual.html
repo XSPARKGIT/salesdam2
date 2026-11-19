@@ -1,0 +1,494 @@
+<title>Integration Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Integration Framework and API</h1>
+    <p class="standfirst">A step-by-step script for BRD Section&nbsp;17. You create and rotate API keys, call the API with them, prove that another tenant, a wrong key or a missing key is refused and logged, watch the rate limit and usage figures, send incoming webhooks, configure outgoing webhooks to a receiver of your own, see signed deliveries, retries and alerts, and read the Integration Log.</p>
+    <div class="mast-meta"><span><b>Scope</b> BRD §17</span><span><b>Tests</b> 24</span><span><b>Time</b> ~2 hours</span><span><b>Issued</b> 19 Nov 2026</span></div>
+  </header>
+  <div class="progress-bar"><span class="count" id="count">0 of 24 complete</span><div class="track"><div class="fill" id="fill"></div></div><button class="btn-reset" id="reset" type="button">Reset</button></div>
+<h2>Before you start</h2><div class="callout"><h3>Signing in</h3><dl class="creds"><dt>Address</dt><dd>http://localhost:5173</dd><dt>Who</dt><dd>An administrator who may manage API keys, integrations and webhooks</dd></dl>
+  <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">Ask your Salesdam contact for the sign-in details. Pages can take 10–30 seconds to fill because the database is remote. The <b>Integrations</b> sidebar item is shown when the feature switch <code>VITE_FEATURE_INTEGRATIONS</code> is <code>true</code> for the web application.</p></div>
+<div class="callout"><h3>What you need</h3><ul>
+<li><b>A copy of your tenant.</b> Run the key, rate-limit and webhook tests in a copy, not in production: <b>Setup → Deployments → Clone Sandbox Tenant</b>, name it <b>S17 Sandbox</b>, switch to it with the <b>Tenant</b> switcher. A copy has no records, so record tests use <b>My Company</b> (Tests 3, 5 and 18).</li>
+<li><b>An API client</b> (curl, Postman, a script) for the steps marked <i>Needs an API client</i>. Use only <b>your own throwaway keys</b>; a key is shown once in the screen and must not be pasted into chats, tickets or this manual.</li>
+<li><b>A request receiver you run yourself</b> (any small local program that accepts HTTP posts and prints them). Never point a test at a real external system.</li></ul></div>
+<div class="callout warn"><h3>Safe-testing rules</h3><ul>
+<li>Rate-limit tests use a throwaway key with a low limit in a copy of the tenant. Do not hammer the sign-in page or any public address.</li>
+<li>Use dummy secrets only. Never put real credentials into a webhook, header or configuration value while testing.</li></ul></div>
+<div class="callout warn"><h3>Cleaning up</h3><ul>
+<li>Delete or revoke your test keys and delete your test webhooks. Remove the Policy record S17-HOOK-1 (Recycle Bin). Switch back to your home tenant, then remove the copy with <b>Setup → Deployments → Delete sandbox…</b> (type its name).</li></ul></div>
+<h2>API keys, the API and API governance</h2><p class="sec-note">BRD §17.1, §17.2, §17.6 — credentials, what the API serves, refusals, limits, usage and rotation.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. An API key is created, shown once, and never shown again</span>
+        <span class="refs"><span class="ref">§17.2.1, §17.2.2, §17.2.6, §17.2.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Integrations</b> in the sidebar (address <code>/integrations</code>).</li><li>Click <b>New API Key</b>. Name it <b>S17 key</b>, keep <b>Read</b> ticked, set <b>Rate limit (requests per minute)</b> to <b>3</b> and click <b>Create Key</b>.</li><li>Read the dialog. Click the eye to reveal the key if you need to copy it, then <b>I've saved the key — close</b>. Reload the page and open the key's card.</li></ol>
+      <div class="expect"><b>Expected</b>The dialog says <b>Copy this key now. It will never be shown again</b> and shows the key masked, with the name, prefix and scopes. After closing, the card shows only the <b>prefix</b>, scopes, limits and usage. Only a SHA-256 hash is stored; the key is not in the list API, the audit log or any log (suite <code>section17-governance</code>).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. A key retrieves records and metadata, and only within its tenant</span>
+        <span class="refs"><span class="ref">§17.1.1, §17.1.7, §17.1.11, §17.6.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li><code>GET http://localhost:5002/api/v1/objects</code> and <code>GET http://localhost:5002/api/v1/objects/&lt;object&gt;/fields</code> (replace http://localhost:5002/api/v1 with <code>http://localhost:5002/api/v1</code>).</li><li><code>GET http://localhost:5002/api/v1/records/&lt;object&gt;/&lt;id of a record that belongs to ANOTHER tenant&gt;</code> and then <code>DELETE</code> the same address (use a throwaway tenant's key).</li></ol>
+      <div class="expect"><b>Expected</b>The first two return <b>200</b> with object and field metadata. The foreign record answers <b>404</b> to both, shows no data and is still there afterwards (suite: 404/404 and the record still exists). Clicked from the page: <code>GET /objects</code> with only the key returned <b>200</b>.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. A key creates, updates, queries and deletes records on standard and custom objects</span>
+        <span class="refs"><span class="ref">§17.1.1–§17.1.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li>Use a key with <b>Read, Write, Delete</b>. <code>POST http://localhost:5002/api/v1/records/policy</code> with a JSON body of the fields; then <code>PUT</code> it, <code>GET http://localhost:5002/api/v1/records/policy?filter={"policy_status":"Active"}</code> and <code>DELETE</code> it.</li><li>Repeat on <b>insured_life</b>.</li></ol>
+      <div class="expect"><b>Expected</b>Create answers <b>201</b>, update <b>200</b>, the filtered list includes the record, delete <b>200</b> (the record goes to the Recycle Bin). Validation rules and field security apply exactly as in the screens (Sections 6 and 9). <i>Not clicked:</i> proved by the suite on a bill object; Policy and Insured Life not run through a key in this acceptance.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. A custom object and field created today are served by the API at once</span>
+        <span class="refs"><span class="ref">§17.1.10, §17.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Object Settings</b>, create the object <b>S17 Gadget</b> and add a text field <b>Colour</b>; add the object to your App (<b>Workspaces</b>).</li><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li><code>POST http://localhost:5002/api/v1/records/&lt;the new object&gt;</code> with <code>{"name":"G1","colour":"red"}</code> then <code>GET</code> it back.</li></ol>
+      <div class="expect"><b>Expected</b>Create answers <b>201</b> and the read returns <b>colour: red</b>. No engineering step, restart or code change is involved: the records API reads the object and field definitions per request. Undo: delete the record, then the object (<b>Setup → Object Settings</b>).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. A key can trigger a Flow, only as far as its role allows</span>
+        <span class="refs"><span class="ref">§17.1.9, §17.6.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li><code>POST http://localhost:5002/api/v1/automations/&lt;flow id&gt;/run-action</code> with <code>{"recordId":"&lt;id&gt;","objectApiName":"&lt;object&gt;"}</code> using a key that has <b>Write</b>; then with a <b>Read</b>-only key.</li></ol>
+      <div class="expect"><b>Expected</b>With <b>Write</b> the flow runs and the record changes; the read-only key is refused (<b>403</b>). <i>Limit:</i> any signed-in identity (or key) that can write may run any active flow by id; there is no per-flow permission.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. A key is limited by scope, by chosen objects and by its owner's role</span>
+        <span class="refs"><span class="ref">§17.6.4, §17.1.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Integrations</b> in the sidebar (address <code>/integrations</code>).</li><li>Create a key with only <b>Read</b>, and a key with <b>Allowed Objects</b> set to a single object.</li><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li>With the read-only key <code>POST http://localhost:5002/api/v1/records/&lt;object&gt;</code>; with the single-object key <code>GET</code> a different object. Then create a key while signed in as a user whose role may read but not create that object and repeat both calls.</li></ol>
+      <div class="expect"><b>Expected</b><b>403</b> each time, with a message naming the missing scope or object. A key acts as the person who created it, so it can never do more than their role: read allowed, create <b>403</b>, an unshared object <b>403</b> (suite).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. A request for another tenant, or with no or a bad key, is refused and logged</span>
+        <span class="refs"><span class="ref">§17.1.11, §17.6.3, §17.6.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Integrations</b> in the sidebar (address <code>/integrations</code>).</li><li>Open the card of <b>S17 key</b> and note its prefix.</li><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li>Send <code>GET http://localhost:5002/api/v1/objects</code> with the key and the header <code>X-Tenant-ID: &lt;another tenant's id&gt;</code>; then with no key; then with the key changed to a wrong value.</li><li>On <b>Integrations</b> click <b>Webhooks &amp; Integration Log</b> (address <code>/integrations/monitor</code>).</li><li>Open the <b>Authentication Failures</b> tab.</li></ol>
+      <div class="expect"><b>Expected</b>The calls answer <b>403</b>, <b>401</b>, <b>401</b>. The tab lists <b>api-key</b> rows with the date and time, the <b>first characters</b> of the key (never the whole key), the reason (for example <b>This API key does not belong to the requested tenant</b>), the source address and the request. A wrong key sent <i>without</i> naming a tenant cannot be tied to one, so it appears only to a superuser (<code>GET /api-keys/auth-failures?scope=platform</code>).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. API rate limiting stops a key that goes over its limit</span>
+        <span class="refs"><span class="ref">§17.6.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Use the key from Test 1 (limit <b>3</b> per minute) and a throwaway tenant only.</li><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li>Send <code>GET http://localhost:5002/api/v1/objects</code> five times in a row, then wait a minute and send once more.</li></ol>
+      <div class="expect"><b>Expected</b>Calls 1–3 answer <b>200</b>, calls 4 and 5 answer <b>429</b> with a <b>Retry-After</b> header; the sixth, after the minute, answers <b>200</b>. Clicked: 200, 200, 200, 429, 429. Keep tests like this on a throwaway tenant and a low limit; the default is <b>300</b> per minute per key.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. Usage is monitored per key and for the whole tenant</span>
+        <span class="refs"><span class="ref">§17.6.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Integrations</b> in the sidebar (address <code>/integrations</code>).</li><li>On the key's card click <b>Usage</b> and read the figures; choose <b>Last 30 days</b>.</li><li>On <b>Integrations</b> click <b>Webhooks &amp; Integration Log</b> (address <code>/integrations/monitor</code>).</li><li>Open the <b>Integration Log</b> tab and read the line above the table.</li></ol>
+      <div class="expect"><b>Expected</b>The panel shows total calls, success rate, errors, average response, last used, calls per day, by method, status codes and recent requests. The log tab reads <b>API usage, last 7 days: N calls, N errors, success rate N%, average N ms</b>. <i>Limit:</i> a call stopped by the rate limit is recorded as an authentication failure, not as a usage row.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. A key can be switched off and back on without losing anything, and a replacement key retires the old one</span>
+        <span class="refs"><span class="ref">§17.2.8, §17.6.6, §17.6.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Integrations</b> in the sidebar (address <code>/integrations</code>).</li><li>On the key's card click <b>Deactivate</b>. The key moves to <b>Revoked / Expired</b> and offers <b>Activate</b>. Call the API with it (as in Test 7).</li><li>Click <b>Activate</b>; call again. Then click <b>Rotate</b> (<b>Needs a person:</b> the browser confirmation cannot be driven by tools), copy the new key and call with the old key and the new one.</li></ol>
+      <div class="expect"><b>Expected</b>While deactivated the key is refused (<b>401</b>); after <b>Activate</b> it works (<b>200</b>). After <b>Rotate</b> the card is renamed <b>(rotated)</b>, the new key works and the old key is refused (<b>401</b>). Clicked: deactivated 401, activated 200, rotate (confirmation answered by script) old 401, new 200. No tenant or business data is touched by any of this.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. A revoked key can never be brought back</span>
+        <span class="refs"><span class="ref">§17.2.8</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Integrations</b> in the sidebar (address <code>/integrations</code>).</li><li>Click <b>Revoke</b> on a key and confirm (<b>Needs a person:</b> the confirmation is a browser dialog). Look for an <b>Activate</b> button on the revoked card and call the API with the key.</li></ol>
+      <div class="expect"><b>Expected</b>The key is refused and the card has no Activate button (<code>POST /api-keys/&lt;id&gt;/activate</code> answers <b>400</b>: a revoked key cannot be reactivated). Revoke and delete are audited as <code>api_credential_revoke</code> / <code>api_credential_delete</code>.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. An integration access token works as a Bearer credential, within its permissions</span>
+        <span class="refs"><span class="ref">§17.2.4, §17.2.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Admin Settings → Integrations</b> (address <code>/admin/settings/integrations</code>), create an integration with <b>Read</b> only and copy its token (<b>Not clicked</b> in this acceptance).</li><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li><code>GET http://localhost:5002/api/v1/records/&lt;object&gt;?limit=1</code> with <code>Authorization: Bearer &lt;token&gt;</code>, then <code>POST</code> a record. Set the integration to inactive and call again.</li></ol>
+      <div class="expect"><b>Expected</b>The read answers <b>200</b>, the write <b>403</b>, and an inactive or expired integration <b>401</b>. The token is stored only as a hash and is never returned after creation (suite). <b>OAuth is not built:</b> there is no authorization-code or client-credentials flow. API keys and access tokens are the supported mechanisms; credentials for calling out to other systems are held server-side in External Objects (Section 15).</div>
+    </div>
+  </div>
+<h2>Incoming webhooks</h2><p class="sec-note">BRD §17.3 — external systems notify Salesdam.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. An incoming webhook creates and updates a record</span>
+        <span class="refs"><span class="ref">§17.3.1–§17.3.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li><code>POST http://localhost:5002/api/v1/webhooks/incoming</code> with <code>{"objectApiName":"policy","action":"create","data":{...},"source":"partner","eventType":"policy.sent"}</code>; then the same with <code>"action":"update","recordId":"&lt;the new id&gt;"</code>.</li></ol>
+      <div class="expect"><b>Expected</b>Both answer <b>200</b>; the record exists and then changes. Validation rules apply (a failing rule answers <b>400</b> with every message) and the body is deduplicated if you send <b>X-Idempotency-Key</b>. Suite-proven; not clicked.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. An incoming webhook starts a Flow, or runs approved custom code, or just records an event</span>
+        <span class="refs"><span class="ref">§17.3.4–§17.3.6</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li>Add <code>"flowId":"&lt;flow id&gt;","recordId":"&lt;id&gt;"</code> to the update request; then send <code>{"customCode":"&lt;snippet name&gt;","data":{}}</code>; then send <code>{"source":"erp","eventType":"invoice.paid","externalEventId":"ev-1"}</code> with no object.</li></ol>
+      <div class="expect"><b>Expected</b>The flow runs (the reply names it and says <b>success</b>); custom code runs only when its version is <b>Active</b> (a draft answers with the error <b>has no active version</b>); the event-only request is accepted and recorded, and sending the same <code>externalEventId</code> again does not create a second entry. See Test 22 for the log.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. Incoming webhooks are authenticated, tenant-specific and permission-checked</span>
+        <span class="refs"><span class="ref">§17.3.7, §17.6.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API client:</b> run each request below from your own client with <code>X-API-Key: &lt;your key&gt;</code>; never paste the key anywhere that is stored or shared.</li><li><code>POST http://localhost:5002/api/v1/webhooks/incoming</code> with no key, with a key for another tenant (or <code>X-Tenant-ID</code> of another tenant), with a read-only key, and with a key limited to other objects.</li><li>In <b>Setup → Admin Settings → Configuration</b> set a dummy <b>Webhook secret</b> for <i>Integration</i>; send the same body unsigned, with a wrong <code>X-Webhook-Signature</code>, and with <code>sha256=&lt;HMAC-SHA256 of the body using the secret&gt;</code>. Reset the setting afterwards.</li></ol>
+      <div class="expect"><b>Expected</b>No key <b>401</b>; other tenant <b>403</b>; read-only and wrong-object keys <b>403</b>. With a tenant secret set, unsigned and wrongly signed requests answer <b>401</b> (and are logged as <b>webhook</b> authentication failures); the correct signature answers <b>200</b>. The signature check is optional: when no secret is configured, the API key alone authenticates the sender.</div>
+    </div>
+  </div>
+<h2>Outgoing webhooks, monitoring and error handling</h2><p class="sec-note">BRD §17.4, §17.5 — events, payloads, retries, alerts and the Integration Log.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. An administrator configures an outgoing webhook; its signing secret is shown once</span>
+        <span class="refs"><span class="ref">§17.4.1, §17.2.6, §17.2.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Before you start:</b> run any small local program that accepts HTTP posts and prints them (a request-capture receiver of your choice) and note its address.</li><li>On <b>Integrations</b> click <b>Webhooks &amp; Integration Log</b> (address <code>/integrations/monitor</code>).</li><li>On <b>Outgoing Webhooks</b> click <b>New Webhook</b>. Name <b>S17 hook</b>, your address as <b>Endpoint URL</b>, tick <b>record.created</b>, <b>flow.completed</b> and <b>approval.completed</b>, type <b>claim_escalated</b> as the custom business event, set <b>Retries</b> 2, <b>Retry interval</b> 1, <b>Backoff</b> Exponential, and click <b>Create Webhook</b>.</li></ol>
+      <div class="expect"><b>Expected</b>A yellow box shows the <b>Signing secret (shown once)</b>; after <b>I have copied it</b> it is gone and the list shows the webhook with its events (including <b>custom.claim_escalated</b>), <b>2 x 1s exponential</b>, delivered/failed counts and <b>Active</b>. The secret is encrypted at rest and never returned again. An unknown event name is refused with <b>400</b>.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. A test delivery arrives signed, and a failing receiver is reported</span>
+        <span class="refs"><span class="ref">§17.4.1, §17.5.7, §17.5.8</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the webhook row click <b>Test</b>. Read the toast and the receiver's output.</li><li>Make the receiver answer an error (HTTP 500) and click <b>Test</b> again.</li></ol>
+      <div class="expect"><b>Expected</b>The first shows <b>Test delivered (HTTP 200)</b>; the receiver sees <code>X-Webhook-Event: test</code> and <code>X-Webhook-Signature: sha256=…</code>, which equals the HMAC-SHA256 of the body with the secret. The second shows <b>Test failed: Request failed with status code 500</b>. Both appear in the Integration Log (Test 22). The row's counters read <b>1 / 1</b>.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. Record created and deleted are delivered, with the fields you mapped</span>
+        <span class="refs"><span class="ref">§17.4.2–§17.4.4, §17.4.12</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Integrations</b> click <b>Webhooks &amp; Integration Log</b> (address <code>/integrations/monitor</code>).</li><li>Create a webhook with <b>record.created</b> and <b>record.deleted</b>, <b>Only these objects</b> <code>policy</code> and the <b>Payload mapping</b> <code>{"policyNo":"policy_number","status":"policy_status","premium":"monthly_premium"}</code> (custom fields).</li><li>Create a Credit Life policy (Policies → New: policy number <b>S17-HOOK-1</b>, status Active, premium 150, a start date) and then delete it from its page.</li></ol>
+      <div class="expect"><b>Expected</b>The receiver gets <b>record.created</b> and then <b>record.deleted</b>, each signed, each with <code>object: policy</code>, the record id and exactly <code>policyNo</code>, <code>status</code> and <code>premium</code> in <code>data</code>; nothing else. <b>record.updated</b> behaves the same (suite). Undo: delete the webhook (Test 24) and clear the Recycle Bin entry.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t19">
+      <span class="test-title"><span class="t">19. A Flow can raise a custom business event, and flow completion is reported</span>
+        <span class="refs"><span class="ref">§17.4.6, §17.4.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Automation → New</b>, choose <b>Record-Triggered Flow</b>, <b>Create Flow</b>, open <b>Steps</b>, <b>Add Step</b> and find <b>Raise Business Event</b> under <b>ACTIONS</b>. Give it the event name <b>claim_escalated</b> (do not save unless you want to keep the flow).</li><li>To see delivery: save a flow on an object with that step, with an active webhook that lists <b>custom.claim_escalated</b> and <b>flow.completed</b>, and create a record that meets it.</li></ol>
+      <div class="expect"><b>Expected</b>The step exists and takes an event name (clicked). A saved flow sends <b>custom.claim_escalated</b> and then <b>flow.completed</b> (with the flow's name) to the subscribed webhook (suite; delivery not clicked). A flow also has the <b>HTTP Request</b> step for ad-hoc calls.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t20">
+      <span class="test-title"><span class="t">20. Approval completed, lead received, communication and call events are delivered</span>
+        <span class="refs"><span class="ref">§17.4.5, §17.4.7–§17.4.10</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Subscribe a webhook to <b>approval.completed</b>, <b>lead.received</b>, <b>communication.received</b>, <b>communication.sent</b> and <b>call.completed</b>.</li><li>Approve a pending request; receive a message or call on a connected channel (<b>Setup → Channels → Test event</b> fires a synthetic one); send a reply from the Inbox; create a record on an object named <code>lead</code> if you have one.</li></ol>
+      <div class="expect"><b>Expected</b>Each action sends its event once. Suite-proven: <b>communication.received</b> and <b>call.completed</b> (synthetic channel events). <i>Wired but not exercised:</i> approval.completed (approve and reject), communication.sent (Inbox reply) and lead.received (fires when a record is created on an object whose API name is <code>lead</code>; My Company has no Lead object). <b>Needs a person</b> to confirm those three end to end.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t21">
+      <span class="test-title"><span class="t">21. A failing receiver is retried with your count and backoff, and an administrator is told</span>
+        <span class="refs"><span class="ref">§17.5.10, §17.5.12, §17.5.13</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Integrations</b> click <b>Webhooks &amp; Integration Log</b> (address <code>/integrations/monitor</code>).</li><li>With the receiver answering 500, trigger a real event (Test 18), then open <b>Integration Log</b> and read the newest row.</li><li>Make the receiver answer 200 again and wait for the next retry (every 30 seconds) or call <code>POST http://localhost:5002/api/v1/webhooks/process-retries</code>.</li><li>After the last allowed attempt fails (receiver kept failing), open the <b>bell</b> notifications as an administrator.</li></ol>
+      <div class="expect"><b>Expected</b>The failing row reads <b>retrying</b>, the HTTP status, the error and <b>attempt 1 of 3, next …</b> (retries + 1 attempts). When the receiver recovers the row becomes <b>success</b> and <b>delivered on attempt 2</b>. After the final attempt it reads <b>failed · attempt 3 of 3</b> and every administrator (and the webhook's creator) gets <b>Webhook … keeps failing</b> once the number of failed deliveries in a row reaches <b>Alert admins after N failures</b> (default 3; 0 = never). Suite-proven; the bell was not clicked.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t22">
+      <span class="test-title"><span class="t">22. The Integration Log shows every column and only your tenant's traffic</span>
+        <span class="refs"><span class="ref">§17.5.1–§17.5.10</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Integrations</b> click <b>Webhooks &amp; Integration Log</b> (address <code>/integrations/monitor</code>).</li><li>Open <b>Integration Log</b>. Read the headings, then filter <b>Direction</b> to <b>Outbound</b> and <b>Result</b> to <b>Failed</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The columns are <b>Tenant, Integration, Direction, Date / time, Event, Endpoint, Result, HTTP status, Error details, Retry status</b>. Outgoing deliveries, incoming webhooks and API-key calls appear together. Another tenant never sees these rows (suite). <i>Limit:</i> the log shows the last 100–300 rows per source; there is no date filter and no export.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t23">
+      <span class="test-title"><span class="t">23. No key, token, signing secret or Authorization header is ever in a log</span>
+        <span class="refs"><span class="ref">§17.2.6, §17.2.7, §17.5.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Integrations</b> click <b>Webhooks &amp; Integration Log</b> (address <code>/integrations/monitor</code>).</li><li>Read the <b>Integration Log</b>, <b>Authentication Failures</b> and <b>Outgoing Webhooks</b> tabs for any key, secret or header value. In <b>Setup → Audit Logs</b> read the entries for API key and webhook creation. Open a Flow's execution history.</li></ol>
+      <div class="expect"><b>Expected</b>None is shown. Keys appear as an eight-character prefix; delivery rows keep only the field <i>names</i> once finished (the record values used for a retry are removed when the delivery succeeds or finally fails); a field called password, secret, token or key in an incoming body is stored as <b>[hidden]</b>. A search of the suite's audit, delivery, incoming and authentication-failure rows found none of the dummy secrets, keys or Authorization header.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t24">
+      <span class="test-title"><span class="t">24. A webhook can be switched off, its secret changed, or the webhook removed, without touching business data</span>
+        <span class="refs"><span class="ref">§17.2.8, §17.6.6, §17.6.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Integrations</b> click <b>Webhooks &amp; Integration Log</b> (address <code>/integrations/monitor</code>).</li><li>Click <b>Deactivate</b> on a webhook, trigger an event, then <b>Activate</b>. Click <b>Delete</b>, then <b>Confirm delete</b>.</li><li><b>Needs an API client:</b> <code>POST http://localhost:5002/api/v1/webhooks/&lt;id&gt;/rotate-secret</code> as an administrator and trigger an event.</li></ol>
+      <div class="expect"><b>Expected</b>While inactive nothing is sent. Delete asks for a second click and removes the webhook (clicked); the old Integration Log rows remain labelled <b>(deleted webhook)</b>. Rotating returns a new secret once; the next delivery is signed with the new secret only (suite).</div>
+    </div>
+  </div>
+<h2>Known limits</h2><div class="callout warn"><h3>Worth knowing</h3><ul>
+<li><b>Not built:</b> OAuth (authorization-code or client-credentials). API keys and Bearer access tokens are the supported credentials; there is no other approved mechanism type.</li>
+<li><b>Authentication of incoming webhooks</b> is the API key or access token (always) plus an optional tenant HMAC secret. A per-webhook signing secret for senders, replay windows and IP allow-lists per webhook are not built (a key can have an IP list).</li>
+<li><b>Rate limiting</b> is per key, in memory in each server process; with several servers each applies its own count. There is also the platform-wide per-address limit. There is no per-tenant quota or billing meter.</li>
+<li><b>Webhook payloads</b> carry the record's fields selected by your mapping (or all fields if you leave it blank) and are not filtered by field security; map only fields the receiver may see.</li>
+<li><b>Tokens created before this release</b> were stored in readable form; regenerate them in <b>Setup → Admin Settings → Integrations</b> (new tokens are stored only as a hash).</li>
+<li><b>Approval completed, communication sent and lead received</b> are wired to the same dispatcher but were not exercised end to end in this acceptance (Test 20). The Admin Settings → Integrations screen (access tokens) was not clicked.</li>
+<li><b>The Integration Log</b> has no date filter or export, and a call refused by the rate limit appears under Authentication Failures rather than usage.</li></ul></div>
+<script>
+  (function () {
+    var KEY = 'salesdam-s17-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>
