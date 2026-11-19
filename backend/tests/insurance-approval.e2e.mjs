@@ -187,8 +187,9 @@ const main = async () => {
     const A = await seedTenant('a');
     const B = await seedTenant('b');
     tenantIds = [A.tenant._id, B.tenant._id];
-    const ca = await login(A.user.username);
-    const cb = await login(B.user.username);
+    // Login accepts only email-format identifiers, so the suite signs in by email.
+    const ca = await login(A.user.email);
+    const cb = await login(B.user.email);
     check('tenant A admin authenticates', !!ca);
     check('tenant B admin authenticates', !!cb);
 
