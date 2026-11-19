@@ -1,0 +1,926 @@
+<title>Metadata Engine Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Object &amp; Field Metadata Engine</h1>
+    <p class="standfirst">
+      A step-by-step script for testing BRD Section&nbsp;3. Everything you need is already
+      built in the <b>My&nbsp;Company</b> workspace — you are checking that it behaves correctly,
+      not building it from scratch.
+    </p>
+    <div class="mast-meta">
+      <span><b>Scope</b> BRD §3.1 – §3.4</span>
+      <span><b>Tests</b> 32</span>
+      <span><b>Time</b> ~60 minutes</span>
+      <span><b>Issued</b> 18 Nov 2026</span>
+    </div>
+  </header>
+
+  <div class="progress-bar">
+    <span class="count" id="count">0 of 32 complete</span>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <button class="btn-reset" id="reset" type="button">Reset</button>
+  </div>
+
+  <h2>Before you start</h2>
+  <p class="sec-note">Sign in and confirm the test data is in place. If anything in this list is
+  missing, stop and report it — the rest of the script depends on it.</p>
+
+  <div class="callout">
+    <h3>Signing in</h3>
+    <dl class="creds">
+      <dt>Address</dt><dd>http://localhost:5173</dd>
+      <dt>Email</dt><dd>admin@example.com</dd>
+      <dt>Workspace</dt><dd>My Company → Insurance</dd>
+    </dl>
+    <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">
+      Ask your Salesdam contact for the password. If the workspace selector at the
+      top-left does not say <b>My Company</b>, switch to it first.
+    </p>
+  </div>
+
+  <div class="callout">
+    <h3>What has already been set up for you</h3>
+    <ul>
+      <li><b>Policy</b> — a custom object with 22 fields, auto-numbered <code>POL-00001</code>,
+          covering every field type in the BRD.</li>
+      <li><b>Insured Life</b> — a child object joined to Policy by a Master-Detail relationship.</li>
+      <li><b>SA Provinces</b> — a Global Value Set of all nine provinces, Gauteng marked as default.</li>
+      <li><b>Insured Life — duplicate ID Number</b> — a duplicate rule set to <i>Block</i>.</li>
+      <li><b>POL-00001</b> — one live policy with three insured lives:
+          Thabo Mokoena (Main Member, R250,000, ID <code>8001015009087</code>),
+          Naledi Mokoena (Spouse, R150,000) and Lesedi Mokoena (Child, R50,000).</li>
+      <li><b>Insurance</b> — a workspace containing both objects.</li>
+    </ul>
+  </div>
+
+  <div class="callout warn">
+    <h3>Two things worth knowing before you begin</h3>
+    <ul>
+      <li><b>Pages take a while to open.</b> This environment runs the application on your
+          machine but keeps its database in the cloud, so every screen waits on a number of
+          round trips. Ten to thirty seconds for a setup or record page is normal here and is
+          not a fault in the feature you are testing. Give a page time before deciding it is
+          stuck.</li>
+      <li><b>A new object is invisible until you add it to a workspace.</b> After creating an
+          object, go to <b>Setup → Workspaces → Insurance → Objects</b>, tick it and save.
+          Otherwise you get "This object isn't available".</li>
+    </ul>
+  </div>
+
+  <!-- ===================== PART 1 ===================== -->
+  <h2>Part 1 — Object definition</h2>
+  <p class="sec-note">BRD §3.1.1 – §3.1.3. You will create a throwaway object, inspect how the
+  platform names it, check its settings, and look at the two relationship types.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. API name is derived from the label as you type</span>
+        <span class="refs"><span class="ref">§3.1.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Setup → Object Settings → New Object</b>.</li>
+        <li>In <b>Object Label</b> type <code>Eye Glass</code>.</li>
+        <li>Watch the <b>Plural Label</b> and <b>API Name</b> boxes without touching them.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Plural Label fills in as <code>Eye Glasses</code> and API Name as <code>eye_glass</code> —
+        spaces become underscores. The API Name box stays editable.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. Invalid API names are rejected</span>
+        <span class="refs"><span class="ref">§3.1.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Still on the New Object form, clear <b>API Name</b> and type <code>2glasses</code>, then try to save.</li>
+        <li>Try <code>eye__glass</code> (two underscores), then <code>eye_glass_</code> (trailing underscore).</li>
+        <li>Finally set it back to <code>eye_glass</code>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Each invalid value is refused with a message explaining the rule. Names must start with a
+        letter, contain only letters, numbers and underscores, and have no doubled or trailing
+        underscores.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. Object settings are kept exactly as you set them</span>
+        <span class="refs"><span class="ref">§3.1.1.6</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the New Object form for <b>Eye Glass</b>, scroll to <b>Object Settings</b>.</li>
+        <li>Tick <b>Enable Type Field</b>, and untick <b>Allow Search</b> and <b>Allow Notes</b>.</li>
+        <li>Add a Description, then click <b>Create Object</b>.</li>
+        <li>When the object opens, look at <b>Object Settings</b> again.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Every toggle is exactly as you left it on the create form — Enable Type Field on, Allow
+        Search and Allow Notes off — without having to save a second time. Your Description is
+        there too.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. The Type picklist is provisioned automatically</span>
+        <span class="refs"><span class="ref">§3.3.1</span><span class="ref">§3.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the <b>Eye Glass</b> object you just created, open the <b>Fields</b> tab.</li>
+        <li>Find the field called <b>Type</b>.</li>
+        <li>Open it and add the values <code>Prescription</code> and <code>Sunglasses</code>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        A picklist named <b>Type</b> is already there, marked <i>System</i> and <i>Protected</i>,
+        created the moment you ticked Enable Type Field. You can still add, rename and deactivate
+        its values like any other picklist — no special tooling.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. Reporting can be switched off per object</span>
+        <span class="refs"><span class="ref">§3.1.1.6</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On <b>Eye Glass → Object Details</b>, untick <b>Allow Reports</b> and save.</li>
+        <li>Go to <b>Analytics</b> and try to build a report over Eye Glass.</li>
+        <li>Switch <b>Allow Reports</b> back on and try again.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        With the toggle off, Eye Glass cannot be reported on — the platform refuses with a message
+        saying reporting is turned off for that object, even though you can still read its records.
+        Switching it back on restores reporting.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. System name fields cannot be renamed at API level</span>
+        <span class="refs"><span class="ref">§3.1.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Policy</b> from Object Settings.</li>
+        <li>Look at the <b>Name Field Type</b> panel.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The system Name field reads "This field is locked and cannot be changed". Its label stays
+        editable while its API name does not.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. Master-Detail states its ownership rules</span>
+        <span class="refs"><span class="ref">§3.1.2.2</span><span class="ref">§3.2.2.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Insured Life → Fields</b> and click the pencil on the <b>Policy</b> field.</li>
+        <li>Read the explanatory line under <b>Parent Object</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Type is <b>Master Detail</b>, parent is <b>Policy</b>, and the form states that records are
+        owned by the parent and deleted with it. Only one Master-Detail field is allowed per object
+        unless the object is marked as a Junction Object.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. Lookup deletion behaviour is configurable</span>
+        <span class="refs"><span class="ref">§3.1.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On <b>Eye Glass</b>, add a new field of type <b>Lookup</b>.</li>
+        <li>Pick a target object and inspect the deletion options.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        You can choose what happens to the child when the parent is deleted — block the deletion,
+        clear the reference, or do nothing. Deleting a parent does not delete children by default,
+        which is what separates a Lookup from a Master-Detail.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. Deleting an object lists what depends on it first</span>
+        <span class="refs"><span class="ref">§3.1.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Eye Glass</b> and click <b>Delete Object</b>.</li>
+        <li>Read the message before confirming.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        You are told exactly what will go with it — how many records and how many fields — and must
+        confirm before anything is removed. Deletion never happens on a single unconfirmed click.
+        Delete Eye Glass once you have read the message; the rest of the script does not need it.</div>
+    </div>
+  </div>
+
+  <!-- ===================== PART 2 ===================== -->
+  <h2>Part 2 — Fields and data types</h2>
+  <p class="sec-note">BRD §3.2.1 – §3.2.2. The Policy object already carries one field of nearly
+  every supported type, so most of this is inspection rather than building.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. Every required field type is offered</span>
+        <span class="refs"><span class="ref">§3.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Policy → Fields → Add Field</b>.</li>
+        <li>Open the <b>Type</b> dropdown and read the whole list.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        All of these appear: Text, Text Area, Number, Currency, Percent, Date, Date/Time, Checkbox,
+        Picklist, Multi-select, Rich Text, Time, Address, Email, Phone, URL, Auto Number, Lookup,
+        Master Detail, Formula, Rollup Summary.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. Field API names derive from the label too</span>
+        <span class="refs"><span class="ref">§3.2.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>In the Add Field dialog type <b>Label</b> = <code>Policy Number</code>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        API Name fills in as <code>policy_number</code> and remains editable.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. New fields start hidden unless you say otherwise</span>
+        <span class="refs"><span class="ref">§3.2.1.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Still in the Add Field dialog, find <b>Field-Level Security</b>.</li>
+        <li>Note which option is selected before you touch anything.</li>
+        <li>Open the list and read the three choices.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        It defaults to <b>Hidden</b>, so a newly created field is not exposed to anybody until an
+        admin grants it. You can instead choose <b>Read-Only</b> or <b>Visible</b>, and whichever
+        you pick is applied to every existing profile the moment the field is created. Cancel out
+        of the dialog when you are done.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. Help text reaches the end user</span>
+        <span class="refs"><span class="ref">§3.2.1.6</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Policy → Fields</b> and note the help text on <b>Policy Number</b>.</li>
+        <li>Now go to <b>Policies</b> in the left sidebar and click <b>New</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The same guidance — "Internal policy reference. Must be unique." — is shown to the user
+        beside the field on the record form.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. Required fields block a save</span>
+        <span class="refs"><span class="ref">§3.2.1.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the <b>New Policy</b> form, clear <b>Policy Number</b> and <b>Monthly Premium</b>.</li>
+        <li>Click <b>Create Record</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The save is refused and inline messages appear — "Policy Number is required" and
+        "Monthly Premium is required". The record is not created.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. Unique fields reject a repeat value</span>
+        <span class="refs"><span class="ref">§3.2.1.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Create a new Policy with <b>Policy Number</b> = <code>POL-TEST-001</code>
+            (the value already used by the existing record) and Monthly Premium = <code>100</code>.</li>
+        <li>Save.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The save is refused because Policy Number must be unique across Policy records.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. Auto Number issues sequential references</span>
+        <span class="refs"><span class="ref">§3.2.2.15</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Create a valid new Policy — Policy Number <code>POL-TEST-002</code>,
+            Monthly Premium <code>750</code>, Start Date any date.</li>
+        <li>Look at the <b>Name</b> shown on the saved record.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The record is named <code>POL-00002</code> — the configured prefix <code>POL-</code>
+        with five-digit zero padding, one higher than the previous policy. The user never types it.</div>
+    </div>
+  </div>
+
+  <!-- ===================== PART 3 ===================== -->
+  <h2>Part 3 — Picklists and value sets</h2>
+  <p class="sec-note">BRD §3.2.3. Field-level lists, shared catalogues, deactivation and defaults.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. A field can own its own list of values</span>
+        <span class="refs"><span class="ref">§3.2.3.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Policy → Fields</b> and edit <b>Policy Status</b>.</li>
+        <li>Type a new value into the Picklist Values box and press <b>Enter</b>.</li>
+        <li>Add another using the <b>Add</b> button instead.</li>
+        <li>Remove both again before closing.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Four values belong to this field alone: Quoted, Active, Lapsed, Cancelled. Both Enter and
+        the Add button add a value, and pressing Enter adds the value rather than submitting the
+        whole field. You can add and remove values here without affecting any other field.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. A Global Value Set is shared across fields</span>
+        <span class="refs"><span class="ref">§3.2.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Setup → Global Value Sets</b> and open <b>SA Provinces</b>.</li>
+        <li>Add a tenth value, <code>Test Province</code>, and save.</li>
+        <li>Now open <b>Policy → Fields → Province</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The Province field is linked to the set, and the new value appears there automatically —
+        you never edited the field. Remove <code>Test Province</code> again afterwards.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t19">
+      <span class="test-title"><span class="t">19. Values can be retired without breaking history</span>
+        <span class="refs"><span class="ref">§3.2.3.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>In <b>SA Provinces</b>, switch <b>Limpopo</b> to inactive using the Active toggle, and save.</li>
+        <li>Create a new Policy and open the Province dropdown.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Limpopo is no longer offered for new records, but any record that already holds it keeps
+        the value and still displays it. Switch it back on when finished.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t20">
+      <span class="test-title"><span class="t">20. Default values are pre-selected on a new record</span>
+        <span class="refs"><span class="ref">§3.2.1.5</span><span class="ref">§3.2.3.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Confirm <b>Gauteng</b> carries the ★ in <b>SA Provinces</b>, and that
+            <b>Policy Status</b> has <code>Active</code> in its Default Value box.</li>
+        <li>Open <b>Policies → New</b> and look at Policy Status and Province before typing anything.</li>
+        <li>Fill in only the required fields and save.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The form opens with <b>Policy Status</b> already showing <b>Active</b> and <b>Province</b>
+        already showing <b>Gauteng</b> — one from the field's own default, the other from the value
+        starred in the shared set. Both are saved on the record, and the user can change either
+        before saving.</div>
+    </div>
+  </div>
+
+  <!-- ===================== PART 4 ===================== -->
+  <h2>Part 4 — Formulas and roll-ups</h2>
+  <p class="sec-note">BRD §3.2.4 – §3.2.5. Calculated fields and parent-level aggregates.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t21">
+      <span class="test-title"><span class="t">21. The formula builder guides the author</span>
+        <span class="refs"><span class="ref">§3.2.4.1</span><span class="ref">§3.2.4.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Policy → Fields → Annual Premium</b>.</li>
+        <li>Change <b>Return Type</b> between Number, Text and Date, watching the
+            <b>Functions</b> panel each time.</li>
+        <li>Click the <b>Fields</b> tab in that panel, then <b>Show more</b> under Functions.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The function list changes with the return type, offering only functions that can produce
+        it. Available fields on Policy are listed and clicking one inserts it. IF, AND, OR,
+        ISBLANK, TEXT, CONCATENATE, arithmetic and date functions are all present.</div>
+      <div class="aside"><b>Where ISCHANGED lives</b>
+        ISCHANGED compares a value against what it was before the save, so it belongs to
+        <b>Validation Rules</b> (Section 6) rather than formula fields — a formula is calculated
+        from the record as it stands and has no earlier value to compare against. You will find it
+        when you test validation rules.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t22">
+      <span class="test-title"><span class="t">22. Formulas reflect the current data</span>
+        <span class="refs"><span class="ref">§3.2.2.12</span><span class="ref">§3.2.4.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open policy <b>POL-00001</b> and note <b>Monthly Premium</b> (500) and
+            <b>Annual Premium</b> (6,000).</li>
+        <li>Edit the record, change Monthly Premium to <code>600</code>, save.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Annual Premium becomes 7,200 immediately. It is read-only throughout — it is calculated
+        from <code>monthly_premium * 12</code>, never typed. Set it back to 500 afterwards.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t23">
+      <span class="test-title"><span class="t">23. Roll-ups only attach to a parent relationship</span>
+        <span class="refs"><span class="ref">§3.2.5.1</span><span class="ref">§3.2.5.2</span><span class="ref">§3.2.5.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Policy → Fields → Total Insured Lives</b>.</li>
+        <li>Note the <b>Summarised Object</b>, <b>Related Via</b> and <b>Aggregate</b> settings.</li>
+        <li>Open the Aggregate dropdown, then look at <b>Filter Criteria</b> below it.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        It summarises Insured Life via the Policy relationship. The aggregate list offers
+        <b>Count, Sum, Min, Max and Average</b>, and an optional Filter Criteria box restricts
+        which child records are counted. Only objects that are children of Policy can be
+        summarised — a roll-up cannot be pointed at an unrelated object.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t23b">
+      <span class="test-title"><span class="t">24. A filtered roll-up counts only matching children</span>
+        <span class="refs"><span class="ref">§3.2.5.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>POL-00001</b> and compare <b>Total Sum Assured</b> with
+            <b>Spouse Cover Total</b>.</li>
+        <li>Open <b>Policy → Fields → Spouse Cover Total</b> and read its
+            <b>Filter Criteria</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Total Sum Assured is <b>450,000</b> — every life on the policy. Spouse Cover Total is
+        <b>150,000</b>, because its filter <code>relationship == "Spouse"</code> counts only
+        Naledi. Both summarise the same child records; only the filter differs.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t24">
+      <span class="test-title"><span class="t">25. Roll-ups update the moment a child changes</span>
+        <span class="refs"><span class="ref">§3.2.5.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>POL-00001</b>. Note <b>Total Insured Lives</b> (3) and
+            <b>Total Sum Assured</b> (450,000).</li>
+        <li>Scroll to the <b>Insured Lives</b> related list and click <b>New</b>.</li>
+        <li>Add <b>Name</b> <code>Kabelo Mokoena</code>, <b>ID Number</b> <code>0803145566088</code>,
+            <b>Relationship</b> Child, <b>Sum Assured</b> <code>25000</code>. Save.</li>
+        <li>Reload the policy.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Total Insured Lives becomes <b>4</b> and Total Sum Assured becomes <b>475,000</b>, without
+        any manual recalculation. Spouse Cover Total stays at 150,000, because the new life is a
+        Child. Delete Kabelo and confirm the totals fall back to 3 and 450,000.</div>
+      <div class="aside"><b>Where children are created</b>
+        An Insured Life belongs to a Policy, so it is created from the <b>related list on a
+        Policy</b> — that is where the Policy field is filled in for you. This is the normal
+        Master-Detail pattern and applies to any child object.</div>
+    </div>
+  </div>
+
+  <!-- ===================== PART 5 ===================== -->
+  <h2>Part 5 — Duplicate detection</h2>
+  <p class="sec-note">BRD §3.4. Matching rules and what happens when a match is found.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t25">
+      <span class="test-title"><span class="t">26. Matching rules support fields, logic and actions</span>
+        <span class="refs"><span class="ref">§3.4.3</span><span class="ref">§3.4.9</span><span class="ref">§3.4.11–15</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Setup → Duplicate Rules</b> and open
+            <b>Insured Life — duplicate ID Number</b>.</li>
+        <li>Click <b>Add field</b> to add a second criterion.</li>
+        <li>Open the <b>When a duplicate is found</b> dropdown.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Any field on the object can be matched, each as exact or case-insensitive. Adding a second
+        field reveals an <b>all of these match / any of these match</b> selector (AND / OR). The
+        action list offers Warn, Block, Present matches, Use existing and Trigger flow. The form
+        states the rule applies to forms, imports and the API.
+        <br><br>Remove the extra criterion before continuing.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t26">
+      <span class="test-title"><span class="t">27. A blocking rule stops the save and shows the match</span>
+        <span class="refs"><span class="ref">§3.4.12</span><span class="ref">§3.4.14</span><span class="ref">§3.4.16</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>POL-00001</b> and click <b>New</b> on the <b>Insured Lives</b> related list.</li>
+        <li>Enter <b>Name</b> <code>Duplicate Check</code>, <b>ID Number</b>
+            <code>8001015009087</code> — the ID already held by Thabo Mokoena — and
+            <b>Sum Assured</b> <code>50000</code>.</li>
+        <li>Click <b>Create</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        A <b>Duplicate record found</b> panel appears explaining that your duplicate rules do not
+        allow saving it. It names the record you clashed with — <b>Thabo Mokoena</b> — says it
+        <i>Matches on ID Number</i>, and gives you <b>Open</b> to go to that record or <b>Back to
+        form</b> to correct yours. No new record is created.</div>
+    </div>
+  </div>
+
+  <!-- ===================== PART 6 ===================== -->
+  <h2>Part 6 — Object and record lifecycle</h2>
+  <p class="sec-note">BRD §3.1.2.3, §3.1.3. Deactivation, cascade ownership, the Recycle Bin, and
+  many-to-many relationships.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t27">
+      <span class="test-title"><span class="t">28. Deactivating an object hides it but keeps the data</span>
+        <span class="refs"><span class="ref">§3.1.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Insured Life → Object Details</b>, untick <b>Active</b> and save.</li>
+        <li>Look at the sidebar and at <b>Setup → Object Settings</b>.</li>
+        <li>Tick <b>Active</b> again and save.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        While inactive the object disappears from navigation and from the active object list, and
+        moves to the <b>Inactive</b> tab — but nothing is deleted. Reactivating brings it back with
+        all three insured lives intact. This is the safe step to take before deleting an object.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t28">
+      <span class="test-title"><span class="t">29. Deleting a parent deletes its children</span>
+        <span class="refs"><span class="ref">§3.1.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Create a throwaway policy — Policy Number <code>POL-CASCADE</code>,
+            Monthly Premium <code>100</code>, Start Date any date.</li>
+        <li>From its <b>Insured Lives</b> related list, add two lives with any details.</li>
+        <li>Delete the policy, then look for those two lives under <b>Insured Lives</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Both lives go with the policy — that is what Master-Detail ownership means. Neither is left
+        behind pointing at a policy that no longer exists.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t29">
+      <span class="test-title"><span class="t">30. Deleted records can be recovered</span>
+        <span class="refs"><span class="ref">§3.1.3.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>The policy and lives you deleted in test 29 are in the Recycle Bin. Open
+            <b>Policies</b> and look for the deleted-records view.</li>
+        <li>Restore <code>POL-CASCADE</code>.</li>
+        <li>Delete it again once you have seen it come back.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Deleting does not destroy a record immediately — it goes to the Recycle Bin and can be
+        restored. Records are kept there for a configurable window, 30 days by default, and are
+        permanently removed only once that window passes.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t30">
+      <span class="test-title"><span class="t">31. Many-to-many needs a junction object</span>
+        <span class="refs"><span class="ref">§3.1.2.3</span><span class="ref">§3.2.2.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Create an object <code>Plain Link</code> and add a <b>Master Detail</b> field to Policy.</li>
+        <li>Try to add a second Master Detail field, this time to Insured Life.</li>
+        <li>Create a second object <code>Junction Link</code>, this time ticking
+            <b>Junction Object</b>, and add Master Detail fields to <i>both</i> Policy and Insured Life.</li>
+        <li>Delete both throwaway objects when done.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The second Master-Detail on Plain Link is refused — one parent per object. Junction Link
+        accepts both, which is how a many-to-many relationship is built: a small object in the
+        middle owned by two parents.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t31">
+      <span class="test-title"><span class="t">32. A combination rule matches on several fields at once</span>
+        <span class="refs"><span class="ref">§3.4.8</span><span class="ref">§3.4.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>In <b>Setup → Duplicate Rules</b>, create a rule on Insured Life matching on
+            <b>Name</b> and <b>Date Of Birth</b>, with <b>all of these match</b> and
+            <b>Block</b>.</li>
+        <li>Add a life with any name and a date of birth, then add a second with the
+            <i>same name but a different date of birth</i>.</li>
+        <li>Now add a third with the same name <i>and</i> the same date of birth.</li>
+        <li>Delete the rule and the test lives when done.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The second saves — only one of the two fields matched, and the rule needs both. The third
+        is blocked and shows the clash. Switching the rule to <b>any of these match</b> would block
+        the second as well.</div>
+    </div>
+  </div>
+
+  <!-- ===================== remaining ===================== -->
+  <h2>Still to be covered</h2>
+  <p>These Section 3 requirements are outside this script and need their own test pass:</p>
+  <ul>
+    <li><b>§3.4.17 – §3.4.19</b> — duplicate detection during Data Import, API creation and
+        integration-based creation. Only the on-screen form path is covered here, though the rule
+        itself is applied the same way in all three.</li>
+    <li><b>§3.4.22</b> — record merging and choosing which values survive.</li>
+    <li><b>§3.3.3 – §3.3.4</b> — the Type field driving layout assignment, required fields and
+        which flows fire. These belong with Sections 4, 6 and 7.</li>
+  </ul>
+
+  <h3>Reporting a problem</h3>
+  <p>For anything that does not match the expected result, note the test number, what you saw
+  instead, and the record or object you were working on. A screenshot of the screen as it looked
+  when it went wrong is usually enough for us to reproduce it.</p>
+
+  <footer>
+    Salesdam V3 · Object &amp; Field Metadata Engine acceptance script · issued 18 November 2026.
+    Tick-box progress is remembered in this browser only.
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s3-tests-v2';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>

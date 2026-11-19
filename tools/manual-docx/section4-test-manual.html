@@ -1,0 +1,768 @@
+<title>Page Layout Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Page Layout &amp; UI Configuration</h1>
+    <p class="standfirst">
+      A step-by-step script for testing BRD Section&nbsp;4. Everything you need is already
+      built in the <b>My&nbsp;Company</b> workspace — you are checking that it behaves correctly,
+      not building it from scratch.
+    </p>
+    <div class="mast-meta">
+      <span><b>Scope</b> BRD §4.1 – §4.4</span>
+      <span><b>Tests</b> 28</span>
+      <span><b>Time</b> ~60 minutes</span>
+      <span><b>Issued</b> 19 Nov 2026</span>
+    </div>
+  </header>
+
+  <div class="progress-bar">
+    <span class="count" id="count">0 of 28 complete</span>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <button class="btn-reset" id="reset" type="button">Reset</button>
+  </div>
+
+  <h2>Before you start</h2>
+  <p class="sec-note">Sign in and confirm the test data is in place. If anything in this list is
+  missing, stop and report it — the rest of the script depends on it.</p>
+
+  <div class="callout">
+    <h3>Signing in</h3>
+    <dl class="creds">
+      <dt>Address</dt><dd>http://localhost:5173</dd>
+      <dt>Email</dt><dd>admin@example.com</dd>
+      <dt>Workspace</dt><dd>My Company → Insurance</dd>
+    </dl>
+    <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">
+      Ask your Salesdam contact for the password. This account has the <b>Super User</b> profile,
+      which matters for Part&nbsp;2.
+    </p>
+  </div>
+
+  <div class="callout">
+    <h3>What has already been set up for you</h3>
+    <ul>
+      <li><b>Policy</b> has two layouts: <b>Policy - Admin (full)</b> (the object default — three
+          sections, the Information section in three columns) and <b>Policy - Agent (simple)</b>
+          (one section, six fields).</li>
+      <li><b>Type</b> on Policy offers <code>Funeral Plan</code>, <code>Life Cover</code> and <code>Credit Life</code>.</li>
+      <li><b>POL-00001</b> — Active, no Type, three insured lives (Thabo, Naledi and Lesedi Mokoena).</li>
+      <li><b>POL-00003</b> — Active, Type <i>Credit Life</i>, three insured lives (Sipho, Zanele and Anele Dlamini).</li>
+      <li><b>POL-00004</b> — Active, Type <i>Funeral Plan</i>, start date 1 November 2026.</li>
+      <li><b>Layout Assignment</b> is set for Policy: Administrator uses the Admin layout; Standard User and
+          Read Only use the Agent layout; Super User follows two rules (Type = Funeral Plan → Admin, then
+          Type is set → Agent).</li>
+      <li><b>Kanban</b> is on, driven by Policy Status. <b>Calendar</b> is on, driven by Start Date.</li>
+      <li>A saved list view <b>Funeral Plans</b>, and an action button <b>Clone Policy</b> that shows only on Active policies.</li>
+    </ul>
+  </div>
+
+  <div class="callout warn">
+    <h3>Two things worth knowing before you begin</h3>
+    <ul>
+      <li><b>Pages take a while to open.</b> This environment runs the application on your
+          machine but keeps its database in the cloud, so every screen waits on a number of
+          round trips. Ten to thirty seconds for a setup or record page is normal here and is
+          not a fault in the feature you are testing.</li>
+      <li><b>Layout changes in Part&nbsp;1 are left unsaved on purpose.</b> Where a test says
+          <i>don't save</i>, reload the page afterwards — that throws the change away and leaves the
+          example layouts exactly as they were for the next person.</li>
+    </ul>
+  </div>
+
+  <h2>Part 1 — Building a layout</h2>
+  <p class="sec-note">BRD §4.1. Setup → Object Settings → <b>Policy</b> → <b>Layout</b> tab opens the layout builder, which every test in this part starts from.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. An object can have more than one layout</span>
+        <span class="refs"><span class="ref">§4.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Setup → Object Settings → Policy</b> and open the <b>Layout</b> tab.</li>
+        <li>Open the <b>Layout</b> picker at the top of the page and look at what it offers.</li>
+        <li>Choose <b>Policy - Agent (simple)</b>, look at the page, then switch back to <b>Policy - Admin (full)</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Two layouts are listed — <code>Policy - Admin (full)</code> marked <i>(object default)</i> and <code>Policy - Agent (simple)</code>. Admin has three sections (System Information, Information, Additional Information). Agent has one section, <b>Policy</b>, with six fields: Policy Number, Type, Start Date, Policy Status, Monthly Premium and Commission Rate.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. A section can have one, two or three columns</span>
+        <span class="refs"><span class="ref">§4.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On <b>Policy - Admin (full)</b>, find the <b>Information</b> section. Its column button reads <b>3 col</b>.</li>
+        <li>Click the button. Then click it again, and once more, watching the number and the field boxes each time.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The button cycles <b>3 → 1 → 2 → 3</b> columns and the fields are redistributed across the columns each time. No field disappears — the same fields are there whichever column count you choose.</div>
+      <div class="aside"><b>Don't save</b>
+        Reload the page when you have finished so the section goes back to three columns.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. Sections can be added and renamed</span>
+        <span class="refs"><span class="ref">§4.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>At the bottom of the builder click <b>Add Section</b>.</li>
+        <li>Click the new section's title and type <code>Test Section</code>.</li>
+        <li>Reload the page without saving.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        A new section appears with two empty columns marked <i>Drop fields here</i>, and its title is editable. After the reload it is gone.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. Fields can be dragged between columns</span>
+        <span class="refs"><span class="ref">§4.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On <b>Policy - Admin (full)</b>, find <b>Policy Number</b> in the Information section.</li>
+        <li>Hold the grip (the six dots) at the left of the field and drag it into a different column. Release.</li>
+        <li>Drag it back to where it was, or reload the page without saving.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The field lifts, a gap shows where it will land, and it stays in the new column when you let go. The other fields close up around the gap. The same works between sections.</div>
+      <div class="aside"><b>Needs a person</b>
+        This is the one test that needs a real mouse. Dragging cannot be carried out by an automated script in this environment, so it has been left for you.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. A field can be required on one layout only</span>
+        <span class="refs"><span class="ref">§4.1.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On <b>Policy - Admin (full)</b>, find <b>Broker Email</b>. Hover the highlighted <b>*</b> button at its right: <i>Required on this layout</i>.</li>
+        <li>Go to <b>Policies → New Policy</b> and click <b>Create Record</b> without filling anything in.</li>
+        <li>Open <b>Setup → Object Settings → Policy → Fields → Broker Email</b> and look at its own Required setting.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Broker Email is marked <b>*</b> on the form, and the save is refused with <i>Broker Email is required</i> alongside Policy Number, Monthly Premium and Start Date. On the field itself, Required is <b>not</b> ticked — the rule belongs to this layout alone.</div>
+      <div class="aside"><b>Where the rule is enforced</b>
+        A layout rule is enforced on the screen the person is using. It does not stop a value being left blank by an import or the API; use the field's own Required setting for that.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. A layout cannot weaken a rule the field itself enforces</span>
+        <span class="refs"><span class="ref">§4.1.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>Policy - Agent (simple)</b> in the builder.</li>
+        <li>Look at <b>Policy Number</b> and hover its <b>*</b> button, then look at <b>Commission Rate</b>'s.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Policy Number shows a red <b>*</b> and its button is greyed with the tooltip <i>Already required on the field itself</i>. Commission Rate is optional on the field, so its button is live and reads <i>Required on this layout</i>. A layout can add a requirement but never remove one the field already carries.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. A field can be read-only on one layout only</span>
+        <span class="refs"><span class="ref">§4.1.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>POL-00003</b> (a Credit Life policy), click <b>Edit</b> and find <b>Commission Rate</b>.</li>
+        <li>Open <b>POL-00004</b> (a Funeral Plan), click <b>Edit</b> and find <b>Commission Rate</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        On POL-00003 (Agent layout) Commission Rate is plain text — there is no box to type in. On POL-00004 (Admin layout) it is an ordinary editable box. It is the same field; only the layout differs.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. A layout chooses which related lists show, and their columns</span>
+        <span class="refs"><span class="ref">§4.1.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>In the builder, on <b>Policy - Admin (full)</b>, scroll below the sections to <b>Related Lists</b>.</li>
+        <li>Find <b>Insured Lives</b> (ticked) and click <b>Configure</b>. Note the ticked columns: Name, Relationship, Sum Assured, ID Number.</li>
+        <li>Open <b>POL-00001</b> and scroll to <b>Related → Insured Lives</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The table on POL-00001 has exactly four columns — Name, ID Number, Relationship, Sum Assured — instead of the original Name, Record Owner, Date of Birth, ID Number. If no related list is ticked on a layout, every related list is shown.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. A related list has a default sort order</span>
+        <span class="refs"><span class="ref">§4.1.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On POL-00001, look at the order of the Insured Lives.</li>
+        <li>In the builder (Admin layout → Related Lists → Insured Lives → Configure) note <b>Default sort: Sum Assured</b>, <b>Order: Descending</b>.</li>
+        <li>Change the order to <b>Ascending</b>, click <b>Save Layout</b>, reload POL-00001. Then change it back to Descending and save again.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        First the largest cover comes first: Thabo (R250,000), Naledi (R150,000), Lesedi (R50,000). After switching to Ascending it reverses: Lesedi, Naledi, Thabo. After switching back it is largest-first again.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. A related list can have a default filter</span>
+        <span class="refs"><span class="ref">§4.1.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>POL-00003</b> and look at <b>Related → Insured Lives</b>.</li>
+        <li>Open <b>POL-00001</b> and look at its Insured Lives for comparison.</li>
+        <li>In the builder, open <b>Policy - Agent (simple) → Related Lists → Insured Lives → Configure</b> and find <b>Default filters</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        POL-00003 lists only Sipho and Zanele — Anele (the Child) is left out and the list is in A–Z order. POL-00001 lists all three of its lives. The Agent layout carries the filter <i>Relationship · not equal to · Child</i>.</div>
+      <div class="aside"><b>Many-to-many lists</b>
+        A related list reached through a junction object takes its columns, sort and buttons from the layout, but default filters are not applied to it.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. A related list controls which buttons it offers</span>
+        <span class="refs"><span class="ref">§4.1.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On <b>POL-00003</b>, look at the Insured Lives list: the <b>New</b> button, and the right-hand end of each row.</li>
+        <li>On <b>POL-00001</b>, look at the same two places.</li>
+        <li>In the builder, look at <b>Buttons offered</b> for the Agent layout's Insured Lives list.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        POL-00003 has a <b>New</b> button but no ⋮ menu on the rows, so lives can be added but not edited or deleted from there. POL-00001 has New and a ⋮ menu with Edit and Delete. The Agent layout has only <b>New</b> ticked.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. A field can appear only when a condition is true</span>
+        <span class="refs"><span class="ref">§4.1.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Policies → New Policy</b>. Look for <b>Cover Options</b> — there is no such box yet.</li>
+        <li>Set <b>Type</b> to <code>Funeral Plan</code>.</li>
+        <li>Change <b>Type</b> to <code>Life Cover</code>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Cover Options is absent at first, appears the moment Type becomes Funeral Plan, and disappears again for Life Cover. In the builder its filter button is highlighted: <i>Show this field only when Type equals Funeral Plan</i>.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. A whole section can appear only when a condition is true</span>
+        <span class="refs"><span class="ref">§4.1.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>POL-00001</b> (no Type) and list its sections.</li>
+        <li>Open <b>POL-00004</b> (Funeral Plan) and list its sections.</li>
+        <li>In the builder, on <b>Policy - Admin (full)</b>, click <b>Condition set</b> on the Additional Information section.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        POL-00001 shows only System Information and Information. POL-00004 also shows <b>Additional Information</b>, with its Description. The condition reads <i>Show this section only when Type is set</i>.</div>
+    </div>
+  </div>
+
+  <h2>Part 2 — Which layout a person sees</h2>
+  <p class="sec-note">BRD §4.2. Layout Assignment is reached from the builder's <b>Layout Assignment</b> button.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. Each profile has its own default layout</span>
+        <span class="refs"><span class="ref">§4.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>In the builder click <b>Layout Assignment</b>.</li>
+        <li>Read the <b>Default layout</b> shown for Administrator, Read Only, Standard User and Super User.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Administrator → <code>Policy - Admin (full)</code>. Read Only and Standard User → <code>Policy - Agent (simple)</code>. Super User → <i>Object default</i>, plus its conditional rules. Anyone signing in with the Standard User or Read Only profile sees the shorter Agent layout on every policy.</div>
+      <div class="aside"><b>Seeing it as another profile</b>
+        This environment has a single Super User account, so the three other profiles are checked here by their settings. To see it first-hand, sign in as a user with that profile and open any policy.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. A rule switches the layout by what is on the record</span>
+        <span class="refs"><span class="ref">§4.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Signed in as the Super User, open <b>POL-00003</b> (Credit Life).</li>
+        <li>Open <b>POL-00004</b> (Funeral Plan).</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        POL-00003 opens in the Agent layout — a single <b>Policy</b> section. POL-00004 opens in the Admin layout with three sections. Same person, same profile; the record's Type chose the layout.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. When two rules match, the first one wins</span>
+        <span class="refs"><span class="ref">§4.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the Layout Assignment page, read the two rules under Super User, top to bottom.</li>
+        <li>Note that POL-00004 satisfies <i>both</i> rules (it is a Funeral Plan, and its Type is set).</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Rule 1 is <i>Type equals Funeral Plan → Admin</i>; rule 2 is <i>Type is set → Agent</i>. POL-00004 meets both but opens in the <b>Admin</b> layout, because the first matching rule is used and the rest are ignored.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. A new record shows the default layout until it is saved</span>
+        <span class="refs"><span class="ref">§4.2.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Policies → New Policy</b>. Note which layout you get.</li>
+        <li>Fill in <b>Policy Number</b> <code>POL-TEST-NEW</code>, <b>Monthly Premium</b> <code>200</code>, <b>Start Date</b> today, <b>Broker Email</b> <code>tester@example.com</code> and <b>Type</b> <code>Credit Life</code>, then click <b>Create Record</b>.</li>
+        <li>Look at the layout the saved record opens in. Then click <b>Delete</b> to remove the test policy.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The blank form opens in the Admin (default) layout — three columns, Broker Email marked <b>*</b>. After saving with Type = Credit Life the record opens in the <b>Agent</b> layout: a single Policy section, no Broker Email. The layout changed because the saved record now matches a rule.</div>
+    </div>
+  </div>
+
+  <h2>Part 3 — List views, Kanban and Calendar</h2>
+  <p class="sec-note">BRD §4.3. All of this is on <b>Policies</b>, an object that was created from scratch and never had a hand-built list.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. Every object gets list views without any setup</span>
+        <span class="refs"><span class="ref">§4.3.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Policies</b> and open the view menu (it says <b>All Policies</b>).</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The menu offers <b>All Policies</b>, <b>Recently Viewed</b> and <b>My Policies</b> under Standard Views, then any saved views, and <b>New List View…</b>.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t19">
+      <span class="test-title"><span class="t">19. The columns of a list can be chosen</span>
+        <span class="refs"><span class="ref">§4.3.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the Policies list click <b>Choose columns</b>.</li>
+        <li>Click <b>Province</b> in the Available list, then click <b>Apply</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The panel shows how many columns are chosen out of 30 and offers every Policy field, with Move left/right and Remove for those already chosen. After Apply, <b>Province</b> is the last column of the table.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t20">
+      <span class="test-title"><span class="t">20. A list sorts by any column</span>
+        <span class="refs"><span class="ref">§4.3.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the Policies list click the <b>Monthly Premium</b> heading.</li>
+        <li>Click it again.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The first click sorts smallest to largest — POL-00003 (R300), POL-00004 (R450), POL-00001 (R500). The second click reverses it.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t21">
+      <span class="test-title"><span class="t">21. A filtered list can be saved as a view</span>
+        <span class="refs"><span class="ref">§4.3.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open the view menu and click <b>New List View…</b>.</li>
+        <li>Name it <code>Credit Life</code>. Under Filter Conditions choose <b>Type</b>, <b>equals</b>, <b>Credit Life</b>.</li>
+        <li>Click <b>Save View</b>. Then open the existing <b>Funeral Plans</b> view for comparison.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Your view lists only POL-00003. Funeral Plans lists only POL-00004. The value box for a picklist field is a dropdown of its real values, and the operators offered change to suit the field.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t22">
+      <span class="test-title"><span class="t">22. Any object can show its records on a Kanban board</span>
+        <span class="refs"><span class="ref">§4.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the Policies list click the <b>Kanban view</b> button.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The board has one column for each Policy Status value — <b>Quoted</b>, <b>Active</b>, <b>Lapsed</b>, <b>Cancelled</b> — each with a count. All three policies are in Active.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t23">
+      <span class="test-title"><span class="t">23. Dragging a card changes its stage</span>
+        <span class="refs"><span class="ref">§4.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the Kanban board, drag the <b>POL-00004</b> card from Active to <b>Lapsed</b>.</li>
+        <li>Open POL-00004 and look at Policy Status.</li>
+        <li>Go back and drag the card from Lapsed to Active.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        A message says <i>Updated POL-00004</i>, the counts change, and the record shows Policy Status <b>Lapsed</b>. Dragging it back restores Active.</div>
+      <div class="aside"><b>Needs a person</b>
+        Like the layout builder, this needs a real mouse drag. The stage change itself has been confirmed by the platform; the drag gesture is for you.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t24">
+      <span class="test-title"><span class="t">24. Only a picklist can drive Kanban, and only a date can drive a calendar</span>
+        <span class="refs"><span class="ref">§4.3.2</span><span class="ref">§4.3.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Setup → Object Settings → Policy → Object Details</b> and scroll to the Kanban and Calendar settings.</li>
+        <li>Open the picklist chosen for Kanban and the date field chosen for the calendar and read what each offers. Don't save.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        Kanban is switched on and offers only picklist fields — Policy Status, Province and Type. The calendar is switched on and offers only date fields — Last Reviewed At and Start Date. Nothing else can be chosen.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t25">
+      <span class="test-title"><span class="t">25. Any object can show its records on a calendar</span>
+        <span class="refs"><span class="ref">§4.3.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>On the Policies list click the <b>Calendar view</b> button. It opens on the current month — use the arrows to move to <b>November 2026</b> if it shows another.</li>
+        <li>Look at 1 November, then click <b>POL-00003</b> there.</li>
+        <li>Return and try <b>Week</b>, <b>Day</b> and <b>Today</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        POL-00003 and POL-00004 sit on 1 November — their Start Date. Clicking one opens that policy. Week and Day show the same records for the chosen period.</div>
+    </div>
+  </div>
+
+  <h2>Part 4 — Buttons on a record</h2>
+  <p class="sec-note">BRD §4.4. Buttons are configuration, not code.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t26">
+      <span class="test-title"><span class="t">26. A button can run a platform action</span>
+        <span class="refs"><span class="ref">§4.4.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>POL-00001</b> and click <b>Clone Policy</b> in the header.</li>
+        <li>Look at the form that opens, then click <b>Cancel</b>.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        A <b>New Policy</b> form opens with the details of POL-00001 already filled in. Nothing is saved until you click Create Record, so cancelling leaves no copy behind.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t27">
+      <span class="test-title"><span class="t">27. Buttons are set up in settings, not in code</span>
+        <span class="refs"><span class="ref">§4.4.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Go to <b>Setup → Object Settings → Policy → Action Buttons</b>.</li>
+        <li>Read the row for <b>Clone Policy</b>. Click <b>New Button</b> and look at the Action type choices, then close it.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        The row reads <i>Runs: Platform action: Clone record · Shown when: Policy Status equals Active · Location: Record Detail</i>. The choices for a button are: <b>Flow</b> (runs straight away), <b>Screen flow</b> (asks the user for input first) or <b>Platform action</b> (for example convert or clone).</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t28">
+      <span class="test-title"><span class="t">28. A button can be shown only when the record meets a condition</span>
+        <span class="refs"><span class="ref">§4.4.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps">
+        <li>Open <b>POL-00004</b> and note the <b>Clone Policy</b> button.</li>
+        <li>Click <b>Edit</b>, set <b>Policy Status</b> to <code>Lapsed</code>, and save.</li>
+        <li>Look at the header again. Then edit the policy, set Policy Status back to <code>Active</code>, and save.</li>
+      </ol>
+      <div class="expect"><b>Expected</b>
+        With Active the button is shown. Once the policy is Lapsed the button is gone. When it is Active again the button is back. The page needs no code change — only the condition on the button.</div>
+    </div>
+  </div>
+
+  <h2>Still to be covered</h2>
+  <p>These points sit outside this script:</p>
+  <ul>
+    <li><b>Layouts as the other profiles.</b> Only a Super User account exists here, so the Administrator, Standard User and Read Only defaults are checked by their settings, not by signing in as each.</li>
+    <li><b>Filters on many-to-many related lists.</b> Sort, columns and buttons apply; default filters do not.</li>
+    <li><b>Layout-only Required and Read-only rules</b> are enforced on screen, not by the API or by Data Import.</li>
+  </ul>
+
+  <h3>Reporting a problem</h3>
+  <p>For anything that does not match the expected result, note the test number, what you saw
+  instead, and the record or layout you were working on. A screenshot of the screen as it looked
+  when it went wrong is usually enough for us to reproduce it.</p>
+
+  <footer>
+    Salesdam V3 · Page Layout &amp; UI Configuration acceptance script · issued 19 November 2026.
+    Tick-box progress is remembered in this browser only.
+  </footer>
+
+</div>
+</div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s4-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>

@@ -1,0 +1,11 @@
+# Build inputs/outputs — everything here is derived from the section HTML.
+node_modules/
+blocks.json
+mine/
+*.pdf
+*.png
+# Generated manuals; the house reference in assets/ is kept.
+/*.docx
+
+# Word lock files while a document is open
+~$*
