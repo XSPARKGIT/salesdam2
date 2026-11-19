@@ -302,3 +302,36 @@ layouts as the Administrator / Standard User / Read Only profiles (one user exis
 **Known and not fixed:** Kanban cards show the Record Owner as a raw id; default
 filters are not applied to many-to-many related lists; layout-only Required /
 Read-only rules are UI-level, not enforced by the API.
+
+---
+
+## 10. Where Section 5 ended
+
+**Tested:** all of §5.1–§5.3 through the UI, plus the `app-access` (26/26) and
+`workspace-object-isolation` (31/31) suites. Manual: 15 tests,
+`tools/manual-docx/section5-test-manual.html`. In this product an **App is a
+Workspace** — look under Setup → Workspaces, Roles and Permission Sets.
+
+**Already built before Section 5:** App attributes, shared objects, the App
+switcher with App-scoped navigation, default landing (including a Home option) and
+App access through Roles and Permission Sets. The existing suites prove the access rules.
+
+**Fixed:** an App's tab order. The sidebar sorted by the object's own global `navOrder`,
+so a shared object sat in the same slot in every App. It now follows the App's own
+object list, and the Objects tab has Move up / Move down.
+
+**Fixtures created:** Broker object, **Broker Desk** App (Brokers, Policies; lands on
+Brokers), Insurance reordered (Policies, Insured Lives; lands on Policies), and the
+**Broker Desk Access** permission set (nobody assigned).
+
+**Worth knowing for next time**
+
+- Slow database means lists look empty for 10–30 s. **Poll for content** in
+  `javascript_exec` instead of guessing a wait; two "bugs" this session were just that.
+- `window.confirm` is auto-declined in the pane, so a delete that uses it cannot be
+  clicked through; use the API and say so in the manual.
+- Switching Apps refetches the object list; the nav takes 2–3 s to settle.
+- A page's controls can be huge (the icon picker is dozens of unnamed buttons); filter
+  your DOM dumps instead of listing every control.
+- Existing Apps' sidebar order now follows each App's object list; if an App was set
+  up in an arbitrary order, that is the order people will now see.
