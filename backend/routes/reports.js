@@ -6,11 +6,15 @@ import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
-import { hasObjectPermission, buildDataAccessFilter } from '../middleware/permissions.js';
+import { hasObjectPermission, buildDataAccessFilter, checkAppPermission, getVisibleFields } from '../middleware/permissions.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { assertReportFunctions, assertReportFieldsVisible } from '../utils/reportGuards.js';
 
 const router = express.Router();
 router.use(requireAuth, enforceTenant);
+// View Analytics opens reports; Manage Analytics is needed to create, change or delete them.
+router.use((req, res, next) =>
+  checkAppPermission(req.method === 'GET' || req.path === '/run' ? 'canViewAnalytics' : 'canManageAnalytics')(req, res, next));
 
 function roleIdsOf(user) {
   const role = user.role;
@@ -126,6 +130,9 @@ router.post(
 
     const obj = await ObjectMeta.findOne({ tenantId: req.tenantId, apiName: objectApiName });
     if (!obj) throw new AppError(`Object "${objectApiName}" not found.`, 404);
+    if (obj.allowReports === false) {
+      throw new AppError(`Reporting is turned off for ${obj.label}.`, 403);
+    }
 
     if (!(await hasObjectPermission(req.user, 'read', objectApiName))) {
       throw new AppError(`You do not have permission to read ${objectApiName}.`, 403);
@@ -139,6 +146,39 @@ router.post(
 
     const fields = await FieldMeta.find({ tenantId: req.tenantId, objectApiName }).lean();
     const fieldMap = new Map(fields.map((f) => [f.apiName, f]));
+
+    assertReportFunctions(aggregations);
+    for (const f of [groupBy, ...aggregations.map((a) => a.field), ...filters.map((x) => x.field), dateRange?.field, sortField, ...columns]) {
+      if (f && !['createdAt', 'updatedAt'].includes(f) && !fieldMap.has(f)) {
+        throw new AppError(`Unknown field "${f}" on ${objectApiName}.`, 400);
+      }
+    }
+    await assertReportFieldsVisible(req.user, objectApiName, [groupBy, ...aggregations.map((a) => a.field), ...filters.map((x) => x.field), dateRange?.field, ...columns]);
+
+    // Cross-object (BRD 11.2): exactly one hop, over a real Lookup / Master-Detail field.
+    let relatedDataFilter = {};
+    if (crossObject?.lookupField && crossObject?.relatedObject) {
+      const lf = fieldMap.get(crossObject.lookupField);
+      if (!lf || !['lookup', 'master_detail'].includes(lf.type)) {
+        throw new AppError(`"${crossObject.lookupField}" is not a Lookup or Master-Detail field on ${objectApiName}.`, 400);
+      }
+      if (lf.lookupObjectApiName !== crossObject.relatedObject) {
+        throw new AppError(`"${crossObject.lookupField}" points to ${lf.lookupObjectApiName}, not ${crossObject.relatedObject}.`, 400);
+      }
+      if (crossObject.relatedObject === objectApiName) {
+        throw new AppError('A report can follow one relationship from the chosen object to a different object.', 400);
+      }
+      const relObj = await ObjectMeta.findOne({ tenantId: req.tenantId, apiName: crossObject.relatedObject });
+      if (!relObj || relObj.allowReports === false) {
+        throw new AppError(`Reporting is turned off for ${relObj?.label || crossObject.relatedObject}.`, 403);
+      }
+      if (crossObject.relatedGroupBy) {
+        const relField = await FieldMeta.findOne({ tenantId: req.tenantId, objectApiName: crossObject.relatedObject, apiName: crossObject.relatedGroupBy }).lean();
+        if (!relField) throw new AppError(`Unknown field "${crossObject.relatedGroupBy}" on ${crossObject.relatedObject}.`, 400);
+        await assertReportFieldsVisible(req.user, crossObject.relatedObject, [crossObject.relatedGroupBy]);
+      }
+      relatedDataFilter = await buildDataAccessFilter(req.user, crossObject.relatedObject);
+    }
 
     const match = {
       tenantId: tenantObjId,
@@ -182,6 +222,7 @@ router.post(
                 tenantId: tenantObjId,
                 objectApiName: crossObject.relatedObject,
                 isDeleted: false,
+                ...relatedDataFilter,
               },
             },
             { $project: { data: 1 } },
@@ -211,7 +252,8 @@ router.post(
       }
       pipeline.push({ $group: groupStage });
 
-      const sortKey = sortField || (aggregations[0]?.alias || 'count');
+      const first = aggregations[0];
+      const sortKey = sortField || (first ? (first.alias || `${first.func}_${first.field || 'all'}`) : 'count');
       pipeline.push({ $sort: { [sortKey]: sortOrder === 'asc' ? 1 : -1 } });
     } else if (aggregations.length > 0) {
       const groupStage = { _id: null };
@@ -234,6 +276,15 @@ router.post(
     pipeline.push({ $limit: Math.min(parseInt(limit) || 100, 1000) });
 
     let results = await DynamicRecord.aggregate(pipeline);
+
+    // Raw-record (table) mode returns whole records: drop fields the user may not see.
+    if (!groupPath && aggregations.length === 0) {
+      const visible = new Set(await getVisibleFields(req.user, objectApiName, fields.map((f) => f.apiName)));
+      results = results.map((r) => ({
+        ...r,
+        data: Object.fromEntries(Object.entries(r.data || {}).filter(([k]) => visible.has(k))),
+      }));
+    }
 
     // If grouping by a lookup/master-detail field, resolve ObjectId _id values
     // to the display name of the referenced record so charts show names, not IDs.
@@ -271,13 +322,23 @@ router.post(
       }
     }
 
+    // A cross-object group is a field of the related object: label it as such.
+    const outFields = fields.map((f) => ({ apiName: f.apiName, label: f.label, type: f.type }));
+    if (crossObject?.lookupField && crossObject?.relatedGroupBy) {
+      const relF = await FieldMeta.findOne({ tenantId: req.tenantId, objectApiName: crossObject.relatedObject, apiName: crossObject.relatedGroupBy }).lean();
+      const relO = await ObjectMeta.findOne({ tenantId: req.tenantId, apiName: crossObject.relatedObject }).select('label').lean();
+      const entry = { apiName: crossObject.relatedGroupBy, label: `${relO?.label || crossObject.relatedObject}: ${relF?.label || crossObject.relatedGroupBy}`, type: relF?.type };
+      const at = outFields.findIndex((f) => f.apiName === entry.apiName);
+      if (at >= 0) outFields[at] = entry; else outFields.push(entry);
+    }
+
     sendSuccess(res, {
       data: {
         results,
         objectApiName,
-        groupBy: groupBy || crossObject?.relatedGroupBy,
+        groupBy: (crossObject?.lookupField && crossObject?.relatedGroupBy) || groupBy,
         total: results.length,
-        fields: fields.map((f) => ({ apiName: f.apiName, label: f.label, type: f.type })),
+        fields: outFields,
       },
     });
   }),

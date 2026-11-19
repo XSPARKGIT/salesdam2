@@ -6,7 +6,7 @@
  *  - Type-aware filters: eq, neq, gt, contains, in, is_null, between
  *  - Cross-object reporting via lookup
  *  - Saved report CRUD: create, list, get, update, delete
- *  - Permission: non-admin can only read permitted objects
+ *  - Permissions: View/Manage Analytics, hidden fields, Allow Reports, one-hop cross-object, function whitelist
  *  - Raw record (table) mode without groupBy
  *
  * Run: node tests/section11-reporting.e2e.mjs   (from backend/)
@@ -450,6 +450,106 @@ try {
     body: { name: 'Bad Report', objectApiName: 'nonexistent_xyz' },
   });
   check('report with bad object rejected', r.status === 404);
+
+
+  // ── 31. Same five functions as Roll-Up Summary fields; nothing else ───────
+  const post = (cookie, body) => req('/api/v1/reports/run', { method: 'POST', cookie, body });
+  r = await post(adminCookie2, { objectApiName: childApi, aggregations: [{ func: 'median', field: 'hours' }] });
+  check('an unsupported function (median) is refused', r.status === 400, `HTTP ${r.status}`);
+  r = await post(adminCookie2, { objectApiName: childApi, aggregations: [{ func: 'function', field: 'hours' }] });
+  check('a Mongo operator cannot be smuggled in as a function', r.status === 400, `HTTP ${r.status}`);
+  r = await post(adminCookie2, { objectApiName: childApi, groupBy: 'no_such_field', aggregations: [{ func: 'count' }] });
+  check('an unknown group-by field is refused', r.status === 400, `HTTP ${r.status}`);
+
+  // ── 32. Cross-object: exactly one hop, over a real relationship ───────────
+  r = await post(adminCookie2, { objectApiName: childApi, aggregations: [{ func: 'count' }],
+    crossObject: { lookupField: 'priority', relatedObject: parentApi, relatedGroupBy: 'status' } });
+  check('cross-object over a non-relationship field is refused', r.status === 400, `HTTP ${r.status}`);
+  r = await post(adminCookie2, { objectApiName: childApi, aggregations: [{ func: 'count' }],
+    crossObject: { lookupField: 'project', relatedObject: childApi, relatedGroupBy: 'priority' } });
+  check('cross-object to an object the field does not point at is refused', r.status === 400, `HTTP ${r.status}`);
+  r = await post(adminCookie2, { objectApiName: childApi, aggregations: [{ func: 'count' }],
+    crossObject: { lookupField: 'project', relatedObject: parentApi, relatedGroupBy: 'owner.name' } });
+  check('a second level (related.related) is refused', r.status === 400, `HTTP ${r.status}`);
+  r = await post(adminCookie2, { objectApiName: childApi, aggregations: [{ func: 'sum', field: 'hours' }],
+    crossObject: { lookupField: 'project', relatedObject: parentApi, relatedGroupBy: 'status' } });
+  check('cross-object reply labels the group as the related field',
+    (r.json?.data?.fields || []).some((f) => f.apiName === 'status' && /Status/.test(f.label) && f.label.includes(':')),
+    JSON.stringify((r.json?.data?.fields || []).filter((f) => f.apiName === 'status')));
+
+  // ── 33. Allow Reports off ────────────────────────────────────────────────
+  await ObjectMeta.updateOne({ tenantId, apiName: childApi }, { allowReports: false });
+  r = await post(adminCookie2, { objectApiName: childApi, aggregations: [{ func: 'count' }] });
+  check('Allow Reports off: /reports/run refuses the object', r.status === 403, `HTTP ${r.status}`);
+  r = await post(adminCookie2, { objectApiName: parentApi, aggregations: [{ func: 'count' }],
+    crossObject: { lookupField: 'x', relatedObject: childApi } });
+  await ObjectMeta.updateOne({ tenantId, apiName: childApi }, { allowReports: true });
+  r = await post(adminCookie2, { objectApiName: childApi, aggregations: [{ func: 'count' }] });
+  check('Allow Reports back on: it runs again', r.status === 200, `HTTP ${r.status}`);
+
+  // ── 34. View Analytics / Manage Analytics, record visibility, field security
+  const perm = (objectApiName, extra = []) => ({ objectApiName, canCreate: false, canRead: true, canUpdate: false, canDelete: false, fieldPermissions: extra });
+  const mkRole = (key, appPermissions, objs) => Role.create({ tenantId, name: `s11${key}_${RUN}`, label: key, dataAccess: 'all', appPermissions, objectPermissions: objs });
+  const rolePlain = await mkRole('plain', {}, [perm(childApi), perm(parentApi)]);
+  const roleView = await mkRole('view', { canViewAnalytics: true }, [perm(childApi, [{ fieldApiName: 'task_notes', canView: false }]), perm(parentApi)]);
+  const roleManage = await mkRole('manage', { canViewAnalytics: true, canManageAnalytics: true }, [perm(childApi), perm(parentApi)]);
+  const mkUser = (key, role) => User.create({ tenantId, firstName: 'S11', lastName: key, email: `s11-${key}-${RUN}@example.com`,
+    username: `s11_${key}_${RUN}`, password: PASSWORD, role: role._id, status: 'active', emailVerified: true });
+  const uPlain = await mkUser('plain', rolePlain);
+  const uView = await mkUser('view', roleView);
+  const uManage = await mkUser('manage', roleManage);
+  const cPlain = await loginCookie(uPlain.email);
+  const cView = await loginCookie(uView.email);
+  const cManage = await loginCookie(uManage.email);
+
+  r = await post(cPlain, { objectApiName: childApi, aggregations: [{ func: 'count' }] });
+  check('without View Analytics a report cannot be run', r.status === 403, `HTTP ${r.status}`);
+  r = await req('/api/v1/reports', { cookie: cPlain });
+  check('without View Analytics the report list is closed', r.status === 403, `HTTP ${r.status}`);
+  r = await post(cView, { objectApiName: childApi, groupBy: 'priority', aggregations: [{ func: 'sum', field: 'hours', alias: 'h' }] });
+  check('with View Analytics a report runs', r.status === 200 && (r.json?.data?.results || []).length === 3, `HTTP ${r.status}`);
+  r = await post(cView, { objectApiName: childApi, crossObject: { lookupField: 'project', relatedObject: parentApi, relatedGroupBy: 'status' }, aggregations: [{ func: 'count' }] });
+  check('with View Analytics a one-level cross-object report runs', r.status === 200 && (r.json?.data?.results || []).length === 3, `HTTP ${r.status}`);
+  r = await req('/api/v1/reports', { method: 'POST', cookie: cView, body: { name: 'Nope', objectApiName: childApi } });
+  check('View Analytics alone cannot save a report', r.status === 403, `HTTP ${r.status}`);
+  r = await req('/api/v1/reports', { method: 'POST', cookie: cManage, body: { name: 'Manager report', objectApiName: childApi, aggregations: [{ func: 'count' }] } });
+  check('Manage Analytics can save a report', r.status === 201, `HTTP ${r.status}`);
+  const mgrId = r.json?.data?._id;
+  r = await req(`/api/v1/reports/${mgrId}`, { method: 'DELETE', cookie: cView });
+  check('View Analytics alone cannot delete a report', r.status === 403, `HTTP ${r.status}`);
+  r = await req(`/api/v1/reports/${mgrId}`, { method: 'DELETE', cookie: cManage });
+  check('Manage Analytics can delete a report', r.status === 200, `HTTP ${r.status}`);
+
+  r = await post(cView, { objectApiName: childApi, groupBy: 'task_notes', aggregations: [{ func: 'count' }] });
+  check('a hidden field cannot be grouped on', r.status === 403, `HTTP ${r.status}`);
+  r = await post(cView, { objectApiName: childApi, filters: [{ field: 'task_notes', operator: 'contains', value: 'API' }], aggregations: [{ func: 'count' }] });
+  check('a hidden field cannot be filtered on', r.status === 403, `HTTP ${r.status}`);
+  r = await post(cView, { objectApiName: childApi, limit: 50 });
+  const raw = r.json?.data?.results || [];
+  check('raw records leave the hidden field out', raw.length === 6 && raw.every((x) => !('task_notes' in (x.data || {}))), `n=${raw.length}`);
+
+
+  // ── 35. Dashboard widgets follow the same rules as reports ───────────────
+  const widget = (cookie, type, config) => req('/api/v1/dashboards/widget-data', { method: 'POST', cookie, body: { type, config } });
+  r = await widget(adminCookie2, 'bar_chart', { objectApiName: childApi, groupBy: 'priority', aggregation: { func: 'sum', field: 'hours' } });
+  check('dashboard widget: SUM grouped by priority runs', r.status === 200 && (r.json?.data?.data?.results || r.json?.data?.results || []).length === 3, `HTTP ${r.status}`);
+  r = await widget(adminCookie2, 'bar_chart', { objectApiName: childApi, groupBy: 'priority', aggregation: { func: 'median', field: 'hours' } });
+  check('dashboard widget: an unsupported function is refused', r.status === 400, `HTTP ${r.status}`);
+  r = await widget(cView, 'metric', { objectApiName: childApi, aggregation: 'sum', field: 'task_notes' });
+  check('dashboard widget: a hidden field cannot be totalled or grouped', r.status === 403, `HTTP ${r.status}`);
+  const roleOwn = await Role.create({ tenantId, name: `s11own_${RUN}`, label: 'own', dataAccess: 'own', appPermissions: { canViewAnalytics: true }, objectPermissions: [perm(childApi)] });
+  const uOwn = await mkUser('own', roleOwn);
+  const cOwn = await loginCookie(uOwn.email);
+  r = await widget(cOwn, 'metric', { objectApiName: childApi, aggregation: 'count' });
+  check('dashboard widget: only counts records the user may see', (r.json?.data?.data?.value ?? r.json?.data?.value) === 0, JSON.stringify(r.json?.data));
+  r = await widget(adminCookie2, 'metric', { objectApiName: childApi, aggregation: 'count' });
+  check('dashboard widget: admin sees all six', (r.json?.data?.data?.value ?? r.json?.data?.value) === 6, JSON.stringify(r.json?.data));
+  r = await post(cOwn, { objectApiName: childApi, aggregations: [{ func: 'count' }] });
+  check('report: only counts records the user may see', (r.json?.data?.results?.[0]?.count_all ?? 0) === 0, JSON.stringify(r.json?.data?.results));
+  await ObjectMeta.updateOne({ tenantId, apiName: childApi }, { allowReports: false });
+  r = await widget(adminCookie2, 'metric', { objectApiName: childApi, aggregation: 'count' });
+  check('dashboard widget: Allow Reports off refuses the object', r.status === 403, `HTTP ${r.status}`);
+  await ObjectMeta.updateOne({ tenantId, apiName: childApi }, { allowReports: true });
 
 } catch (err) {
   check('test harness ran without error', false, err.stack || err.message);

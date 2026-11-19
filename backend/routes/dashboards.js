@@ -8,6 +8,8 @@ import User from '../models/User.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
+import { hasObjectPermission, buildDataAccessFilter } from '../middleware/permissions.js';
+import { assertReportFunctions, assertReportFieldsVisible } from '../utils/reportGuards.js';
 
 const router = express.Router();
 router.use(requireAuth, enforceTenant);
@@ -390,6 +392,24 @@ router.post(
       }
     }
 
+    // Widgets follow the same rules as reports: Allow Reports, Read on the object,
+    // the user's record visibility, field security, and the five shared functions.
+    let dataFilter = {};
+    if (config.objectApiName) {
+      const wObj = await ObjectMeta.findOne({ tenantId: req.tenantId, apiName: config.objectApiName }).select('label allowReports').lean();
+      if (!wObj) throw new AppError(`Object "${config.objectApiName}" not found.`, 404);
+      if (wObj.allowReports === false) throw new AppError(`Reporting is turned off for ${wObj.label}.`, 403);
+      if (!(await hasObjectPermission(req.user, 'read', config.objectApiName))) {
+        throw new AppError(`You do not have permission to read ${config.objectApiName}.`, 403);
+      }
+      dataFilter = await buildDataAccessFilter(req.user, config.objectApiName);
+      const fn = type === 'metric' ? config.aggregation : config.aggregation?.func;
+      assertReportFunctions(fn ? [{ func: fn }] : []);
+      await assertReportFieldsVisible(req.user, config.objectApiName, [
+        config.field, config.aggregation?.field, config.groupBy, ...(config.columns || []), ...(Array.isArray(config.filters) ? config.filters.map((c) => c?.field) : Object.keys(config.filters || {})),
+      ]);
+    }
+
     switch (type) {
       case 'metric': {
         const {
@@ -404,6 +424,7 @@ router.post(
           tenantId: tenantObjId,
           objectApiName,
           isDeleted: false,
+          ...dataFilter,
         };
         applyFilters(match, filters);
 
@@ -445,6 +466,7 @@ router.post(
           tenantId: tenantObjId,
           objectApiName,
           isDeleted: false,
+          ...dataFilter,
         };
         applyFilters(match, filters);
 
@@ -483,6 +505,7 @@ router.post(
           tenantId: req.tenantId,
           objectApiName,
           isDeleted: false,
+          ...dataFilter,
         };
         applyFilters(query, filters);
 

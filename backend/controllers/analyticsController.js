@@ -1,9 +1,11 @@
 import mongoose from 'mongoose';
 import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
+import FieldMeta from '../models/FieldMeta.js';
 import User from '../models/User.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { hasObjectPermission, buildDataAccessFilter } from '../middleware/permissions.js';
+import { assertReportFunctions, assertReportFieldsVisible } from '../utils/reportGuards.js';
 
 /**
  * GET /api/analytics/overview
@@ -75,6 +77,17 @@ const runReport = asyncHandler(async (req, res) => {
   }
   if (relatedLookup?.object && !(await hasObjectPermission(req.user, 'read', relatedLookup.object))) {
     throw new AppError(`You do not have permission to read ${relatedLookup.object}.`, 403);
+  }
+  assertReportFunctions(aggregations);
+  if (relatedLookup?.field && relatedLookup?.object) {
+    const lf = await FieldMeta.findOne({ tenantId: req.tenantId, objectApiName, apiName: relatedLookup.field }).lean();
+    if (!lf || !['lookup', 'master_detail'].includes(lf.type) || lf.lookupObjectApiName !== relatedLookup.object) {
+      throw new AppError(`"${relatedLookup.field}" is not a Lookup or Master-Detail field on ${objectApiName} pointing to ${relatedLookup.object}.`, 400);
+    }
+  }
+  await assertReportFieldsVisible(req.user, objectApiName, [groupBy, ...aggregations.map((a) => a.field), ...Object.keys(filters), dateRange?.field]);
+  if (relatedLookup?.object && relatedGroupBy) {
+    await assertReportFieldsVisible(req.user, relatedLookup.object, [relatedGroupBy]);
   }
   const dataFilter = await buildDataAccessFilter(req.user, objectApiName);
 
