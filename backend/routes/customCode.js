@@ -12,6 +12,7 @@ router.post('/', checkAppPermission('canManageCustomCode'), cc.create);
 router.post('/:name/versions', checkAppPermission('canManageCustomCode'), cc.addVersion);
 router.post('/:name/activate', checkAppPermission('canDeployCustomCode'), cc.activate);
 router.post('/:name/restore', checkAppPermission('canDeployCustomCode'), cc.restore);
+router.post('/:name/status', checkAppPermission('canDeployCustomCode'), cc.setStatus);
 router.post('/:name/execute', checkAppPermission('canDeployCustomCode'), cc.execute);
 router.patch('/:name', checkAppPermission('canManageCustomCode'), cc.update);
 router.patch('/:name/versions/:version', checkAppPermission('canManageCustomCode'), cc.updateVersion);

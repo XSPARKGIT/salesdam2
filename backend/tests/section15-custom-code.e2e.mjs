@@ -103,6 +103,38 @@ try {
   const execLoop = await req('/api/v1/custom-code/loop_code/execute', { method: 'POST', cookie: CA, body: { inputs: {} } });
   check('timeout protection blocks infinite loop', execLoop.status >= 400, `HTTP ${execLoop.status}`);
 
+
+  // ---- Runtime isolation (BRD 15.4.1, 15.4.19-15.4.30, 15.5) ----
+  const run = async (name, code, body = {}) => {
+    const c = await req('/api/v1/custom-code', { method: 'POST', cookie: CA, body: { name, description: 'iso', code } });
+    if (c.status !== 201) return c;
+    return req(`/api/v1/custom-code/${name}/execute`, { method: 'POST', cookie: CA, body: { inputs: {}, version: 1, ...body } });
+  };
+  const esc = await run('iso_escape', 'var o={};try{o.a=typeof readRecord.constructor.constructor("return process")()}catch(e){o.a="blocked"}try{o.b=typeof inputs.constructor.constructor("return process")()}catch(e){o.b="blocked"}try{o.c=typeof require}catch(e){o.c="x"}result=o;');
+  check('escape via host function constructor is blocked (15.4.1/15.4.29)', esc.status === 200 && esc.json?.data?.output?.a === 'blocked' && esc.json?.data?.output?.b === 'blocked' && esc.json?.data?.output?.c === 'undefined', JSON.stringify(esc.json?.data?.output));
+  const mem = await run('iso_mem', 'var a=[];for(;;){a.push(new Array(1e6).fill(7));}');
+  check('memory growth is stopped (15.4.20)', mem.status >= 400, `HTTP ${mem.status}`);
+  const rec = await run('iso_recur', 'function f(n){return f(n+1)+1}result=f(0)');
+  check('runaway recursion is contained (15.4.21)', rec.status >= 400, `HTTP ${rec.status}`);
+  const thr = await run('iso_throw', 'throw new Error("boom")');
+  const after = await req('/api/v1/custom-code', { cookie: CA });
+  check('a failing script is reported and the server stays up (15.4.30)', thr.status === 500 && after.status === 200, `HTTP ${thr.status}/${after.status}`);
+  const flt = await run('iso_filter', 'queryRecords("account",{"$where":"1"}).then(function(r){result="allowed"},function(e){result="refused"})');
+  check('query operators from code are refused (15.4.25)', flt.json?.data?.output === 'refused', JSON.stringify(flt.json?.data?.output));
+  const api = await run('iso_api', 'callApi("Not Approved","/x").then(function(r){result="called"},function(e){result="refused"})');
+  check('call to a non-approved external system is refused (15.1.8)', api.json?.data?.output === 'refused', JSON.stringify(api.json?.data?.output));
+  const w = await run('iso_write', 'createRecord("account",{name:"x"}).then(function(){result="wrote"},function(e){result=e.message})');
+  check('test run cannot write (15.5.6)', /Test mode/.test(String(w.json?.data?.output)), JSON.stringify(w.json?.data?.output));
+  // Draft -> Test -> Active -> Inactive; a draft can be test-run
+  await req('/api/v1/custom-code/iso_write/versions', { method: 'POST', cookie: CA, body: { code: 'result=2', changeNote: 'v2' } });
+  const toTest = await req('/api/v1/custom-code/iso_write/status', { method: 'POST', cookie: CA, body: { version: 2, status: 'test' } });
+  const draftRun = await req('/api/v1/custom-code/iso_write/execute', { method: 'POST', cookie: CA, body: { version: 2 } });
+  check('draft/test version can be test-run before activation (15.5)', toTest.status === 200 && draftRun.json?.data?.output === 2 && draftRun.json?.data?.testMode === true, `HTTP ${toTest.status}/${draftRun.status}`);
+  await req('/api/v1/custom-code/iso_write/activate', { method: 'POST', cookie: CA, body: { version: 2 } });
+  const toInactive = await req('/api/v1/custom-code/iso_write/status', { method: 'POST', cookie: CA, body: { version: 2, status: 'inactive' } });
+  const inactiveRun = await req('/api/v1/custom-code/iso_write/execute', { method: 'POST', cookie: CA, body: {} });
+  check('inactive code no longer executes (15.4.12/15.4.13)', toInactive.status === 200 && inactiveRun.status >= 400, `HTTP ${toInactive.status}/${inactiveRun.status}`);
+
 } catch (err) {
   console.error('TEST RUN ERROR:', err);
   check('test run completed without unexpected error', false, err.message);

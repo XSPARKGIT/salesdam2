@@ -215,14 +215,18 @@ const entryConditionMet = async (automation, record, tenantId, prev = null) => {
 // ─── Condition evaluation ─────────────────────────────────────────────────────
 // `prev` (the values before an update) makes the 'changed' operator real; with
 // no previous values (create, scheduled, manual) nothing counts as changed.
-const evaluateConditions = (conditions, record, logic = 'all', prev = null) => {
+const evaluateConditions = (conditions, record, logic = 'all', prev = null, vars = null) => {
   if (!conditions || conditions.length === 0) return true;
 
   const evalOne = (cond) => {
-    const fieldValue =
+    let fieldValue =
       record.data instanceof Map
         ? record.data.get(cond.field)
         : record.data?.[cond.field];
+    // BRD 15.1.7: a decision can branch on a value a earlier step returned, e.g. field "$review.risk".
+    if (vars && typeof cond.field === 'string' && cond.field.startsWith('$')) {
+      fieldValue = cond.field.slice(1).split('.').reduce((o, k) => (o == null ? undefined : o[k]), vars);
+    }
 
     const fvStr = typeof fieldValue === 'string' ? fieldValue.toLowerCase() : fieldValue;
     const cvStr = typeof cond.value === 'string' ? cond.value.toLowerCase() : cond.value;
@@ -427,8 +431,8 @@ const executeNodeInner = async (node, allNodes, record, ctx, tenantId) => {
           conditions.length === 0
             ? false
             : logic === 'all'
-              ? conditions.every((c) => evaluateConditions([c], record))
-              : conditions.some((c) => evaluateConditions([c], record));
+              ? conditions.every((c) => evaluateConditions([c], record, 'all', null, ctx.variables))
+              : conditions.some((c) => evaluateConditions([c], record, 'all', null, ctx.variables));
         if (passed) {
           matchedOutcome = outcome;
           break;
@@ -497,7 +501,11 @@ const executeNodeInner = async (node, allNodes, record, ctx, tenantId) => {
       try {
         const { renderPdfTemplate } = await import('./pdfRenderService.js');
         const { default: File } = await import('../models/File.js');
-        const buffer = await renderPdfTemplate(tenantId, templateId, null);
+        // BRD 15.3.13: the template is rendered against the flow's record (it was rendered with none),
+        // and any inputs the step maps ({record.x} / {$var} / literals) are passed through.
+        const mapped = {};
+        for (const [k, v] of Object.entries(inputMappings || {})) mapped[k] = typeof v === 'string' ? interpolate(v, record, ctx) : v;
+        const buffer = await renderPdfTemplate(tenantId, templateId, record?._id || null, { inputs: mapped });
         if (saveToFiles !== false) {
           const tmpl = await (await import('../models/PdfTemplate.js')).default.findById(templateId);
           const recordData = record.data instanceof Map ? Object.fromEntries(record.data) : (record.data || {});
@@ -548,7 +556,11 @@ const executeNodeInner = async (node, allNodes, record, ctx, tenantId) => {
       try {
         const { executeCustomCode } = await import('./customCodeService.js');
         const res = await executeCustomCode(tenantId, ccName, ccInputs, { record, ctx });
-        if (outputVariable) ctx.variables[outputVariable] = res.output;
+        if (outputVariable) {
+          ctx.variables[outputVariable] = res.output;
+          ctx.variables[`${outputVariable}__ok`] = true;
+          ctx.variables[`${outputVariable}__error`] = '';
+        }
         say(
           ctx,
           `Ran "${ccName}"` + (outputVariable ? ` -> {$${outputVariable}} = ${JSON.stringify(res.output)}` : ''),
@@ -556,6 +568,12 @@ const executeNodeInner = async (node, allNodes, record, ctx, tenantId) => {
       } catch (err) {
         // Custom code failures are contained here rather than failing the flow,
         // so the trace has to carry the error itself.
+        // BRD 15.1.10: later steps can test {$<outputVariable>__ok} / {$<outputVariable>__error}.
+        if (outputVariable) {
+          ctx.variables[outputVariable] = null;
+          ctx.variables[`${outputVariable}__ok`] = false;
+          ctx.variables[`${outputVariable}__error`] = err.message;
+        }
         say(ctx, `Custom code "${ccName}" failed: ${err.message}`, 'failed');
         logger.error(`Custom code node failed: ${err.message}`);
       }
@@ -1234,8 +1252,9 @@ async function executeEmail(config, record, ctx, tenantId) {
  * more than an agent can.
  */
 async function executeSendMessageTemplate(config, record, ctx, tenantId) {
-  if (!config.to || !config.templateId) {
-    say(ctx, 'Needs both a recipient and a template - nothing sent', 'warning');
+  // A blank template falls back to the tenant's default communication template (checked at send).
+  if (!config.to) {
+    say(ctx, 'Needs a recipient - nothing sent', 'warning');
     return;
   }
   const toAddr = interpolate(config.to, record, ctx);
@@ -1269,7 +1288,7 @@ async function executeHttpRequest(config, record, ctx, tenantId) {
 
   // If referencing an ExternalObject, pull its base URL + auth
   if (config.externalObjectId) {
-    const ext = await ExternalObject.findById(config.externalObjectId).select(
+    const ext = await ExternalObject.findOne({ _id: config.externalObjectId, tenantId }).select(
       '+credentials',
     );
     if (ext && ext.isActive) {

@@ -38,6 +38,7 @@ const customCodeSchema = new mongoose.Schema(
           error: String,
           inputs: mongoose.Schema.Types.Mixed,
           output: mongoose.Schema.Types.Mixed,
+          testMode: Boolean,
         },
       ],
       default: [],

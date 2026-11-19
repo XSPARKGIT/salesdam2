@@ -63,9 +63,17 @@ const activate = asyncHandler(async (req, res) => {
 });
 
 const execute = asyncHandler(async (req, res) => {
-  const { inputs, record, testMode } = req.body || {};
-  const result = await customCodeService.executeCustomCode(req.tenantId, req.params.name, inputs || {}, { record, testMode: !!testMode, userId: req.user._id });
+  const { inputs, record, testMode, version } = req.body || {};
+  // BRD 15.5.6: a run from this endpoint is a TEST run unless production is asked for explicitly.
+  const result = await customCodeService.executeCustomCode(req.tenantId, req.params.name, inputs || {}, { record, testMode: testMode !== false, version: version ?? null, userId: req.user._id });
   sendSuccess(res, { data: result }, 'Executed');
+});
+
+const setStatus = asyncHandler(async (req, res) => {
+  const { version, status } = req.body || {};
+  const doc = await customCodeService.setVersionStatus(req.tenantId, req.params.name, version, status, req.user);
+  await audit({ tenantId: req.tenantId, userId: req.user._id, action: 'custom_code_status', resource: 'CustomCode', resourceId: doc._id, details: { name: req.params.name, version: Number(version), status }, req });
+  sendSuccess(res, { data: doc }, 'Status updated');
 });
 
 const remove = asyncHandler(async (req, res) => {
@@ -135,4 +143,4 @@ const updateVersion = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: doc }, 'Version updated');
 });
 
-export { list, get, create, addVersion, activate, execute, remove, restore, update, updateVersion };
+export { setStatus, list, get, create, addVersion, activate, execute, remove, restore, update, updateVersion };

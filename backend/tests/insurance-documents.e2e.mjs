@@ -171,8 +171,8 @@ const main = async () => {
     const A = await seedTenant('a');
     const B = await seedTenant('b');
     tenantIds = [A.tenant._id, B.tenant._id];
-    const ca = await login(A.user.username);
-    const cb = await login(B.user.username);
+    const ca = await login(A.user.email);
+    const cb = await login(B.user.email);
     check('tenant A admin authenticates', !!ca);
     check('tenant B admin authenticates', !!cb);
 

@@ -2,7 +2,8 @@ import express from 'express';
 import PdfTemplate from '../models/PdfTemplate.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
-import { checkAppPermission } from '../middleware/permissions.js';
+import { checkAppPermission, buildDataAccessFilter } from '../middleware/permissions.js';
+import DynamicRecord from '../models/DynamicRecord.js';
 import { asyncHandler, sendSuccess, AppError, paginate } from '../utils/errors.js';
 import { renderPdfTemplate } from '../services/pdfRenderService.js';
 import { audit } from '../utils/auditLogger.js';
@@ -110,6 +111,13 @@ router.post('/:id/duplicate', checkAppPermission('canManageDocumentTemplates'), 
 // Render a PDF from a template using actual record data
 router.get('/:id/render', asyncHandler(async (req, res) => {
   const { recordId } = req.query;
+  if (recordId) {
+    // BRD 15.4.12: a document can only be generated from a record the user may see.
+    const probe = await DynamicRecord.findOne({ _id: recordId, tenantId: req.tenantId, isDeleted: false }).select('objectApiName').lean();
+    if (!probe) throw new AppError('Record not found.', 404);
+    const visible = await DynamicRecord.exists({ _id: recordId, tenantId: req.tenantId, objectApiName: probe.objectApiName, isDeleted: false, ...(await buildDataAccessFilter(req.user, probe.objectApiName)) });
+    if (!visible) throw new AppError('Record not found.', 404);
+  }
   const buffer = await renderPdfTemplate(req.tenantId, req.params.id, recordId);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="document.pdf"`);
