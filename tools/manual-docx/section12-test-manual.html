@@ -1,0 +1,381 @@
+<title>Import and Export Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Data Import and Export</h1>
+    <p class="standfirst">A step-by-step script for BRD Section&nbsp;12. You are checking that the import screen offers every field of an object (including ones created today) as a mapping target, that you can choose exactly which fields to export, and that only an administrator can switch off validation rules and flows for a bulk import. You build a small throwaway object and delete it at the end.</p>
+    <div class="mast-meta"><span><b>Scope</b> BRD §12.1 – §12.3</span><span><b>Tests</b> 12</span><span><b>Time</b> ~40 minutes</span><span><b>Issued</b> 19 Nov 2026</span></div>
+  </header>
+  <div class="progress-bar"><span class="count" id="count">0 of 12 complete</span><div class="track"><div class="fill" id="fill"></div></div><button class="btn-reset" id="reset" type="button">Reset</button></div>
+<h2>Before you start</h2><div class="callout"><h3>Signing in</h3><dl class="creds"><dt>Address</dt><dd>http://localhost:5173</dd><dt>Administrator</dt><dd>admin@example.com (System Admin, Super User)</dd><dt>Workspace</dt><dd>My Company</dd></dl>
+  <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">Ask your Salesdam contact for the administrator password. Pages can take 10–30 seconds to fill because the database is remote. The screens are under <b>Setup → Admin Settings → Data Import</b> and <b>Data Export</b>.</p></div><div class="callout"><h3>What you need</h3><ul>
+<li><b>A throwaway object.</b> Create <b>S12 Lead</b> (Setup → Object Settings → New Object) with the record name set to <b>Auto Number</b>, label <b>Lead Ref</b>, prefix <b>LD-</b>. Then add these fields (Fields tab → New Field): <b>Company</b> (Text, required), <b>Score</b> (Number), <b>Stage</b> (Picklist: New, Qualified, Lost), <b>Start Date</b> (Date), <b>Policy</b> (Lookup to Policy), <b>Internal Notes</b> (Text) and <b>Double Score</b> (Formula, Number, <code>score * 2</code>).</li>
+<li><b>One validation rule</b> on S12 Lead: expression <code>score &lt; 0</code>, error message <b>Score cannot be negative.</b>, error field Score, active.</li>
+<li><b>One flow</b> (Automation → New Flow, record-triggered on S12 Lead, when a record is <b>created</b>) with one <b>Update Record</b> step that sets <b>Description</b> to <b>Flow stamped this lead</b>. Save and activate it.</li>
+<li><b>A CSV file.</b> Test 2 gives the text of <b>s12-leads.csv</b>; save it on your computer.</li></ul>
+<p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">The same setup is removed at the end (Test 12). Your Salesdam contact can supply the object, rule and flow ready-made if you prefer.</p></div><h2>Mapping columns to fields</h2><p class="sec-note">BRD §12.1 — the column-to-field step reads the object's live field list, so a new custom field is a mapping target straight away, with no development work.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. A field created today is available as a mapping target immediately</span>
+        <span class="refs"><span class="ref">§12.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Admin Settings → Data Import</b>. In <b>Target Object</b> choose <b>S12 Lead (Custom)</b>. Under the object, read the line <b>Available fields</b>.</li><li>In another tab, open <b>Setup → Object Settings → S12 Lead → Fields → New Field</b>. Create a <b>Text</b> field called <b>Region</b> and save. (The click path for creating a field is the one proved in the Metadata Engine manual.)</li><li>Return to the Data Import tab and click <b>↻ Refresh fields</b>. (The page also refreshes by itself when you switch back to the tab.)</li></ol>
+      <div class="expect"><b>Expected</b>Before: <b>Available fields</b> lists ten fields and does not include <b>region</b>. After the refresh the line reads <b>(11 fields loaded)</b> and includes <b>region</b>. No code change or restart was needed.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. Columns line up with fields by their header, and the system fills in calculated fields itself</span>
+        <span class="refs"><span class="ref">§12.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Make a file <b>s12-leads.csv</b> (a spreadsheet saved as CSV is fine) with these seven lines, the first being the headers:<br><code>Company,Score,stage,start date,Region,Double Score,Comments</code><br><code>Acme Ltd,10,Qualified,2026-03-15,North,99,hello</code><br><code>Beta Ltd,-4,New,2026-03-16,South,1,rule row</code><br><code>,5,New,2026-03-17,East,2,missing company</code><br><code>Gamma Ltd,abc,Gone,notadate,West,3,bad types</code><br><code>Delta Ltd,8,Lost,15/03/2026,West,4,date style</code><br><code>Epsilon Ltd,9,qualified,2026-03-18,West,5,case</code></li><li>On Data Import click the drop area (<i>Click or drag a file here</i>) and choose the file. <b>Needs a person</b>: an automated run cannot operate the file chooser, so the file was dropped onto the same area instead.</li><li>Read the table <b>CSV COLUMN / SAMPLE VALUE / MAPS TO FIELD</b>. Open the list on the <b>Double Score</b> row.</li></ol>
+      <div class="expect"><b>Expected</b><b>Company, Score, stage, start date</b> and <b>Region</b> are matched to Company, Score, Stage, Start Date and Region automatically (capitals and spaces do not matter, and the newly created <b>Region</b> is picked up too). <b>Double Score</b> and <b>Comments</b> show <b>— Skip this column —</b>. The lists offer every field <b>except</b> the calculated ones (Lead Ref and Double Score are not offered), because the system fills those in. The summary reads 7 columns, 5 mapped, 2 skipped.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. A missing required column is flagged before anything is imported</span>
+        <span class="refs"><span class="ref">§12.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Click <b>Cancel</b>, then choose a file whose only headers are <b>Score</b> and <b>Stage</b> (one row: <code>1,New</code>).</li><li>Read the notice above the table, and click <b>Cancel</b> again.</li></ol>
+      <div class="expect"><b>Expected</b>The notice reads <b>Required field Company has no column. Every row will be rejected unless you add that column to the file or map an existing column to it.</b> Nothing has been imported.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. By default every row goes through the full validation pipeline and bad rows say why</span>
+        <span class="refs"><span class="ref">§12.3</span><span class="ref">§12.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Choose <b>s12-leads.csv</b> again (the file from Test 2). Click <b>Review &amp; Import</b>. Leave <b>Bypass Validation Rules and Flows</b> <b>unticked</b>. Click <b>Confirm Import</b>.</li><li>Read the result screen.</li></ol>
+      <div class="expect"><b>Expected</b>Result: <b>1 Created, 5 Failed</b>, and a <b>Why rows failed</b> list, one line per refused row, all of a row's problems together: <b>Row 3</b> Score cannot be negative. · <b>Row 4</b> "Company" is required. · <b>Row 5</b> "Score" must be a number, "Stage" has invalid value "Gone", "Start Date" must be a valid date. · <b>Row 6</b> "Start Date" must be a valid date (dates must be written 2026-03-15; 15/03/2026 is refused). · <b>Row 7</b> "Stage" has invalid value "qualified" (picklist values must match exactly). The page title is <b>Import Complete</b>; <b>Updated</b> shows a dash because an import only creates records.</div>
+    </div>
+  </div>
+<h2>Choosing what to export</h2><p class="sec-note">BRD §12.2 — export any selection of fields per object, in the format and with the filters you choose, never beyond what the exporting person may see.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. Only the fields you tick are exported, including calculated ones</span>
+        <span class="refs"><span class="ref">§12.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Admin Settings → Data Export</b>. Choose <b>S12 Lead</b> as <b>Object to Export</b>. Note the count <b>11 of 11 fields selected</b> and that the format is <b>CSV</b>.</li><li>Click <b>Deselect all</b>, then tick <b>Score</b>, <b>Company</b> and <b>Double Score</b>. The button now reads <b>Export S12 Lead as CSV · 3 fields</b>. Click it.</li><li>Open the downloaded <b>s12_lead-export.csv</b>.</li></ol>
+      <div class="expect"><b>Expected</b>A message says <b>Exported 3 fields from s12_lead as CSV.</b> The file has exactly three columns, <b>Score, Company, Double Score</b>, and one row for the lead the Test 4 import created, plus the leads from earlier tests: <code>10,Acme Ltd,20</code> (Double Score is the real value 10 × 2, not empty). Columns follow the order of the fields on the object, not the order you ticked them.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. A filter exports only the matching records</span>
+        <span class="refs"><span class="ref">§12.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Still on Data Export with the same three fields, set the filter row to <b>Score</b>, <b>&gt; greater than</b>, value <b>9</b>. The header says <b>1 active filter</b>.</li><li>Click the export button and open the file.</li></ol>
+      <div class="expect"><b>Expected</b>Only rows whose Score is above 9 are in the file (in the example data <code>10,Acme Ltd,20</code> and, if Test 10 has been run, <code>20,Bypass Ok Ltd,40</code>). Records with a lower score are absent.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. All fields and the JSON format both work</span>
+        <span class="refs"><span class="ref">§12.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Click <b>JSON</b>, leave every field ticked (<b>Select all</b> if needed) and click the export button. Open the file.</li></ol>
+      <div class="expect"><b>Expected</b>The file is a list of records, each carrying all of the object's fields (name, owner_id, description, score, stage, start_date, policy_ref, company, internal_notes, double_score, region). Roll-Up Summary fields are not offered on this screen.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. A field hidden from a person is never exported to them, even when asked for</span>
+        <span class="refs"><span class="ref">§12.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In Setup → Roles, create a role <b>S12 Importer</b> that may read, create, import and export <b>S12 Lead</b>, with <b>Import Data</b> and <b>Export Data</b> ticked under System Permissions, and with <b>Internal Notes</b> not visible (Field-Level Security). Create a user with that role.</li><li>Sign in as that user, open <b>Data Export</b>, choose <b>S12 Lead</b>, and look for <b>Internal Notes</b> in the field list. Then try to request it anyway: <code>…/admin/export?object=s12_lead&amp;fields=company,score,internal_notes</code>.</li></ol>
+      <div class="expect"><b>Expected</b><b>Internal Notes</b> is not offered. The forced request returns the file with only <b>Score</b> and <b>Company</b>: the hidden column is silently dropped, not an error. <b>Needs a person</b>: the pane can only be signed in as one person, so this was proved by signing in as that user through the same requests the screen sends (admin export and per-object export, requested fields and all fields) rather than by clicking.</div>
+    </div>
+  </div>
+<h2>Bypassing validation rules and flows</h2><p class="sec-note">BRD §12.3 — a bulk import may skip Validation Rules and Flows only when an administrator explicitly asks for it. The default is the full pipeline.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. By default a flow runs for every imported record</span>
+        <span class="refs"><span class="ref">§12.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Data Export</b> for <b>S12 Lead</b>, deselect everything and tick only <b>Company</b> and <b>Description</b>. Export and open the file.</li></ol>
+      <div class="expect"><b>Expected</b>The lead imported in Test 4 (<b>Acme Ltd</b>) has <b>Flow stamped this lead</b> in <b>Description</b>: the flow ran for the imported record.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. An administrator can bypass validation rules and flows for a data migration</span>
+        <span class="refs"><span class="ref">§12.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Data Import</b> choose <b>S12 Lead</b> and a file with the headers <b>Company, Score, Stage, Start Date</b> and three rows: <code>Bypass Neg Ltd,-9,New,2026-05-01</code> · <code>Bypass Ok Ltd,20,Qualified,2026-05-02</code> · <code>Bypass Bad Ltd,abc,Gone,notadate</code>.</li><li>Click <b>Review &amp; Import</b>. The tick box <b>Bypass Validation Rules and Flows (admin only; for data migration)</b> is visible and unticked. Tick it: a warning appears, <b>Warning: validation rules and flows will be skipped for this import only.</b> Click <b>Confirm Import</b> and accept the confirmation pop-up (<i>Bypass Validation Rules and Flows for this import? …</i>). <b>Needs a person</b> for the pop-up: the checking tool cannot press it, so it was accepted by overriding the browser confirm.</li><li>Read the result, then repeat the Test 9 export (Company, Description). Open <b>Admin → Audit Logs</b> (Setup) and read the newest <b>import</b> rows for S12 Lead.</li></ol>
+      <div class="expect"><b>Expected</b>Result: <b>2 Created, 1 Failed</b>. The negative-score row <b>was created</b> (the validation rule was skipped), and the row with a bad number, picklist value and date <b>is still refused</b>: bypass skips <b>rules and flows only</b>, never the data-type checks. In the export, <b>Bypass Neg Ltd</b> and <b>Bypass Ok Ltd</b> have an <b>empty Description</b>: <b>the flow did not run</b>. Audit Logs has a new <b>import</b> row with the new <b>Details</b> column reading <b>created: 2, failed: 1, bypassValidation: true</b>; the Test 4 row reads <b>bypassValidation: false</b>. Duplicate rules still apply to a bypassed import.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. Only an administrator can bypass: it is not offered to anyone else, and a forged request is refused</span>
+        <span class="refs"><span class="ref">§12.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Signed in as the <b>S12 Importer</b> user from Test 8, open <b>Data Import</b>, choose <b>S12 Lead</b>, upload a file and click <b>Review &amp; Import</b>.</li><li>Send an import with the bypass flag set anyway (<code>bypassValidation=true</code>) to <code>/admin/import</code> and to <code>/records/s12_lead/import</code>.</li></ol>
+      <div class="expect"><b>Expected</b>The bypass tick box is <b>not on the screen</b> for this user. A normal import by this user creates the valid row and refuses the negative one (<b>Score cannot be negative.</b>), so rules apply to them. Both forged requests are refused with <b>403 — Automation bypass is restricted to administrators.</b> A file that maps a column onto <b>Internal Notes</b> (hidden) is refused with <b>403 — You are not authorized to import into field "internal_notes".</b> <b>Needs a person</b> for the screen itself (one person can be signed in in the pane); the refusals were proved through the requests the screen sends.</div>
+    </div>
+  </div>
+<h2>Clean up</h2><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. Remove everything this manual created</span>
+        <span class="refs"><span class="ref">—</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Setup → Object Settings → <b>S12 Lead</b> → delete the object (type its name when asked); its records go with it. Delete the flow <b>S12 Lead Stamp</b> in Automation. Deactivate the test user and delete the <b>S12 Importer</b> role.</li></ol>
+      <div class="expect"><b>Expected</b>No S12 object, flow, role or active test user remains. Audit Logs keep the import and export rows by design.</div>
+    </div>
+  </div>
+<h2>Not covered by clicking</h2><div class="callout warn"><h3>Proven another way, or not proven here</h3><ul>
+<li>Choosing the file with the file chooser, and the bypass confirmation pop-up, cannot be operated by the checking tool (Tests 2, 3, 4 and 10). The same screen code ran with the file dropped on the drop area.</li>
+<li>Anything that needs a second signed-in person (Tests 8 and 11) was proved through requests as a real test user, not on screen.</li>
+<li>Duplicate rules running on import, and an exported file importing back unchanged, are proved by the automated suites <b>duplicate-detection</b> (21/21) and <b>csv-roundtrip</b> (11/11), not clicked here. The suite <b>section12-import-export</b> (15/15) also proves that a bypassed import skips the flow.</li>
+<li>Dates must be written <b>2026-03-15</b> and picklist values must match exactly; other date styles are refused with a clear message, not converted. Columns in an export follow the object\'s field order, not your tick order. The Import screen only reads <b>.csv, .xlsx and .xls</b> files and stops at 5,000 rows.</li>
+<li>A person without administrator rights cannot create records on an object whose name field is plain Text (the name is read-only to them), so they cannot import into it either. Use an Auto Number name, as S12 Lead does.</li></ul></div>  <footer>Salesdam V3 · Data Import and Export acceptance script · issued 19 November 2026. Tick-box progress is remembered in this browser only.</footer>
+</div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s12-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>

@@ -488,3 +488,19 @@ roles Claims Manager (parent) and Claims Handler, Approval Threshold Amount = **
 **Known and not fixed:** `/analytics/report` stays Read-based (BRD 5.3, proven by app-access), so View Analytics gates only the `/reports` API and the menu; lookups to User cannot be followed one level (Users are not a reportable object) and grouping on them shows ids; dashboard widgets are single-object; no fixture Lookup between reportable objects (the suite builds one); the table header for an ungrouped count reads "Category".
 
 **Lessons:** the pane can read 0x0, so recharts draws nothing: `resize_window` 1200x800 then read `svg text` (reset afterwards); the pane once bounced to /login after backend restarts although the session was valid, so just navigate again; `extract.py` drops `<div class="aside">`, so use a `callout warn` for caveats; `/reports/run` and `/analytics/report` are two separate runners, change both.
+
+---
+
+## 16. Where Section 12 ended
+
+**Tested:** §12.1–§12.3 on a throwaway object **S12 Lead** (auto-number name, Company required, Score, Stage, Start Date, Policy lookup, Internal Notes, formula Double Score, a rule and a record-triggered flow). Clicked: Data Import (new field appears after ↻ Refresh fields, header auto-match, required-column notice, default import with per-row reasons, admin bypass) and Data Export (subset, filter, JSON, all fields) by dropping a `File` on the drop area and capturing the export `Blob` via `URL.createObjectURL`; non-admin and hidden-field cases by real test-user requests (`na.mjs`). Suites once each: `section12-import-export` 15/15, `csv-roundtrip` 11/11, `duplicate-detection` 21/21. Manual: 12 tests, `tools/manual-docx/section12-test-manual.html`.
+
+**Already built:** mapping reads live fields; `fields=` export param with field security; admin-only bypass (403 for others) that skips **validation rules and flows** (not type/required/duplicate checks) and is audited (`bypassValidation`).
+
+**Fixed (uncommitted):** Data Import page was **blank** (`fileRef` never declared); calculated fields offered as mapping targets (now hidden, auto-match skips them); import checked editable-field security only when the UI sent a mapping, not for header auto-match (API); **formula columns exported empty** (now computed in all three export paths; the screen no longer hides formula fields); Import/Export error toasts read `err.response.data.message` (now `err.message`); "create or update" wording; Audit Logs screen had no **Details** column (bypass flag was invisible).
+
+**Known and not fixed:** non-admins cannot import into an object whose name field is Text (name is read-only to them); dates must be ISO and picklists case-exact; export column order follows field order, not tick order; roll-up fields are not exportable; the page's CSV preview splits on commas (quoted commas in a header misalign the preview only).
+
+**Lessons:** the first `select` on admin pages is the tenant switcher: find the object select by its options; the file chooser and `window.confirm` cannot be driven, but a dropped `File` and `window.confirm=()=>true` exercise the same handlers; a role cannot be deleted while a (deactivated) user holds it.
+
+**Left behind:** role *S12 Importer* (held by deactivated user s12.importer@example.com). Object, records, flow deleted.
