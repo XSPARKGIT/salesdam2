@@ -31,6 +31,17 @@ function toDataObj(data) {
   return data; // already a plain object after .lean()
 }
 
+/** Stored data plus the current value of every formula field, so formula columns are not blank. */
+function dataWithFormulas(rec, fields) {
+  const data = toDataObj(rec.data);
+  if (!fields.some((f) => f.type === 'formula')) return data;
+  try {
+    return { ...data, ...computeFormulaValues(data, fields) };
+  } catch {
+    return data;
+  }
+}
+
 /** Escape a value for CSV: wrap in quotes if it contains comma/quote/newline */
 function csvEscape(val) {
   if (val === null || val === undefined) return '';
@@ -282,7 +293,7 @@ export const exportRecords = asyncHandler(async (req, res) => {
 
   const csvLines = [headers.map(csvEscape).join(',')];
   records.forEach((rec) => {
-    const data = toDataObj(rec.data);
+    const data = dataWithFormulas(rec, fields);
     const row = apiNames.map((apiName) => csvEscape(exportValue(data[apiName])));
     csvLines.push(row.join(','));
   });
@@ -420,7 +431,7 @@ export const adminExport = asyncHandler(async (req, res) => {
   if (format === 'JSON') {
     const apiNames = exportFields.map((f) => f.apiName);
     const output = records.map((rec) => {
-      const data = toDataObj(rec.data);
+      const data = dataWithFormulas(rec, allFields);
       const row = {};
       apiNames.forEach((apiName) => {
         row[apiName] = data[apiName] ?? null;
@@ -440,7 +451,7 @@ export const adminExport = asyncHandler(async (req, res) => {
   const apiNames = exportFields.map((f) => f.apiName);
   const csvLines = [headers.map(csvEscape).join(',')];
   records.forEach((rec) => {
-    const data = toDataObj(rec.data);
+    const data = dataWithFormulas(rec, allFields);
     csvLines.push(apiNames.map((n) => csvEscape(exportValue(data[n]))).join(','));
   });
 
@@ -511,12 +522,19 @@ export const importRecords = asyncHandler(async (req, res) => {
     throw new AppError('Automation bypass is restricted to administrators.', 403);
   }
 
-  // Enforce editable-field security on explicit mappings
-  if (explicitMapping) {
+  // Enforce editable-field security on every column that will be written —
+  // explicit mappings and, when none is sent, the header-name auto-matches.
+  const mappingToCheck =
+    explicitMapping ||
+    Object.fromEntries(
+      Object.keys(rows[0] || {}).map((col) => [col, labelToApiName[col.toLowerCase()]]),
+    );
+  {
     const editable = await getEditableFields(req.user, objectApiName, fields.map((f) => f.apiName));
     const editableSet = new Set(editable);
-    for (const [col, mapped] of Object.entries(explicitMapping)) {
+    for (const [col, mapped] of Object.entries(mappingToCheck)) {
       if (!mapped || mapped === '__skip__') continue;
+      if (COMPUTED_TYPES.has(fieldByApiName[mapped]?.type)) continue; // ignored on import
       if (!editableSet.has(mapped)) {
         throw new AppError(`You are not authorized to import into field "${mapped}".`, 403);
       }

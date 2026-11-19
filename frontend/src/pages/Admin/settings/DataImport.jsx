@@ -27,7 +27,11 @@ const ACCEPTED_MIME = new Set([
 ]);
 
 // Try to auto-match a CSV header string to a field apiName
+// Calculated fields are filled in by the system, so a column can never target them.
+const COMPUTED = ['auto_number', 'formula', 'rollup_summary'];
+
 function autoMatch(header, fields) {
+  fields = fields.filter((f) => !COMPUTED.includes(f.type));
   const norm = (v) => v.toLowerCase().replace(/[\s_-]+/g, '');
   const h = norm(header);
   return (
@@ -56,6 +60,7 @@ export default function DataImport() {
   const [result, setResult] = useState(null);
 
   const [bypassValidation, setBypassValidation] = useState(false);
+  const fileRef = useRef(null);
   const { isAdmin } = useAuth();
 
   // Load all objects on mount
@@ -238,7 +243,7 @@ export default function DataImport() {
       setResult(res.data?.data || res.data);
       setStep('done');
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Import failed.');
+      toast.error(err?.message || err?.response?.data?.message || 'Import failed.');
     } finally {
       setImporting(false);
     }
@@ -415,7 +420,7 @@ export default function DataImport() {
                       >
                         <option value={SKIP}>— Skip this column —</option>
                         <optgroup label="Fields">
-                          {fields.map((f) => (
+                          {fields.filter((f) => !COMPUTED.includes(f.type)).map((f) => (
                             <option key={f.apiName} value={f.apiName}>
                               {f.label} ({f.apiName}) · {f.type}
                             </option>
@@ -539,7 +544,7 @@ export default function DataImport() {
               </div>
             </div>
             <p className={s.confirmNote}>
-              This will create or update records in{' '}
+              This will create new records in{' '}
               <strong>{selectedObject?.label || objectApiName}</strong>. This
               action cannot be undone.
             </p>

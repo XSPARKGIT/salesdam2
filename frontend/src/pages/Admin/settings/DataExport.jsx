@@ -26,7 +26,7 @@ const OPERATORS = [
   { value: 'gte', label: '≥ greater or equal' },
 ];
 
-const EXCLUDED_TYPES = new Set(['rollup_summary', 'formula']);
+const EXCLUDED_TYPES = new Set(['rollup_summary']);
 
 let nextId = 1;
 const makeFilter = () => ({
@@ -145,7 +145,7 @@ export default function DataExport() {
         `Exported ${selectedFields.size} fields from ${objectApiName} as ${format}.`,
       );
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Export failed.');
+      toast.error(err?.message || err?.response?.data?.message || 'Export failed.');
     } finally {
       setExporting(false);
     }

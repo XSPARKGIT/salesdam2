@@ -72,7 +72,7 @@ const AuditLogs = () => {
         {!loading && logs.length === 0 && <p>No audit logs.</p>}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr><th>Timestamp</th><th>Action</th><th>Resource</th><th>User</th><th>IP</th><th>Status</th></tr>
+            <tr><th>Timestamp</th><th>Action</th><th>Resource</th><th>User</th><th>IP</th><th>Status</th><th>Details</th></tr>
           </thead>
           <tbody>
             {logs.map((l) => (
@@ -83,6 +83,7 @@ const AuditLogs = () => {
                 <td>{l.userEmail || l.userId?.email || l.userId?._id || ''}</td>
                 <td>{l.ipAddress}</td>
                 <td>{l.status}</td>
+                <td>{l.details && typeof l.details === 'object' ? Object.entries(l.details).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : ''}</td>
               </tr>
             ))}
           </tbody>
