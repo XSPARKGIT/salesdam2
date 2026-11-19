@@ -341,7 +341,7 @@ function ProcessForm({ id, initial }) {
       queryClient.invalidateQueries({ queryKey: ['approval-state'] });
       navigate('/setup/approval-processes');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save the approval process.');
+      toast.error(err?.data?.message || err?.message || 'Failed to save the approval process.');
     } finally {
       setSaving(false);
     }

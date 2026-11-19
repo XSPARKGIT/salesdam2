@@ -1,0 +1,604 @@
+<title>Approval Process Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Approval Processes</h1>
+    <p class="standfirst">
+      A step-by-step script for testing BRD Section&nbsp;8. Approval processes are already set up
+      on a <b>Claim</b> object in the <b>My&nbsp;Company</b> workspace — you are checking that records
+      are routed to the right people, in order, that each stage does what the process says, and that
+      a submitter can take a request back.
+    </p>
+    <div class="mast-meta">
+      <span><b>Scope</b> BRD §8.1 – §8.7</span>
+      <span><b>Tests</b> 22</span>
+      <span><b>Time</b> ~75 minutes</span>
+      <span><b>Issued</b> 19 Nov 2026</span>
+    </div>
+  </header>
+
+  <div class="progress-bar">
+    <span class="count" id="count">0 of 22 complete</span>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <button class="btn-reset" id="reset" type="button">Reset</button>
+  </div>
+
+  <h2>Before you start</h2>
+  <p class="sec-note">Sign in and confirm the test data is in place. Several tests need a second or third person signed in — those are marked <b>Needs a second person</b>.</p>
+
+  <div class="callout">
+    <h3>Signing in</h3>
+    <dl class="creds">
+      <dt>Address</dt><dd>http://localhost:5173</dd>
+      <dt>Email</dt><dd>admin@example.com (System Admin)</dd>
+      <dt>Workspace</dt><dd>My Company → Insurance</dd>
+    </dl>
+    <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">
+      Ask your Salesdam contact for the password. Processes are under <b>Setup → Approval Processes</b>, approver groups under <b>Setup → Approver Groups</b>, and your queue under <b>My Approvals</b>.
+    </p>
+  </div>
+
+  <div class="callout">
+    <h3>What is already in place</h3>
+    <ul>
+      <li><b>Claim object</b> (Claims in the Insurance sidebar): Claim Reference (CLM-00001 …), Claim Number, Claim Amount, Claim Status (Draft, Pending Approval, Approved, Rejected), Assigned Approver, Rejection Reason, Approval Note.</li>
+      <li><b>Claim Manager Review</b> — amount above the company threshold (<code>CONFIG("approvals.threshold_amount")</code>, set to R1&nbsp;000); one step: the owner\'s manager; locks while pending; sets Claim Status at each stage.</li>
+      <li><b>Claim High Value Review</b> — amount above R5&nbsp;000; step 1 System Admin by name, step 2 anyone holding the Claims Manager role; records the approver on the claim; locks; on approval starts the flow <i>Claim Approval Stamp</i> and stores the comment in Approval Note; rejection needs a reason, stored in Rejection Reason.</li>
+      <li><b>Claim Referral Review</b> — amount above R100&nbsp;000; step 1 the person in <i>Assigned Approver</i>, step 2 the <b>Claims Panel</b> group; does not lock.</li>
+      <li><b>People for the second-person tests:</b> <b>Sam Submitter</b> (role Claims Handler, manager System Admin) and <b>Alex Approver</b> (role Claims Manager, in Claims Panel). Claims Handler sits below Claims Manager in the role hierarchy. These two test accounts have been switched off; ask your administrator to reactivate them, or use two of your own colleagues given the same roles.</li>
+    </ul>
+  </div>
+
+  <div class="callout warn">
+    <h3>Things worth knowing before you begin</h3>
+    <ul>
+      <li><b>Pages take a while to open.</b> The application runs on your machine but its database is in the cloud, so a screen can take ten to thirty seconds to fill in.</li>
+      <li><b>Approved or rejected claims are finished with their process</b> but remain ordinary records; they can be deleted in the tidy-up (Test 22).</li>
+      <li><b>Tests that change a setting put it back:</b> Test 3 moves the approval threshold and returns it; Test 8 clears and restores Sam\'s manager; Test 5 switches a process off and on.</li>
+      <li><b>Test claims are named M8-1 … M8-9.</b> Claim References (CLM-0000x) are numbered automatically, so use the Claim Number to find them.</li>
+      <li><b>The earlier fixtures</b> (POL-00001, POL-00003, POL-00004) are never submitted by this script.</li>
+    </ul>
+  </div>
+
+  <h2>Part 1 — Defining a process</h2>
+  <p class="sec-note">BRD §8.1. Processes are managed under <b>Setup → Approval Processes</b>. Each belongs to one object.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. A process belongs to an object and is a name, a switch and an ordered list of steps</span>
+        <span class="refs"><span class="ref">§8.1.1</span><span class="ref">§8.1.3</span><span class="ref">§8.1.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Go to <b>Setup → Approval Processes</b>.</li><li>Read the list: name, object, number of steps, entry criteria and status.</li><li>Click the pencil (<b>Edit</b>) on <b>Claim High Value Review</b> and read the whole page, then click <b>Cancel</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Three processes are listed, all on <b>Claim</b>: <i>Claim Manager Review</i> (1 step), <i>Claim High Value Review</i> (2 steps) and <i>Claim Referral Review</i> (2 steps), all <b>Active</b>. The editor shows Name, Object, Description and an <b>Active</b> tick; <b>Entry criteria</b>; <b>Approval steps</b> (1 Senior sign-off — a specific user; 2 Claims manager queue — anyone with a role) with move up, move down and remove buttons and <b>Add step</b>; and the three action groups <b>When submitted</b>, <b>When finally approved</b> and <b>When rejected</b>.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. Entry criteria must be a true/false formula, and a wrong one is explained</span>
+        <span class="refs"><span class="ref">§8.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open the editor for <b>Claim High Value Review</b>.</li><li>In <b>Entry criteria</b> change <code>claim_amount &gt; 5000</code> to <code>claim_amount + 1</code>. Read the line under the box.</li><li>Click <b>Save changes</b>.</li><li>Click <b>Cancel</b> (do not save).</li></ol>
+      <div class="expect"><b>Expected</b>
+        While you type, the box reports that the formula must be a true/false condition but returns a number, and suggests comparing it with something. <b>Save changes</b> is refused with the same message in a notice. After <b>Cancel</b> the list still shows <code>claim_amount &gt; 5000</code>. The criteria use the same formula builder as validation rules.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. Entry criteria can read a company setting, so a threshold is changed without editing the process</span>
+        <span class="refs"><span class="ref">§8.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Policies → Claims</b> click <b>New Claim</b>. Enter Claim Number <code>M8-1</code>, Claim Amount <code>400</code> and save. Create a second claim <code>M8-2</code> for <code>2500</code>.</li><li>Open <b>M8-1</b> and look for an <b>Approval</b> panel. Then open <b>M8-2</b>.</li><li>Go to <b>Setup → Admin Settings → Configuration</b>, set <b>Approval Threshold Amount</b> to <code>3000</code> and <b>Save</b>. Reopen <b>M8-2</b>.</li><li>Set the value back to <code>1000</code> and <b>Save</b>. (Do not use <b>Reset</b> — that returns to the platform default of 0.)</li></ol>
+      <div class="expect"><b>Expected</b>
+        <b>M8-1</b> (R400) has no Approval panel: it is below the <code>CONFIG("approvals.threshold_amount")</code> of R1 000 used by <i>Claim Manager Review</i>. <b>M8-2</b> (R2 500) shows <i>This record can be submitted to “Claim Manager Review”</i>. With the threshold at R3 000 the panel disappears from M8-2; at R1 000 it returns. The process itself was never edited.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. A record that matches more than one process is offered a choice</span>
+        <span class="refs"><span class="ref">§8.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create a claim <code>M8-3</code> for <code>8000</code>. Open it.</li><li>In the <b>Approval</b> panel read the text and open the process drop-down.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The panel says <i>This record matches 2 approval processes</i> and the drop-down lists <b>Claim Manager Review</b> and <b>Claim High Value Review</b> (R8 000 is above both thresholds). Nothing is submitted until <b>Submit for approval</b> is clicked. Leave M8-3 as it is: Tests 6, 12, 13 and 19 use it.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. A process that is switched off is no longer offered</span>
+        <span class="refs"><span class="ref">§8.1.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Setup → Approval Processes</b> click <b>Deactivate</b> on <b>Claim High Value Review</b>.</li><li>Open <b>M8-3</b> and read the Approval panel.</li><li>Back on the list click <b>Activate</b> on the same process.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The row shows <b>Inactive</b> and a notice <i>Process deactivated</i>. M8-3 now offers only <b>Claim Manager Review</b>. (Submitting to the inactive process by name is refused with <i>Approval process not found</i>.) After <b>Activate</b> the row is <b>Active</b> again and M8-3 offers both.</div>
+    </div>
+  </div>
+
+  <h2>Part 2 — Who approves</h2>
+  <p class="sec-note">BRD §8.2. Each step names how its approver is found. Tests 7–10 need a second person signed in; Test 6 and 11 can be done alone.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. A specific named user approves a step</span>
+        <span class="refs"><span class="ref">§8.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>M8-3</b>. Choose <b>Claim High Value Review</b> in the drop-down and click <b>Submit for approval</b>.</li><li>Read the step trail in the <b>Approval</b> panel, then open <b>My Approvals</b> in the sidebar.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Step 1 <i>Senior sign-off</i> names <b>System Admin</b> and is the active step; <b>My Approvals</b> lists M8-3 under <i>Claim High Value Review — Step 1 of 2 · Senior sign-off</i>. The sidebar approvals badge and the bell show <i>Approval required: Claim High Value Review</i>. (Recalled in Test 19.)</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. The record owner's manager approves (an assigned manager)</span>
+        <span class="refs"><span class="ref">§8.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Sign in as <b>Sam Submitter</b> (role Claims Handler, manager <b>System Admin</b>). Create a claim <code>M8-4</code> for <code>2500</code> and click <b>Submit for approval</b>.</li><li>Sign out; sign in as <b>System Admin</b> and open <b>My Approvals</b>.</li><li>Leave M8-4 pending: Tests 18 and 20 use it.</li></ol>
+      <div class="expect"><b>Expected</b>
+        M8-4 appears in the admin's <b>My Approvals</b> as <i>Claim Manager Review — Step 1 of 1 · Manager review, From Sam Submitter</i>.</div>
+      <div class="aside"><b>Needs a person.</b> Needs a second person signed in as Sam. Verified here with Sam acting through the API and the System Admin in the screen.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. The record owner's manager is found through the role hierarchy when none is assigned</span>
+        <span class="refs"><span class="ref">§8.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As an administrator open Sam Submitter's user record and clear <b>Manager</b>. (Roles: <i>Claims Handler</i> sits below <i>Claims Manager</i> in the hierarchy; <b>Alex Approver</b> holds Claims Manager.)</li><li>As Sam submit a new claim <code>M8-5</code> for <code>2500</code> to <b>Claim Manager Review</b>.</li><li>As Alex open <b>My Approvals</b>. Then restore Sam's manager to System Admin.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With no manager on Sam's record the step falls to the role above his: anyone holding <b>Claims Manager</b> may decide. M8-5 appears for Alex, and only a Claims Manager can approve it — Sam and others get <i>You are not the approver for the current step</i>.</div>
+      <div class="aside"><b>Needs a person.</b> Needs a second person. Verified here with two real test users (Sam, Alex); the same rule is also checked by the approval-builder suite.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. A user named in a field on the record approves</span>
+        <span class="refs"><span class="ref">§8.2.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As Sam create <code>M8-6</code> for <code>150000</code> and set <b>Assigned Approver</b> to <b>Alex Approver</b>.</li><li>Submit it to <b>Claim Referral Review</b>.</li><li>As Alex open <b>My Approvals</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Step 1 <i>Named on the claim</i> goes to the person in the Assigned Approver field (Alex). The process does <b>not</b> lock the record, so Sam can still edit it while it waits.</div>
+      <div class="aside"><b>Needs a person.</b> Needs a second person. Verified here with Sam and Alex.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. A public group of approvers can approve a step</span>
+        <span class="refs"><span class="ref">§8.2.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Approver Groups</b> and find <b>Claims Panel</b> (member: Alex Approver).</li><li>Continue M8-6: as Alex approve step 1. Open <b>My Approvals</b> again.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Step 2 <i>Claims panel</i> is now active for every member of the Claims Panel group; M8-6 appears in Alex's <b>My Approvals</b>. Someone who is not in the group cannot decide it. A group used by a process cannot be deleted.</div>
+      <div class="aside"><b>Needs a person.</b> Needs a second person. Verified here; group rules also covered by the approver-group suite.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. When no approver can be found the person submitting is told why</span>
+        <span class="refs"><span class="ref">§8.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As System Admin create <code>M8-7</code> for <code>3000</code>. Open it and click <b>Submit for approval</b> (only <b>Claim Manager Review</b> applies).</li></ol>
+      <div class="expect"><b>Expected</b>
+        The submission is refused with a notice: <i>No manager could be found for this record. Ask your administrator to assign a manager to the record owner (or to put a role above theirs in the role hierarchy) before submitting.</i> The record stays Draft and unlocked.</div>
+    </div>
+  </div>
+
+  <h2>Part 3 — What happens at each stage</h2>
+  <p class="sec-note">BRD §8.3 – §8.5. Submit, approve and reject each update fields, may lock or unlock, and tell people.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. Submitting updates fields, locks the record and tells the approver</span>
+        <span class="refs"><span class="ref">§8.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>M8-3</b> (submitted in Test 6). Read the header, the <b>Claim Status</b> and <b>Assigned Approver</b> fields, and the <b>Edit</b> and <b>Delete</b> controls.</li></ol>
+      <div class="expect"><b>Expected</b>
+        <b>Claim Status</b> has changed from Draft to <b>Pending Approval</b> (a field update), <b>Assigned Approver</b> shows System Admin, the person asked (the process writes the approver onto the record, and recalling the request clears it again), the panel says <b>Pending approval</b> with a <b>Locked</b> badge, and <b>Edit</b> is replaced by a greyed <b>Locked</b> button (tooltip <i>This record is locked while an approval is pending</i>) while <b>Delete</b> is greyed (<i>Cannot delete while an approval is pending</i>). The approver received an in-app notification.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. A locked record refuses edits and deletes, whichever way they are attempted</span>
+        <span class="refs"><span class="ref">§8.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Claims</b> tick the box beside <b>M8-3</b> and click <b>Delete (1)</b>, then <b>Delete</b> in the dialog.</li><li>Open <b>M8-3</b> and try to click <b>Edit</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The list refuses with <i>A selected record is locked while an approval is pending. Recall or decide the approval first.</i> and the record remains. On the record Edit cannot be clicked. The same lock is enforced by the server for an edit or delete (reply <i>423 — This record is locked while an approval is pending</i>), for bulk delete, and for merge — those were checked with scripted requests and are marked below.</div>
+      <div class="aside"><b>Needs a person.</b> Inline editing in the list and the API requests need a technical person: the server's edit, delete, bulk-delete and merge refusals were confirmed with scripted calls, not by clicking. The inline-cell route uses the same server endpoint but was not clicked through.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. Approving updates fields, unlocks, starts a flow, and stores the approver's comment</span>
+        <span class="refs"><span class="ref">§8.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Sign in as Sam, create <code>M8-8</code> for <code>7500</code> and submit it to <b>Claim High Value Review</b>.</li><li>As System Admin open it, click <b>Approve</b>, type <code>Senior sign-off given</code> and click <b>Approve</b>.</li><li>As Alex open <b>My Approvals</b>, open M8-8, click <b>Approve</b> with comment <code>Claims manager agrees</code>.</li><li>As Sam read the claim, then the bell.</li></ol>
+      <div class="expect"><b>Expected</b>
+        After step 1 the trail reads <i>Approved by System Admin — “Senior sign-off given”</i> and step 2 is <i>Anyone with the Claims Manager role</i>. After step 2 the claim is <b>Approved</b>, <b>Claim Status</b> says Approved, <b>Approval Note</b> holds <i>Claims manager agrees</i>, the record is <b>unlocked</b>, and <b>Description</b> reads <code>approved | Claims manager agrees | Claim High Value Review</code> — written by the flow <i>Claim Approval Stamp</i> that the process launches. Sam receives <i>Approval approved: Claim High Value Review</i> with the comment.</div>
+      <div class="aside"><b>Needs a person.</b> Needs a second and third person. Step 1 was clicked in the screen as System Admin; Sam and Alex acted through the API.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. Rejecting needs a reason, stores it, updates fields and unlocks</span>
+        <span class="refs"><span class="ref">§8.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As System Admin create <code>M8-9</code> for <code>6000</code>; submit it to <b>Claim High Value Review</b>.</li><li>Click <b>Reject</b>, leave the reason empty and click <b>Reject</b>.</li><li>Type <code>Missing police report</code> and click <b>Reject</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With no reason the screen says <i>Add a reason for the rejection.</i> and nothing happens. With a reason the claim becomes <b>Rejected</b>, <b>Claim Status</b> says Rejected, <b>Rejection Reason</b> holds <i>Missing police report</i>, the lock is gone (<b>Edit</b> is back) and the panel offers <b>Submit again</b>. The submitter is notified: <i>Approval rejected … Comment: Missing police report</i>.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. People are told in the app, and by email</span>
+        <span class="refs"><span class="ref">§8.3</span><span class="ref">§8.4</span><span class="ref">§8.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>After Tests 12–15 open the bell as each person and read the list.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The approver receives <i>Approval required: &lt;process&gt;</i> when each step starts (including step 2 only once step 1 is approved), and the submitter receives <i>Approval approved</i> or <i>Approval rejected</i> with the comment.</div>
+      <div class="aside"><b>Needs a person.</b> Emails (approver on submit; submitter on approve with a link, and on reject with the reason) are proven by the approval-builder suite, which captures the mail instead of sending it. They were not read from a real inbox here.</div>
+    </div>
+  </div>
+
+  <h2>Part 4 — Steps, recall and separation of duties</h2>
+  <p class="sec-note">BRD §8.6 – §8.7.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. Step 2 only becomes active once step 1 is approved</span>
+        <span class="refs"><span class="ref">§8.6</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Do these two checks while you run Test 14. With M8-8 waiting at step 1, sign in as Alex and open <b>My Approvals</b>.</li><li>After System Admin approves step 1, as Alex reload <b>My Approvals</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Alex's list is empty while step 1 is pending — the trail shows step 2 as <i>Assigned when this step starts</i>. After step 1 is approved the claim appears for Alex. Alex cannot decide it earlier.</div>
+      <div class="aside"><b>Needs a person.</b> Needs a second person; verified with Alex through the API.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. A single-step process is simply one step</span>
+        <span class="refs"><span class="ref">§8.6</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Read <b>Claim Manager Review</b> in the list and on a submitted claim (M8-4).</li></ol>
+      <div class="expect"><b>Expected</b>
+        It shows <b>1</b> step and one entry in the trail; its approval completes the request: this is the equivalent of the original single manager approval. (The built-in <b>Lead Approval</b> process is the same shape — see the end of this script.)</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t19">
+      <span class="test-title"><span class="t">19. A submitter can recall a pending request and the record returns to how it was</span>
+        <span class="refs"><span class="ref">§8.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As System Admin open <b>M8-3</b> (pending from Test 6) and click <b>Recall</b>, then confirm.</li><li>Read <b>Claim Status</b>, the buttons and the panel.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The notice <i>Approval request recalled.</i> appears, <b>Claim Status</b> goes back to <b>Draft</b>, <b>Edit</b> returns, the lock is gone and the panel shows <b>Recalled</b> with <b>Submit again</b> and the picker. The approver no longer sees it in My Approvals.</div>
+      <div class="aside"><b>Needs a person.</b> The browser confirmation behind Recall is declined automatically in an automated run; here it was accepted by a one-line override before clicking the real button.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t20">
+      <span class="test-title"><span class="t">20. Only the submitter can recall, and only the current approver can decide</span>
+        <span class="refs"><span class="ref">§8.7</span><span class="ref">§8.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>With M8-4 pending, sign in as Alex and try to <b>Recall</b> it, or approve it as Sam.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Alex is refused: <i>Only the submitter can recall this request.</i> Sam is refused: <i>You are not the approver for the current step.</i> An approved or rejected request cannot be decided again.</div>
+      <div class="aside"><b>Needs a person.</b> Needs a second person; verified with Sam and Alex through the API.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t21">
+      <span class="test-title"><span class="t">21. The built-in Lead Approval process still behaves as described</span>
+        <span class="refs"><span class="ref">§8.6</span><span class="ref">§8.4</span><span class="ref">§8.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Not run in this workspace: it has no Lead object, so the built-in process is not present. In a workspace with Leads, <b>Setup → Approval Processes</b> shows <b>Lead Approval</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Not exercised by clicking. The approval-builder suite runs it on a tenant with Leads: the owner's manager is emailed, only that manager can approve, approval converts the Lead to a Deal and emails the owner a link to the Deal, rejection stores the reason (optional) and emails the owner, a process that was in flight under the old workflow can still be decided, and switching the process off stops submissions.</div>
+      <div class="aside"><b>Needs a person.</b> Proven by suite only (55 checks), not by clicking.</div>
+    </div>
+  </div>
+
+  <h2>Part 5 — Putting things back</h2>
+  <p class="sec-note">Leave the workspace as you found it.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t22">
+      <span class="test-title"><span class="t">22. Tidy-up: test claims removed, threshold and Sam's manager restored</span>
+        <span class="refs"><span class="ref">—</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Recall any claim still pending. On <b>Claims</b> tick <b>M8-1</b> to <b>M8-9</b> and click <b>Delete</b>.</li><li>On <b>Configuration</b> check <b>Approval Threshold Amount</b> is <code>1000</code>; check Sam Submitter's manager is System Admin again.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The Claims list holds only the earlier fixtures. Deleted claims sit in the Recycle Bin. The three processes, the Claims Panel group and the roles remain for the next run. Earlier manuals' records (POL-00001, POL-00003, POL-00004) were never submitted and still edit and save normally.</div>
+    </div>
+  </div>
+
+  <h2>Still to be covered</h2>
+  <p>These points sit outside this script:</p>
+  <ul>
+    <li><b>Emails.</b> Whether an approval, rejection or submission email is delivered to a real inbox. The content and recipients are proven by the automated approval checks, which capture mail instead of sending it.</li>
+    <li><b>Lead Approval.</b> The built-in Lead-to-Deal process exists only where the Lead object does; it is proven by the automated checks (Test 21).</li>
+    <li><b>Drag and drop</b> of the step order. Steps are reordered with the move up / move down buttons.</li>
+    <li><b>Reopening an approved or rejected claim.</b> A rejected claim can be edited and submitted again; an approved one is finished.</li>
+    <li><b>System writes.</b> Internal platform writes (for example the Insurance module moving a policy through its lifecycle) do not check the approval lock; only the screen, the record API, bulk delete and merge do.</li>
+    <li><b>Whether the person who submitted may also approve their own request.</b> They may when they are also the named approver (Test 6 used System Admin for both). The BRD does not require separation, so none is enforced.</li>
+    <li><b>Import.</b> Importing rows creates new records only and cannot overwrite a locked one.</li>
+  </ul>
+
+  <h3>Reporting a problem</h3>
+  <p>For anything that does not match the expected result, note the test number, what you saw
+  instead, and the record you were working on. A screenshot of the screen as it looked
+  when it went wrong is usually enough for us to reproduce it.</p>
+
+  <footer>
+    Salesdam V3 · Approval Processes acceptance script · issued 19 November 2026.
+    Tick-box progress is remembered in this browser only.
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s8-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>

@@ -875,6 +875,15 @@ const bulkDelete = asyncHandler(async (req, res) => {
       ...writeFilter,
     }).session(session);
     const targetIds = targets.map((t) => t._id);
+    // A record awaiting approval is locked against deletion too — one locked
+    // record stops the whole batch, nothing is half-deleted.
+    const locked = await approvalProcessService.lockedRecordIds(req.tenantId, objectApiName, targetIds);
+    if (locked.length > 0) {
+      throw new AppError(
+        `${locked.length === 1 ? 'A selected record is' : `${locked.length} selected records are`} locked while an approval is pending. Recall or decide the approval first.`,
+        423,
+      );
+    }
     const deletedSnapshots = targets.map((t) => t.toDataObject());
 
     await _applyChildDeleteBehaviours(req.tenantId, objectApiName, targetIds, session);

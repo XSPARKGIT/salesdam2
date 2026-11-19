@@ -3,6 +3,7 @@ import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import Activity from '../models/Activity.js';
 import { AppError } from '../utils/errors.js';
+import approvalProcessService from './approvalProcessService.js';
 import { validateRecordData, evaluateValidationRules, buildValidationFailure } from './validationService.js';
 import { buildSearchText } from './searchService.js';
 import { computeAndSetFormulaValues } from './formulaService.js';
@@ -55,6 +56,11 @@ const mergeRecords = async ({
     isDeleted: false,
   });
   if (!master) throw new AppError('Master record not found.', 404);
+
+  const lockedIds = await approvalProcessService.lockedRecordIds(tenantId, objectApiName, [masterId, ...sourceIds]);
+  if (lockedIds.length > 0) {
+    throw new AppError('A record in this merge is locked while an approval is pending. Recall or decide the approval first.', 423);
+  }
 
   const duplicates = await DynamicRecord.find({
     _id: { $in: sourceIds },

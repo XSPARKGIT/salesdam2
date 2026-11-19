@@ -55,7 +55,10 @@ const approverLabel = (step) => {
   return '—';
 };
 
-const errMessage = (err, fallback) => err?.response?.data?.message || fallback;
+// The shared API client rejects with { message, status, data } (not an axios
+// error), so the server's explanation lives on err.message.
+const errMessage = (err, fallback) =>
+  err?.data?.message || err?.response?.data?.message || err?.message || fallback;
 
 /**
  * Approval status and actions for any record (Core BRD §8): submit to a

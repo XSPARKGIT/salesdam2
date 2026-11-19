@@ -478,6 +478,20 @@ const isRecordLocked = async (tenantId, objectApiName, recordId) => {
   return Boolean(lock);
 };
 
+/** Which of these records are locked by a pending approval (bulk delete, merge). */
+const lockedRecordIds = async (tenantId, objectApiName, recordIds) => {
+  const locks = await ApprovalRequest.find({
+    tenantId,
+    objectApiName,
+    recordId: { $in: recordIds },
+    status: 'pending',
+    locked: true,
+  })
+    .select('recordId')
+    .lean();
+  return locks.map((l) => String(l.recordId));
+};
+
 /* ── Runtime operations ─────────────────────────────────────────────────── */
 
 /**
@@ -913,6 +927,7 @@ export default {
   LEAD_APPROVAL_PROCESS,
   resolveApprover,
   isRecordLocked,
+  lockedRecordIds,
   submit,
   decide,
   recall,

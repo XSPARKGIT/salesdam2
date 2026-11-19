@@ -97,7 +97,7 @@ export default function LeadApprovalSettings() {
       );
     } catch (err) {
       setSettings((prev) => ({ ...prev, [key]: !val }));
-      toast.error(err?.response?.data?.message || 'Failed to update setting.');
+      toast.error(err?.data?.message || err?.message || 'Failed to update setting.');
     }
   };
 
@@ -115,7 +115,7 @@ export default function LeadApprovalSettings() {
     } catch (err) {
       setSettings((prev) => ({ ...prev, approvers: previous }));
       toast.error(
-        err?.response?.data?.message || 'Failed to update approvers.',
+        err?.data?.message || err?.message || 'Failed to update approvers.',
       );
     } finally {
       setSavingApprovers(false);

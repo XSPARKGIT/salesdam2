@@ -88,7 +88,7 @@ export default function ApproverGroups() {
       setEditing(null);
       reload();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Save failed.');
+      toast.error(err?.data?.message || err?.message || 'Save failed.');
     } finally {
       setSaving(false);
     }
@@ -101,7 +101,7 @@ export default function ApproverGroups() {
       toast.success('Approver group deleted.');
       reload();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Delete failed.');
+      toast.error(err?.data?.message || err?.message || 'Delete failed.');
     }
   };
 

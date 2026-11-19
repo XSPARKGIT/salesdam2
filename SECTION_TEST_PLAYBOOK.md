@@ -384,3 +384,51 @@ while checking edits (earlier value not recorded).
 - The in-pane record Delete is an in-page modal (clickable); only rule delete uses `window.confirm`.
 - `git archive HEAD backend` into the scratchpad (symlink `node_modules`, copy `.env`) is
   a safe way to prove a test fails without your changes — never stash.
+
+---
+
+## 12. Where Section 8 ended
+
+**Tested:** all of §8.1–§8.7 through the UI (process list, editor, entry-criteria formula
+and `CONFIG("approvals.threshold_amount")`, picker for several matching processes, Active /
+Inactive, submit, lock badge, approve with comment, reject with required reason, recall,
+My Approvals, bell notifications), plus suites `approval-process` 43/43, `approval-builder`
+55/55, `approver-group-changeset` 9/9, `validation-evaluation` 18/18, `record-merge` 23/23.
+`insurance-approval` is 2/16 and fails identically on a clean copy of HEAD: its login uses a
+non-email username (`insapr_…`) and login is now email-only, so every call is 401. Stale test,
+not from this work; it should log in with the user's email like `approval-builder` does. Manual: 22 tests,
+`tools/manual-docx/section8-test-manual.html` (built from `gen8.py`-style generator off the
+Section 6 shell; the HTML is the source). Almost all of §8 was **already built**.
+
+**Fixed (uncommitted):**
+- Bulk delete and merge ignored the approval lock (single edit/delete returned 423, bulk
+  delete deleted a locked record). `lockedRecordIds` in `approvalProcessService`, used by
+  `bulkDelete` and `recordMergeService`.
+- Approval screens showed "Failed to submit…" instead of the server's reason (e.g. "No manager
+  could be found…"): the shared `api` rejects with `{message,status,data}`, not an axios error,
+  so `err.response.data.message` is always undefined. Fixed in ApprovalPanel, the process
+  list/editor, approver groups and LeadApprovalSettings. **Other screens likely have the same
+  pattern** — grep `err.response?.data` before trusting any error toast.
+
+**Fixtures left:** object **Claim** (auto-number CLM-, in Insurance), processes Claim Manager
+Review / High Value Review / Referral Review, group Claims Panel, flow *Claim Approval Stamp*,
+roles Claims Manager (parent) and Claims Handler, Approval Threshold Amount = **1000**
+(company value; platform default is 0), claims CLM-00001…00008 (S8-001…S8-008), two test users
+(sec8.submitter / sec8.approver @example.com) **deactivated**. Policies untouched.
+
+**Worth knowing**
+- Non-admin roles cannot supply the object's *name* field (always read-only) — an object that
+  non-admins create records on needs an **auto-number** name. The name field's type cannot be
+  changed afterwards (system field); delete and recreate (`DELETE /objects/x?force=true`) which
+  also strips the object from roles' permissions. Role object permissions need
+  `fieldPermissions` entries with `canEdit`, or every field is stripped.
+- Set a user's role with `POST /roles/assign`, not `PUT /users/:id` (silently ignored).
+  Lookup-to-user fields: create the field, then `PUT` it with `lookupObjectApiName: 'user'`.
+- The device's `activeWorkspaceId` in localStorage overrides the server session's workspace; an
+  object outside it renders a **blank page**. Set it before opening records.
+- A partial `PUT` of a record fails required-field checks; the UI edit form sends the whole record.
+- Recall uses `window.confirm` (auto-declined): override `window.confirm=()=>true` then click.
+- With one real user, a second/third person was simulated by real test users driven through the
+  API from a scratch script (`as.mjs`: login with a cookie cache; password kept in a 0600 file).
+- Always filter scratch DB reads by `tenantId` — other tenants hold same-named objects (`claim`).
+- The Lead Approval built-in process is only seeded for tenants with a `lead` object.

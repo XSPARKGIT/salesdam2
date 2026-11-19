@@ -36,7 +36,7 @@ export default function ApprovalProcessList() {
       toast.success(p.active ? 'Process activated.' : 'Process deactivated.');
       refresh();
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Failed to update process.'),
+    onError: (err) => toast.error(err?.data?.message || err?.message || 'Failed to update process.'),
   });
 
   const remove = useMutation({
@@ -45,7 +45,7 @@ export default function ApprovalProcessList() {
       toast.success('Process deleted.');
       refresh();
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Failed to delete process.'),
+    onError: (err) => toast.error(err?.data?.message || err?.message || 'Failed to delete process.'),
   });
 
   const handleDelete = (p) => {
