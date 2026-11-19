@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { emit as emitWebhookEvent } from './outboundWebhookService.js';
 import ChannelAccount, { CHANNELS } from '../models/ChannelAccount.js';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
@@ -244,6 +245,7 @@ const ingestMessage = async (account, payload) => {
     }).catch(() => {}); // activity logging must never block ingestion
   }
 
+  emitWebhookEvent(account.tenantId, 'communication.received', { data: { channel: account.channel, conversationId: String(conversation._id), messageId: String(message._id) } });
   return { conversation, message, duplicate: false };
 };
 
@@ -341,6 +343,9 @@ const ingestCall = async (account, payload) => {
     }
   }
 
+  if (payload.status === 'completed' || payload.durationSeconds) {
+    emitWebhookEvent(account.tenantId, 'call.completed', { data: { channel: account.channel, direction: payload.direction || 'inbound', durationSeconds: payload.durationSeconds || 0, conversationId: String(conversation._id), messageId: String(message._id) } });
+  }
   return { conversation, message, duplicate: false };
 };
 

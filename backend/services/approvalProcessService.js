@@ -1,3 +1,4 @@
+import { emit as emitWebhookEvent } from './outboundWebhookService.js';
 import mongoose from 'mongoose';
 import ApprovalProcess from '../models/ApprovalProcess.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
@@ -669,6 +670,7 @@ const decide = async ({ tenantId, requestId, user, decision, comment = '', optio
       await record.save();
     }
     await request.save();
+    emitWebhookEvent(tenantId, 'approval.completed', { objectApiName: record?.objectApiName, record, data: { outcome: 'rejected', processName: process.name, requestId: String(request._id) } });
     await notifySubmitter(tenantId, process, request, 'rejected', comment);
     await launchStageFlow('onReject', process, request, record, 'rejected', comment);
     await emailSubmitter(tenantId, process, request, 'rejected', comment, user._id);
@@ -729,6 +731,7 @@ const decide = async ({ tenantId, requestId, user, decision, comment = '', optio
     await record.save();
   }
   await request.save();
+  emitWebhookEvent(tenantId, 'approval.completed', { objectApiName: record?.objectApiName, record, data: { outcome: 'approved', processName: process.name, requestId: String(request._id) } });
   await notifySubmitter(tenantId, process, request, 'approved', comment);
   await launchStageFlow('onApprove', process, request, record, 'approved', comment);
   await emailSubmitter(tenantId, process, request, 'approved', comment, user._id);

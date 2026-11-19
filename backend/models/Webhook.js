@@ -22,18 +22,18 @@ const webhookSchema = new mongoose.Schema({
   // Which events trigger this webhook
   events: [{
     type: String,
-    enum: [
-      'record.created', 'record.updated', 'record.deleted',
-      'user.created', 'user.updated',
-      'automation.run', 'automation.failed',
-    ],
+    // Known events plus custom business events named custom.<name> (BRD 17.4.11);
+    // the route validates against services/outboundWebhookService.isKnownEvent.
   }],
+  payloadMapping: { type: mongoose.Schema.Types.Mixed, default: undefined }, // { "name sent": "field api name" } (17.4.12)
+  retryBackoff: { type: String, enum: ['fixed', 'exponential'], default: 'fixed' },
+  failureNotifyThreshold: { type: Number, default: 3, min: 0, max: 100 }, // consecutive failed deliveries before admins are told; 0 = never
 
   // Filter: only fire for specific objects
   objectFilters: [{ type: String }], // objectApiNames
 
   // Retry config
-  retryCount: { type: Number, default: 3 },
+  retryCount: { type: Number, default: 3, min: 0, max: 10 }, // retries after the first attempt
   retryIntervalSeconds: { type: Number, default: 30 },
 
   // Stats
@@ -43,6 +43,7 @@ const webhookSchema = new mongoose.Schema({
     failureCount: { type: Number, default: 0 },
     lastFiredAt: { type: Date },
     lastStatus: { type: Number }, // HTTP status code
+    consecutiveFailures: { type: Number, default: 0 },
   },
 
   headers: { type: Map, of: String }, // Custom headers to send

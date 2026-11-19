@@ -6,7 +6,8 @@ const webhookDeliveryLogSchema = new mongoose.Schema(
     webhookId: { type: mongoose.Schema.Types.ObjectId, ref: 'Webhook', required: true, index: true },
     event: { type: String, required: true },
     url: { type: String, required: true },
-    payload: { type: mongoose.Schema.Types.Mixed },
+    payload: { type: mongoose.Schema.Types.Mixed }, // only while a retry is pending; cleared when final
+    payloadFields: [{ type: String }],
     status: { type: String, enum: ['pending', 'success', 'failed', 'retrying'], default: 'pending' },
     httpStatus: { type: Number },
     response: { type: String },

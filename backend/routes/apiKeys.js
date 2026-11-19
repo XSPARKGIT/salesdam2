@@ -11,6 +11,8 @@
  *   - Revocation immediately stops authentication (isActive: false)
  */
 import express from 'express';
+import mongoose from 'mongoose';
+import AuthFailureLog from '../models/AuthFailureLog.js';
 import ApiKey from '../models/ApiKey.js';
 import ApiKeyUsageLog from '../models/ApiKeyUsageLog.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -38,7 +40,7 @@ router.get('/usage-summary', asyncHandler(async (req, res) => {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
   const summary = await ApiKeyUsageLog.aggregate([
-    { $match: { tenantId: new (require('mongoose')).Types.ObjectId(req.tenantId), timestamp: { $gte: since } } },
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), timestamp: { $gte: since } } },
     { $group: {
         _id: null,
         total: { $sum: 1 },
@@ -48,7 +50,7 @@ router.get('/usage-summary', asyncHandler(async (req, res) => {
   ]);
 
   const byKey = await ApiKeyUsageLog.aggregate([
-    { $match: { tenantId: new (require('mongoose')).Types.ObjectId(req.tenantId), timestamp: { $gte: since } } },
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), timestamp: { $gte: since } } },
     { $group: { _id: '$keyId', count: { $sum: 1 }, errors: { $sum: { $cond: [{ $gte: ['$statusCode', 400] }, 1, 0] } } } },
     { $sort: { count: -1 } },
     { $limit: 10 },
@@ -68,6 +70,14 @@ router.get('/usage-summary', asyncHandler(async (req, res) => {
   });
 }));
 
+// GET /api/api-keys/auth-failures - failed authentications for this tenant (BRD 17.6.3)
+router.get('/auth-failures', asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  // A superuser may also read failures that could not be tied to any tenant (unknown keys).
+  const platform = req.query.scope === 'platform' && req.user?.role?.name === 'superuser';
+  const rows = await AuthFailureLog.find(platform ? { tenantId: null } : { tenantId: req.tenantId }).sort({ timestamp: -1 }).limit(limit).lean();
+  sendSuccess(res, { data: rows });
+}));
 
 // GET /api/api-keys/:id
 router.get('/:id', asyncHandler(async (req, res) => {
@@ -80,7 +90,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 // POST /api/api-keys — create a new key
 // Returns the raw key in rawKey — shown ONCE, never retrievable again
 router.post('/', asyncHandler(async (req, res) => {
-  const { name, description, scopes = ['read'], expiresAt, ipWhitelist = [], allowedObjects = [] } = req.body;
+  const { name, description, scopes = ['read'], expiresAt, ipWhitelist = [], allowedObjects = [], rateLimitPerMinute } = req.body;
   if (!name) throw new AppError('name is required.', 400);
 
   // Validate scopes
@@ -105,6 +115,7 @@ router.post('/', asyncHandler(async (req, res) => {
     expiresAt:      expiresAt || undefined,
     ipWhitelist:    ipWhitelist.map(ip => ip.trim()).filter(Boolean),
     allowedObjects: allowedObjects.filter(Boolean),
+    ...(rateLimitPerMinute ? { rateLimitPerMinute: Math.min(100000, Math.max(1, parseInt(rateLimitPerMinute) || 300)) } : {}),
     createdBy:  req.user._id,
     isActive:   true,
   });
@@ -134,8 +145,13 @@ router.post('/', asyncHandler(async (req, res) => {
 router.patch('/:id', asyncHandler(async (req, res) => {
   const key = await ApiKey.findOne({ _id: req.params.id, tenantId: req.tenantId });
   if (!key) throw new AppError('API key not found.', 404);
+  if (req.body.rateLimitPerMinute !== undefined) {
+    const n = parseInt(req.body.rateLimitPerMinute);
+    if (!(n >= 1 && n <= 100000)) throw new AppError('rateLimitPerMinute must be between 1 and 100000.', 400);
+    req.body.rateLimitPerMinute = n;
+  }
 
-  const allowed = ['name', 'description', 'scopes', 'ipWhitelist', 'expiresAt', 'allowedObjects'];
+  const allowed = ['name', 'description', 'scopes', 'ipWhitelist', 'expiresAt', 'allowedObjects', 'rateLimitPerMinute'];
   allowed.forEach(k => { if (req.body[k] !== undefined) key[k] = req.body[k]; });
   await key.save();
 
@@ -151,6 +167,20 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
   sendSuccess(res, { data: { ...key.toObject(), keyHash: undefined } }, 'Key updated');
 }));
+
+// POST /api/api-keys/:id/deactivate | /activate - temporary switch-off (BRD 17.6.6); a revoked key cannot come back
+for (const [verb, on] of [['deactivate', false], ['activate', true]]) {
+  router.post(`/:id/${verb}`, asyncHandler(async (req, res) => {
+    const key = await ApiKey.findOne({ _id: req.params.id, tenantId: req.tenantId });
+    if (!key) throw new AppError('API key not found.', 404);
+    if (key.revokedAt) throw new AppError('A revoked key cannot be reactivated. Create or rotate a key instead.', 400);
+    key.isActive = on;
+    key.deactivatedAt = on ? undefined : new Date();
+    await key.save();
+    await audit({ tenantId: req.tenantId, userId: req.user._id, action: `api_credential_${verb}`, resource: 'ApiKey', resourceId: key._id, details: { name: key.name }, req });
+    sendSuccess(res, { data: { _id: key._id, isActive: key.isActive } }, `API key ${verb}d.`);
+  }));
+}
 
 // DELETE /api/api-keys/:id/revoke — revoke (soft-delete, keeps audit trail)
 router.delete('/:id/revoke', asyncHandler(async (req, res) => {
@@ -303,6 +333,7 @@ router.post('/:id/rotate', asyncHandler(async (req, res) => {
     expiresAt: oldKey.expiresAt,
     ipWhitelist: oldKey.ipWhitelist,
     allowedObjects: oldKey.allowedObjects,
+    rateLimitPerMinute: oldKey.rateLimitPerMinute,
     createdBy: req.user._id,
     isActive: true,
   });

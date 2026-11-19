@@ -1,6 +1,9 @@
 import User from '../models/User.js';
 import Session from '../models/Session.js';
+import crypto from 'crypto';
+import mongoose from 'mongoose';
 import ApiKey from '../models/ApiKey.js';
+import Integration from '../models/Integration.js';
 import ApiKeyUsageLog from '../models/ApiKeyUsageLog.js';
 import { AppError } from '../utils/errors.js';
 import configurationService from '../services/configurationService.js';
@@ -28,6 +31,12 @@ const requireAuth = async (req, res, next) => {
     const apiKeyHeader = req.headers['x-api-key'];
     if (apiKeyHeader) {
       return await authenticateApiKey(req, res, next, apiKeyHeader);
+    }
+
+    // 1b. Integration access token (Authorization: Bearer <token>) - BRD 17.2.4
+    const bearer = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '');
+    if (bearer && !req.sessionData?.userId) {
+      return await authenticateIntegrationToken(req, res, next, bearer[1]);
     }
 
     // 2. Check session is present (loaded by sessionMiddleware from DB)
@@ -133,7 +142,72 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
+// Per-key sliding window (BRD 17.6.1). In memory: one limiter per server process.
+const keyWindows = new Map();
+const keyRateLimited = (key) => {
+  const limit = key.rateLimitPerMinute || 300;
+  const now = Date.now();
+  const id = String(key._id);
+  const hits = (keyWindows.get(id) || []).filter((t) => t > now - 60000);
+  hits.push(now);
+  keyWindows.set(id, hits);
+  return hits.length > limit ? Math.max(1, Math.ceil((hits[0] + 60000 - now) / 1000)) : 0;
+};
+
+const logAuthFailure = async (req, { integration, identifier, reason, tenantId }) => {
+  try {
+    const AuthFailureLog = (await import('../models/AuthFailureLog.js')).default;
+    const claimed = req.headers['x-tenant-id'];
+    await AuthFailureLog.create({
+      tenantId: tenantId || (mongoose.isValidObjectId(claimed) ? claimed : null),
+      integration,
+      identifier,
+      reason,
+      ip: req.ip || req.headers['x-forwarded-for'],
+      path: req.originalUrl ? req.originalUrl.split('?')[0] : req.path,
+      method: req.method,
+    });
+  } catch { /* logging must never block */ }
+};
+
+const METHOD_SCOPE = { GET: 'read', HEAD: 'read', POST: 'write', PUT: 'write', PATCH: 'write', DELETE: 'delete' };
+
+const authenticateIntegrationToken = async (req, res, next, token) => {
+  let known = null;
+  try {
+    const integration = await Integration.findOne({
+      tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+      isDeleted: false,
+    });
+    if (!integration) throw new AppError('Invalid or expired access token.', 401);
+    known = integration.tenantId;
+    if (integration.status !== 'active') throw new AppError('This integration is inactive.', 401);
+    if (integration.isExpired()) throw new AppError('Access token has expired.', 401);
+    const claimed = req.headers['x-tenant-id'];
+    if (claimed && String(claimed) !== String(integration.tenantId)) {
+      throw new AppError('This access token does not belong to the requested tenant.', 403);
+    }
+    const required = METHOD_SCOPE[req.method?.toUpperCase()];
+    const scopes = integration.permissions || [];
+    if (required && !scopes.includes(required) && !scopes.includes('admin')) {
+      throw new AppError(`This access token does not have '${required}' scope for ${req.method} requests.`, 403);
+    }
+    const user = await User.findById(integration.createdBy).populate('role');
+    if (!user || user.status !== 'active') throw new AppError('Integration owner account is inactive.', 403);
+    req.user = user;
+    req.tenantId = integration.tenantId.toString();
+    req.isApiKeyAuth = true;
+    req.integrationToken = integration;
+    Integration.updateOne({ _id: integration._id }, { lastUsedAt: new Date(), lastUsedIp: req.ip }).catch(() => {});
+    next();
+  } catch (err) {
+    await logAuthFailure(req, { integration: 'access-token', identifier: token.substring(0, 4) + '...', reason: err.message, tenantId: known });
+    next(err);
+  }
+};
+
 const authenticateApiKey = async (req, res, next, rawKey) => {
+  let knownTenant = null;
   try {
     const prefix = rawKey.substring(0, 12);
     const apiKeys = await ApiKey.find({
@@ -143,6 +217,19 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
 
     const validKey = apiKeys.find((k) => k.verifyKey(rawKey));
     if (!validKey) throw new AppError('Invalid or expired API key.', 401);
+    knownTenant = validKey.tenantId;
+
+    // A key belongs to exactly one tenant: a request that names another one is refused.
+    const claimedTenant = req.headers['x-tenant-id'];
+    if (claimedTenant && String(claimedTenant) !== String(validKey.tenantId)) {
+      throw new AppError('This API key does not belong to the requested tenant.', 403);
+    }
+
+    const retryAfter = keyRateLimited(validKey);
+    if (retryAfter) {
+      res.setHeader('Retry-After', retryAfter);
+      throw new AppError('API rate limit exceeded for this key. Try again later.', 429);
+    }
 
     if (validKey.expiresAt && validKey.expiresAt < new Date()) {
       throw new AppError('API key has expired.', 401);
@@ -253,7 +340,7 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
         keyId: validKey._id,
         keyPrefix: validKey.keyPrefix,
         method: req.method,
-        path: req.path,
+        path: (req.originalUrl || req.path).split('?')[0],
         objectApiName,
         statusCode: res.statusCode,
         responseTime: Date.now() - _start,
@@ -263,18 +350,12 @@ const authenticateApiKey = async (req, res, next, rawKey) => {
 
     next();
   } catch (err) {
-    try {
-      const AuthFailureLog = (await import('../models/AuthFailureLog.js')).default;
-      await AuthFailureLog.create({
-        tenantId: null,
-        integration: 'api-key',
-        identifier: rawKey ? rawKey.substring(0, 8) + '...' : undefined,
-        reason: err.message || 'API key authentication failed',
-        ip: req.ip || req.headers['x-forwarded-for'],
-        path: req.path,
-        method: req.method,
-      });
-    } catch { /* ignore */ }
+    await logAuthFailure(req, {
+      integration: 'api-key',
+      identifier: rawKey ? rawKey.substring(0, 8) + '...' : undefined,
+      reason: err.message || 'API key authentication failed',
+      tenantId: knownTenant,
+    });
     next(err);
   }
 };

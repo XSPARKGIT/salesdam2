@@ -17,6 +17,8 @@ const apiKeySchema = new mongoose.Schema({
     enum: ['read', 'write', 'delete', 'admin'],
   }],
   isActive: { type: Boolean, default: true },
+  rateLimitPerMinute: { type: Number, default: 300, min: 1, max: 100000 }, // BRD 17.6.1, per key
+  deactivatedAt: { type: Date }, // temporary switch-off (BRD 17.6.6); revoke is permanent
   expiresAt: { type: Date },
   lastUsedAt: { type: Date },
   usageCount: { type: Number, default: 0 },

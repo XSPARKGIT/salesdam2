@@ -1,21 +1,25 @@
 import Webhook from '../models/Webhook.js';
 import WebhookDeliveryLog from '../models/WebhookDeliveryLog.js';
-import axios from 'axios';
-import crypto from 'crypto';
+import { attemptDelivery } from './outboundWebhookService.js';
 import logger from '../utils/logger.js';
 
 /**
- * Process pending/failed webhook deliveries that are due for retry.
+ * Process pending/failed webhook deliveries that are due for retry (BRD 17.5.12).
+ * Count, interval and backoff come from each webhook. `tenantId` limits the
+ * sweep (the admin button); the background worker passes none.
  * Returns the number of deliveries processed.
  */
-export const processWebhookRetries = async () => {
+export const processWebhookRetries = async (tenantId = null) => {
   const now = new Date();
   const due = await WebhookDeliveryLog.find({
-    status: { $in: ['failed', 'retrying'] },
-    // Field-to-field comparison needs $expr; in a plain query '$maxAttempts'
-    // is just a string and Mongoose fails to cast it to the Number path.
+    ...(tenantId ? { tenantId } : {}),
+    // Field-to-field comparison needs $expr.
     $expr: { $lt: ['$attempt', '$maxAttempts'] },
-    $or: [{ nextRetryAt: { $lte: now } }, { nextRetryAt: null }],
+    payload: { $ne: null },
+    $or: [
+      { status: 'retrying', nextRetryAt: { $lte: now } },
+      { status: 'pending', createdAt: { $lte: new Date(now.getTime() - 120000) } }, // orphaned by a restart
+    ],
   }).limit(50);
 
   let processed = 0;
@@ -25,48 +29,13 @@ export const processWebhookRetries = async () => {
       if (!webhook || !webhook.isActive) {
         log.status = 'failed';
         log.error = 'Webhook inactive or deleted';
+        log.nextRetryAt = null;
+        log.payloadFields = Object.keys(log.payload?.data || {});
+        log.payload = null;
         await log.save();
         continue;
       }
-
-      const signature = crypto.createHmac('sha256', webhook.secret || '').update(JSON.stringify(log.payload)).digest('hex');
-      const attempt = log.attempt + 1;
-
-      try {
-        const response = await axios.post(webhook.url, log.payload, {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Signature': `sha256=${signature}`,
-            ...Object.fromEntries(webhook.headers || []),
-          },
-          timeout: 10000,
-        });
-
-        log.status = 'success';
-        log.httpStatus = response.status;
-        log.response = String(response.data || '').slice(0, 500);
-        log.attempt = attempt;
-        log.completedAt = new Date();
-        log.nextRetryAt = null;
-        await log.save();
-
-        // Update webhook stats
-        await Webhook.updateOne({ _id: webhook._id }, { $inc: { 'stats.successCount': 1, 'stats.totalFired': 1 }, 'stats.lastFiredAt': new Date(), 'stats.lastStatus': response.status });
-      } catch (err) {
-        log.status = attempt >= log.maxAttempts ? 'failed' : 'retrying';
-        log.httpStatus = err.response?.status;
-        log.error = err.message;
-        log.attempt = attempt;
-        if (attempt < log.maxAttempts) {
-          const interval = (webhook.retryIntervalSeconds || 30) * 1000;
-          log.nextRetryAt = new Date(Date.now() + interval);
-        } else {
-          log.nextRetryAt = null;
-        }
-        await log.save();
-
-        await Webhook.updateOne({ _id: webhook._id }, { $inc: { 'stats.failureCount': 1, 'stats.totalFired': 1 }, 'stats.lastFiredAt': new Date(), 'stats.lastStatus': err.response?.status || 0 });
-      }
+      await attemptDelivery(log, webhook);
       processed++;
     } catch (err) {
       logger.error(`Retry worker error for log ${log._id}: ${err.message}`);

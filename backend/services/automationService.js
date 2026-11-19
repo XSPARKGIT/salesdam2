@@ -1,3 +1,4 @@
+import { emit as emitWebhookEvent } from './outboundWebhookService.js';
 import axios from 'axios';
 import Automation from '../models/Automation.js';
 import Notification from '../models/Notification.js';
@@ -48,6 +49,12 @@ function _exit(tenantId, automationId) {
  */
 const fireAutomations = async (event, objectApiName, record, tenantId, prev = null) => {
   try {
+    // Outgoing webhooks (BRD 17.4): record created / updated / deleted, and a lead arriving.
+    const webhookEvent = { create: 'record.created', update: 'record.updated', delete: 'record.deleted' }[event];
+    if (webhookEvent) {
+      emitWebhookEvent(tenantId, webhookEvent, { objectApiName, record });
+      if (event === 'create' && objectApiName === 'lead') emitWebhookEvent(tenantId, 'lead.received', { objectApiName, record });
+    }
     const automations = await Automation.find({
       tenantId,
       isActive: true,
@@ -85,6 +92,7 @@ const fireAutomations = async (event, objectApiName, record, tenantId, prev = nu
         ctx._automationId = String(automation._id);
         ctx._automationName = automation.name;
         await executeFlow(automation, record, ctx, tenantId);
+        emitWebhookEvent(tenantId, 'flow.completed', { objectApiName, record, data: { flowId: String(automation._id), flowName: automation.name, result: 'success' } });
 
         await Automation.updateOne(
           { _id: automation._id },
@@ -152,6 +160,7 @@ const runAutomation = async (automationId, record, tenantId, variables = {}, opt
       ctx._automationId = String(automation._id);
       ctx._automationName = automation.name;
       await executeFlow(automation, record, ctx, tenantId);
+      emitWebhookEvent(tenantId, 'flow.completed', { objectApiName: record?.objectApiName, record, data: { flowId: String(automation._id), flowName: automation.name, result: 'success' } });
       await Automation.updateOne(
         { _id: automation._id },
         {
@@ -479,6 +488,14 @@ const executeNodeInner = async (node, allNodes, record, ctx, tenantId) => {
     case 'action_http_request':
       await executeHttpRequest(node.config, record, ctx, tenantId);
       break;
+
+    case 'action_custom_event': {
+      // BRD 17.4.11: a business event raised from a flow, delivered to webhooks subscribed to custom.<name>
+      const name = String(node.config?.eventName || '').trim().replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 60);
+      if (!name) throw new Error('Custom event step needs an event name.');
+      emitWebhookEvent(tenantId, `custom.${name}`, { objectApiName: record?.objectApiName, record, data: { flowName: ctx._automationName } });
+      break;
+    }
 
     case 'action_update_record':
       await executeUpdateRecord(node.config, record, ctx, tenantId);

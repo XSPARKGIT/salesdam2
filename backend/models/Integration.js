@@ -37,6 +37,7 @@ const integrationSchema = new mongoose.Schema(
     tokenHash: {
       type: String,
       required: true,
+      index: true,
     },
     expiresAt: {
       type: Date,
@@ -80,7 +81,9 @@ integrationSchema.methods.generateToken = function () {
   const token = crypto.randomBytes(32).toString('hex');
   const hash = crypto.createHash('sha256').update(token).digest('hex');
   this.tokenHash = hash;
-  this.accessToken = token;
+  // Only a hash is stored (the unique accessToken column keeps a non-reversible
+  // value); the raw token is returned once to the caller and never again.
+  this.accessToken = `sha256:${hash}`;
   return token;
 };
 

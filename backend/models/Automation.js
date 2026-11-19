@@ -22,6 +22,7 @@ const flowNodeSchema = new mongoose.Schema(
         'action_send_message_template', // WhatsApp/Messenger/Instagram/SMS template, provider-approval gated
         'action_send_notification',
         'action_webhook',
+        'action_custom_event', // raise custom.<name> for outgoing webhooks (BRD 17.4.11)
         'action_http_request', // call an ExternalObject or arbitrary endpoint
         'action_toast', // show a toast notification in the browser
         'action_generate_pdf', // render a PDF template and optionally

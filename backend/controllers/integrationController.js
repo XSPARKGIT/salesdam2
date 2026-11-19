@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import Integration from '../models/Integration.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
@@ -72,6 +73,7 @@ const createIntegration = asyncHandler(async (req, res) => {
   sendSuccess(res, {
     data: {
       ...integration.toObject(),
+      tokenHash: undefined,
       accessToken: token,
     },
     message: 'Integration created successfully. Save the token as it will not be shown again.',
@@ -87,7 +89,7 @@ const getIntegration = asyncHandler(async (req, res) => {
     _id: req.params.id,
     tenantId: req.user.tenantId,
     isDeleted: false,
-  }).select('-tokenHash');
+  }).select('-tokenHash -accessToken');
 
   if (!integration) {
     throw new AppError('Integration not found', 404);
@@ -135,7 +137,7 @@ const updateIntegration = asyncHandler(async (req, res) => {
   });
 
   sendSuccess(res, {
-    data: integration.toObject({ select: '-tokenHash -accessToken' }),
+    data: { ...integration.toObject(), tokenHash: undefined, accessToken: undefined },
     message: 'Integration updated successfully.',
   });
 });
@@ -171,6 +173,7 @@ const regenerateToken = asyncHandler(async (req, res) => {
   sendSuccess(res, {
     data: {
       ...integration.toObject(),
+      tokenHash: undefined,
       accessToken: newToken,
     },
     message: 'Token regenerated successfully. Update the external system with the new token.',
@@ -223,7 +226,7 @@ const verifyToken = asyncHandler(async (req, res) => {
   }
 
   const integration = await Integration.findOne({
-    accessToken: token,
+    tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
     isDeleted: false,
   });
 

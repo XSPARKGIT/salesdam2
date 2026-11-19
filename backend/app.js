@@ -64,6 +64,7 @@ import changeSetRoutes from './routes/changeSets.js';
 import customCodeRoutes from './routes/customCode.js';
 import facebookLeadRoutes from './routes/facebookLead.js';
 import incomingWebhookRoutes from './routes/incomingWebhooks.js';
+import integrationLogRoutes from './routes/integrationLog.js';
 import globalValueSetRoutes from './routes/globalValueSets.js';
 import channelRoutes from './routes/channels.js';
 import conversationRoutes from './routes/conversations.js';
@@ -244,6 +245,7 @@ app.use(`${API_V1_PREFIX}/activities`, activityRoutes);
 app.use(`${API_V1_PREFIX}/change-sets`, changeSetRoutes);
 app.use(`${API_V1_PREFIX}/custom-code`, customCodeRoutes);
 app.use(`${API_V1_PREFIX}/webhooks/incoming`, incomingWebhookRoutes);
+app.use(`${API_V1_PREFIX}/integration-log`, integrationLogRoutes);
 // Shared picklist catalogue (Core BRD §3.2 — PICK-002).
 app.use(`${API_V1_PREFIX}/global-value-sets`, globalValueSetRoutes);
 // Omnichannel inbox: channel accounts, conversations & messaging templates

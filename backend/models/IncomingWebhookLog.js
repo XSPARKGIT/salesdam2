@@ -11,6 +11,9 @@ const schema = new mongoose.Schema(
     recordId: { type: mongoose.Schema.Types.ObjectId },
     status: { type: String, enum: ['received', 'processed', 'failed'], default: 'received' },
     error: { type: String },
+    httpStatus: { type: Number },
+    endpoint: { type: String },
+    apiKeyName: { type: String },
     processedAt: { type: Date },
     // Provider-assigned event id (e.g. Meta's leadgen_id) for idempotency —
     // a redelivered event must not be processed twice (§16.1).

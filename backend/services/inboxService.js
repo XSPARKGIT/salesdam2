@@ -1,3 +1,4 @@
+import { emit as emitWebhookEvent } from './outboundWebhookService.js';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import ChannelAccount from '../models/ChannelAccount.js';
@@ -203,6 +204,7 @@ const _sendAndRecord = async ({ tenantId, conversation, body, attachments = [], 
 
   conversation.lastMessageAt = new Date();
   await conversation.save();
+  emitWebhookEvent(tenantId, 'communication.sent', { data: { channel: conversation.channel, conversationId: String(conversation._id), messageId: String(message._id), status: message.status } });
   return message;
 };
 
