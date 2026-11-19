@@ -9,6 +9,13 @@ import ApprovalProcess from '../models/ApprovalProcess.js';
 import ApproverGroup from '../models/ApproverGroup.js';
 import DuplicateRule from '../models/DuplicateRule.js';
 import TenantConfiguration from '../models/TenantConfiguration.js';
+import Workspace from '../models/Workspace.js';
+import CustomCode from '../models/CustomCode.js';
+import PdfTemplate from '../models/PdfTemplate.js';
+import ExternalObject from '../models/ExternalObject.js';
+import { validateFormula } from './formulaParser.js';
+import crypto from 'crypto';
+import mongoose from 'mongoose';
 import Role from '../models/Role.js';
 import User from '../models/User.js';
 import Tenant from '../models/Tenant.js';
@@ -28,8 +35,11 @@ import logger from '../utils/logger.js';
 const COMPONENT_ORDER = [
   'object',
   'field',
+  'validation_rule',
   'layout',
   'layout_assignment',
+  'pdf_template',
+  'custom_code',
   'flow',
   'approver_group',
   'approval_process',
@@ -160,6 +170,26 @@ const SNAPSHOTTERS = {
     const snapshot = stripTenancy(doc);
     delete snapshot.externalObjectId; // integration-specific, not portable
     delete snapshot.stats; // per-tenant runtime counters
+    // PDF templates and integrations are referenced by id; carry their names instead.
+    for (const node of snapshot.nodes || []) {
+      const cfg = node.config;
+      if (!cfg) continue;
+      if (node.type === 'action_generate_pdf' && cfg.templateId) {
+        const t = await PdfTemplate.findOne({ _id: cfg.templateId, tenantId }).select('apiName').lean();
+        cfg.templateApiName = t?.apiName;
+        delete cfg.templateId;
+      }
+      if (node.type === 'subflow' && cfg.automationId) {
+        const sub = await Automation.findOne({ _id: cfg.automationId, tenantId }).select('apiName').lean();
+        cfg.subflowApiName = sub?.apiName;
+        delete cfg.automationId;
+      }
+      if (cfg.externalObjectId) {
+        const x = await ExternalObject.findOne({ _id: cfg.externalObjectId, tenantId }).select('name').lean();
+        cfg.externalObjectName = x?.name;
+        delete cfg.externalObjectId;
+      }
+    }
     return snapshot;
   },
 
@@ -221,6 +251,42 @@ const SNAPSHOTTERS = {
       }
     }
     return snapshot;
+  },
+
+
+  // Key: `object:RuleName`. Rules live inside the object, so one can travel alone.
+  validation_rule: async (tenantId, key) => {
+    const parts = _splitKey(key, ':');
+    if (!parts) return null;
+    const obj = await ObjectMeta.findOne({ tenantId, apiName: parts[0] }).lean();
+    const rule = (obj?.validationRules || []).find((r) => r.name === parts[1]);
+    if (!rule) return null;
+    const { _id, ...rest } = rule;
+    return { objectApiName: parts[0], ...rest };
+  },
+
+  // Key: the snippet name. Only the ACTIVE (approved) version travels, never
+  // drafts. `full` (used for rollback) keeps the whole version history.
+  custom_code: async (tenantId, name, full = false) => {
+    const doc = await CustomCode.findOne({ tenantId, name }).lean();
+    if (!doc) return null;
+    const strip = ({ createdBy, ...v }) => v;
+    const versions = (doc.versions || [])
+      .filter((v) => full || v.version === doc.activeVersion)
+      .map(strip);
+    return {
+      name: doc.name,
+      apiName: doc.apiName,
+      description: doc.description || '',
+      activeVersion: doc.activeVersion ?? null,
+      versions,
+      ...(full ? { replace: true } : {}),
+    };
+  },
+
+  pdf_template: async (tenantId, apiName) => {
+    const doc = await PdfTemplate.findOne({ tenantId, apiName });
+    return doc ? stripTenancy(doc) : null;
   },
 
   duplicate_rule: async (tenantId, key) => {
@@ -306,6 +372,11 @@ const _referencedObjects = (components) => {
     if (component.componentType === 'flow' && snapshot.trigger?.objectApiName) {
       refs.add(snapshot.trigger.objectApiName);
     }
+    if (component.componentType === 'flow') {
+      for (const node of snapshot.nodes || []) {
+        if (node.config?.objectApiName) refs.add(node.config.objectApiName);
+      }
+    }
     // Layouts may pull in other objects via related lists.
     if (component.componentType === 'layout') {
       (snapshot.relatedLists || []).forEach((list) => {
@@ -334,6 +405,33 @@ const _layoutFieldRefs = (snapshot) => {
     if (list.sortField) refs.add(list.sortField);
   });
   return refs;
+};
+
+
+const SYSTEM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy', 'ownerId']);
+const _plainField = (f) => typeof f === 'string' && /^[a-z][a-z0-9_]*$/i.test(f);
+
+/** Object + field names a flow step reads or writes (only what can be known statically). */
+const _flowNodeFieldRefs = (node, triggerObject) => {
+  const cfg = node.config || {};
+  let objectApiName;
+  const fields = new Set();
+  if (node.type === 'action_update_record') {
+    objectApiName = triggerObject;
+    Object.keys(cfg.fields || {}).forEach((f) => fields.add(f));
+  } else if (node.type === 'action_create_record') {
+    objectApiName = cfg.objectApiName;
+    Object.keys(cfg.fields || {}).forEach((f) => fields.add(f));
+  } else if (node.type === 'get_records' || node.type === 'delete_records') {
+    objectApiName = cfg.objectApiName;
+    (Array.isArray(cfg.filters) ? cfg.filters : []).forEach((flt) => {
+      const f = flt?.field || flt?.fieldApiName;
+      if (f) fields.add(f);
+    });
+  } else {
+    return null;
+  }
+  return { objectApiName, fields: [...fields].filter(_plainField) };
 };
 
 const validate = async ({ changeSet, targetTenantId }) => {
@@ -466,6 +564,73 @@ const validate = async ({ changeSet, targetTenantId }) => {
     }
   }
 
+  // ── Validation rules, custom code, templates and integrations (§13.2) ──
+  const packagedCode = new Set(components.filter((c) => c.componentType === 'custom_code').map((c) => c.componentKey));
+  const packagedFlows = new Set(components.filter((c) => c.componentType === 'flow').map((c) => c.componentKey));
+  const packagedTemplates = new Set(components.filter((c) => c.componentType === 'pdf_template').map((c) => c.componentKey));
+  for (const component of components) {
+    const snap = component.snapshot || {};
+    const via = `${component.componentType}:${component.componentKey}`;
+    if (component.componentType === 'validation_rule') {
+      const objectApiName = snap.objectApiName;
+      if (!packaged.has(objectApiName) && !targetObjectSet.has(objectApiName)) continue; // missing object reported already
+      const tf = await FieldMeta.find({ tenantId: targetTenantId, objectApiName }).select('apiName').lean();
+      const known = new Set([...tf.map((f) => f.apiName), 'id', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy', 'ownerId']);
+      packagedFields.forEach((k) => { if (k.startsWith(`${objectApiName}.`)) known.add(k.split('.')[1]); });
+      const check = snap.expression ? validateFormula(snap.expression, {}, { asCondition: true, knownFields: known }) : { valid: true };
+      const m = /^Unknown field "(.+?)"/.exec(check.error || '');
+      if (m) missing.push({ dependency: 'field', key: `${objectApiName}.${m[1]}`, via });
+      if (snap.errorField && !known.has(snap.errorField)) missing.push({ dependency: 'field', key: `${objectApiName}.${snap.errorField}`, via });
+    }
+    if (component.componentType === 'custom_code' && !(snap.versions || []).some((v) => v.version === snap.activeVersion && v.status === 'active')) {
+      missing.push({ dependency: 'custom_code_approved_version', key: component.componentKey, via });
+    }
+    if (component.componentType === 'flow') {
+      for (const node of snap.nodes || []) {
+        const cfg = node.config || {};
+        if (node.type === 'subflow') {
+          const subName = cfg.subflowApiName;
+          if (subName && !packagedFlows.has(subName)) {
+            const sub = await Automation.findOne({ tenantId: targetTenantId, apiName: subName }).select('_id').lean();
+            if (!sub) missing.push({ dependency: 'flow', key: subName, via });
+          } else if (!subName && cfg.automationId) {
+            missing.push({ dependency: 'flow', key: String(cfg.automationId), via });
+          }
+        }
+        // Fields the flow reads or writes must exist on the object it works on.
+        const fieldRefs = _flowNodeFieldRefs(node, snap.trigger?.objectApiName);
+        if (fieldRefs) {
+          const { objectApiName: fo, fields } = fieldRefs;
+          if (fo && fields.length && (packaged.has(fo) || targetObjectSet.has(fo))) {
+            const tf = await FieldMeta.find({ tenantId: targetTenantId, objectApiName: fo, apiName: { $in: fields } }).select('apiName').lean();
+            const have = new Set(tf.map((f) => f.apiName));
+            for (const f of fields) {
+              if (!have.has(f) && !packagedFields.has(`${fo}.${f}`) && !SYSTEM_FIELDS.has(f)) {
+                missing.push({ dependency: 'field', key: `${fo}.${f}`, via });
+              }
+            }
+          }
+        }
+        if (node.type === 'custom_code' && cfg.name && !packagedCode.has(cfg.name)) {
+          const cc = await CustomCode.findOne({ tenantId: targetTenantId, name: cfg.name }).select('activeVersion').lean();
+          if (!cc || !cc.activeVersion) missing.push({ dependency: 'custom_code', key: cfg.name, via });
+        }
+        if (node.type === 'action_generate_pdf') {
+          if (cfg.templateApiName && !packagedTemplates.has(cfg.templateApiName)) {
+            const t = await PdfTemplate.findOne({ tenantId: targetTenantId, apiName: cfg.templateApiName }).select('_id').lean();
+            if (!t) missing.push({ dependency: 'document_template', key: cfg.templateApiName, via });
+          } else if (!cfg.templateApiName && cfg.templateId) {
+            missing.push({ dependency: 'document_template', key: String(cfg.templateId), via });
+          }
+        }
+        if (cfg.externalObjectName) {
+          const x = await ExternalObject.findOne({ tenantId: targetTenantId, name: cfg.externalObjectName }).select('_id').lean();
+          if (!x) missing.push({ dependency: 'integration', key: cfg.externalObjectName, via });
+        }
+      }
+    }
+  }
+
   return { valid: missing.length === 0, missing };
 };
 
@@ -582,8 +747,89 @@ const PERSISTERS = {
     );
   },
 
+
+  validation_rule: async (tenantId, snapshot) => {
+    const { objectApiName, ...rule } = snapshot;
+    const obj = await ObjectMeta.findOne({ tenantId, apiName: objectApiName });
+    if (!obj) {
+      throw new AppError(`Object '${objectApiName}' is missing in the target tenant.`, 409);
+    }
+    const idx = obj.validationRules.findIndex((r) => r.name === rule.name);
+    if (idx >= 0) obj.validationRules.set(idx, { ...rule, id: obj.validationRules[idx].id || rule.id });
+    else obj.validationRules.push(rule);
+    await obj.save();
+  },
+
+  // A new deployment adds the incoming approved version as the next version
+  // number and activates it, so the previous active version stays in the
+  // history. A rollback snapshot (`replace`) puts the whole history back.
+  custom_code: async (tenantId, snapshot) => {
+    const doc = await CustomCode.findOne({ tenantId, name: snapshot.name });
+    if (snapshot.replace) {
+      if (!doc) {
+        await CustomCode.create({
+          tenantId, name: snapshot.name, apiName: snapshot.apiName, description: snapshot.description,
+          activeVersion: snapshot.activeVersion, versions: snapshot.versions,
+        });
+        return;
+      }
+      doc.versions = snapshot.versions;
+      doc.activeVersion = snapshot.activeVersion;
+      doc.description = snapshot.description;
+      await doc.save();
+      return;
+    }
+    const incoming = (snapshot.versions || []).find((v) => v.version === snapshot.activeVersion);
+    if (!incoming) {
+      throw new AppError(`Custom code '${snapshot.name}' has no approved (active) version to deploy.`, 409);
+    }
+    const base = { code: incoming.code, inputs: incoming.inputs || {}, changeNote: incoming.changeNote || 'Deployed from change set' };
+    if (!doc) {
+      await CustomCode.create({
+        tenantId, name: snapshot.name, apiName: snapshot.apiName, description: snapshot.description,
+        activeVersion: 1, versions: [{ ...base, version: 1, status: 'active' }],
+      });
+      return;
+    }
+    const current = doc.versions.find((v) => v.version === doc.activeVersion);
+    if (current && current.code === incoming.code) return; // already the same code
+    doc.versions.forEach((v) => { if (v.status === 'active') v.status = 'archived'; });
+    const next = (doc.versions.reduce((m, v) => Math.max(m, v.version), 0) || 0) + 1;
+    doc.versions.push({ ...base, version: next, status: 'active' });
+    doc.activeVersion = next;
+    doc.description = snapshot.description;
+    await doc.save();
+  },
+
+  pdf_template: async (tenantId, snapshot) => {
+    await PdfTemplate.findOneAndUpdate(
+      { tenantId, apiName: snapshot.apiName },
+      { $set: { ...snapshot, tenantId } },
+      { upsert: true },
+    );
+  },
+
   flow: async (tenantId, snapshot) => {
-    const data = { ...snapshot };
+    const data = JSON.parse(JSON.stringify(snapshot));
+    for (const node of data.nodes || []) {
+      const cfg = node.config;
+      if (!cfg) continue;
+      if (cfg.templateApiName) {
+        const t = await PdfTemplate.findOne({ tenantId, apiName: cfg.templateApiName }).select('_id').lean();
+        if (t) cfg.templateId = t._id;
+        delete cfg.templateApiName;
+      }
+      if (cfg.subflowApiName) {
+        const sub = await Automation.findOne({ tenantId, apiName: cfg.subflowApiName }).select('_id').lean();
+        if (sub) cfg.automationId = sub._id;
+        delete cfg.subflowApiName;
+      }
+      if (cfg.externalObjectName) {
+        const x = await ExternalObject.findOne({ tenantId, name: cfg.externalObjectName }).select('_id').lean();
+        if (x) cfg.externalObjectId = x._id;
+        delete cfg.externalObjectName;
+      }
+    }
     delete data.externalObjectId;
     delete data.stats;
     await Automation.findOneAndUpdate(
@@ -734,6 +980,14 @@ const _DELETE_BY_KEY = {
       ? LayoutAssignment.deleteOne({ tenantId, objectApiName: parts[0], roleId: role._id })
       : null;
   },
+  validation_rule: async (tenantId, key) => {
+    const parts = _splitKey(key, ':');
+    return parts
+      ? ObjectMeta.updateOne({ tenantId, apiName: parts[0] }, { $pull: { validationRules: { name: parts[1] } } })
+      : null;
+  },
+  custom_code: (tenantId, key) => CustomCode.deleteOne({ tenantId, name: key }),
+  pdf_template: (tenantId, key) => PdfTemplate.deleteOne({ tenantId, apiName: key }),
   flow: (tenantId, key) => Automation.deleteOne({ tenantId, apiName: key }),
   approver_group: (tenantId, key) => ApproverGroup.deleteOne({ tenantId, name: key }),
   approval_process: (tenantId, key) => {
@@ -778,6 +1032,7 @@ const persistComponents = async (targetTenantId, components, warnings = []) => {
     const before = await SNAPSHOTTERS[component.componentType](
       targetTenantId,
       component.componentKey,
+      true,
     );
     await PERSISTERS[component.componentType](
       targetTenantId,
@@ -795,7 +1050,7 @@ const persistComponents = async (targetTenantId, components, warnings = []) => {
 
 /** Every metadata component a tenant currently owns (for cloning). */
 const collectAll = async (tenantId) => {
-  const [objects, fields, layouts, assignments, roles, flows, approvals, duplicateRules, configs, groups] =
+  const [objects, fields, layouts, assignments, roles, flows, approvals, duplicateRules, configs, groups, codes, templates] =
     await Promise.all([
       ObjectMeta.find({ tenantId }).select('apiName').lean(),
       FieldMeta.find({ tenantId }).select('objectApiName apiName').lean(),
@@ -807,6 +1062,8 @@ const collectAll = async (tenantId) => {
       DuplicateRule.find({ tenantId }).select('objectApiName name').lean(),
       TenantConfiguration.find({ tenantId }).select('key').lean(),
       ApproverGroup.find({ tenantId }).select('name').lean(),
+      CustomCode.find({ tenantId }).select('name').lean(),
+      PdfTemplate.find({ tenantId }).select('apiName').lean(),
     ]);
 
   const seen = new Set();
@@ -815,7 +1072,7 @@ const collectAll = async (tenantId) => {
     const dedupe = `${componentType}:${componentKey}`;
     if (seen.has(dedupe)) return;
     seen.add(dedupe);
-    const snapshot = await SNAPSHOTTERS[componentType](tenantId, componentKey);
+    const snapshot = await SNAPSHOTTERS[componentType](tenantId, componentKey, true); // a clone keeps full code history
     if (snapshot) components.push({ componentType, componentKey, snapshot });
   };
 
@@ -829,6 +1086,8 @@ const collectAll = async (tenantId) => {
     const name = roleName.get(String(doc.roleId));
     if (name) await push('layout_assignment', `${doc.objectApiName}:${name}`);
   }
+  for (const doc of codes) await push('custom_code', doc.name);
+  for (const doc of templates) await push('pdf_template', doc.apiName);
   for (const doc of flows) await push('flow', doc.apiName);
   for (const doc of groups) await push('approver_group', doc.name);
   for (const doc of approvals)
@@ -864,7 +1123,22 @@ const cloneConfiguration = async ({ sourceTenantId, name, user }) => {
   await seedDefaultRoles(clone._id);
 
   const warnings = [];
-  await persistComponents(String(clone._id), components, warnings);
+  try {
+    await persistComponents(String(clone._id), components, warnings);
+    // Apps (workspaces) decide which objects are visible, so a sandbox needs them
+    // too. Members are not copied; objects are named, so the list carries over.
+    const apps = await Workspace.find({ tenantId: sourceTenantId }).lean();
+    for (const app of apps) {
+      const { _id, createdBy, lastModifiedBy, memberIds, createdAt, updatedAt, __v, ...rest } = app;
+      await Workspace.create({ ...rest, tenantId: clone._id, memberIds: [] });
+    }
+  } catch (err) {
+    // Never leave a half-built sandbox tenant behind.
+    const models = [ObjectMeta, FieldMeta, Layout, LayoutAssignment, Automation, ApprovalProcess, ApproverGroup, DuplicateRule, TenantConfiguration, CustomCode, PdfTemplate, Role, Workspace];
+    await Promise.all(models.map((M) => M.deleteMany({ tenantId: clone._id }).catch(() => {})));
+    await Tenant.deleteOne({ _id: clone._id });
+    throw err;
+  }
 
   logger.info(
     `Cloned ${components.length} components from tenant ${sourceTenantId} into sandbox tenant ${clone._id}`,
@@ -981,10 +1255,159 @@ const listDeploymentLog = async ({ tenantId, limit, skip }) => {
   const offset = Number(skip) || 0;
   const filter = { tenantId };
   const [items, total] = await Promise.all([
-    DeploymentLog.find(filter).sort({ at: -1 }).skip(offset).limit(size).lean(),
+    DeploymentLog.find(filter).sort({ at: -1 }).skip(offset).limit(size)
+      .select('-rollback').populate('by', 'firstName lastName email').populate('sourceTenantId', 'name').lean(),
     DeploymentLog.countDocuments(filter),
   ]);
   return { items, total, limit: size, skip: offset };
+};
+
+/* ── Package files: export / import (§13.2) ──────────────────────────────── */
+
+const PACKAGE_FORMAT = 'salesdam-change-set';
+const PACKAGE_VERSION = 1;
+const MAX_PACKAGE_BYTES = 5 * 1024 * 1024;
+const MAX_COMPONENTS = 500;
+const SECRET_KEY = /(password|passwd|secret|token|api[-_]?key|authorization|credential)/i;
+const ID_KEYS = ['_id', 'tenantId', 'objectId', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy', '__v'];
+
+/** Stable JSON (sorted keys) so the checksum does not depend on key order. */
+const _canonical = (v) => {
+  if (Array.isArray(v)) return `[${v.map(_canonical).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => `${JSON.stringify(k)}:${_canonical(v[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v) ?? 'null';
+};
+const _checksum = (pkg) => crypto.createHash('sha256').update(_canonical({
+  version: pkg.version, name: pkg.name, description: pkg.description || '', components: pkg.components,
+})).digest('hex');
+
+/** Credential-looking keys never leave the tenant. */
+const _redact = (v) => {
+  if (Array.isArray(v)) return v.map(_redact);
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) out[k] = SECRET_KEY.test(k) && typeof val === 'string' ? '' : _redact(val);
+    return out;
+  }
+  return v;
+};
+
+// The natural key each component's payload must agree with.
+const KEY_FROM_SNAPSHOT = {
+  object: (x) => x.apiName,
+  field: (x) => `${x.objectApiName}.${x.apiName}`,
+  layout: (x) => `${x.objectApiName}:${x.name}`,
+  layout_assignment: (x) => `${x.objectApiName}:${x.roleName}`,
+  flow: (x) => x.apiName,
+  approver_group: (x) => x.name,
+  approval_process: (x) => `${x.objectApiName}:${x.name}`,
+  duplicate_rule: (x) => `${x.objectApiName}:${x.name}`,
+  tenant_config: (x) => x.key,
+  validation_rule: (x) => `${x.objectApiName}:${x.name}`,
+  custom_code: (x) => x.name,
+  pdf_template: (x) => x.apiName,
+};
+
+const exportPackage = async ({ changeSet }) => {
+  const source = await Tenant.findById(changeSet.tenantId).select('name').lean();
+  const pkg = {
+    format: PACKAGE_FORMAT,
+    version: PACKAGE_VERSION,
+    name: changeSet.name,
+    description: changeSet.description || '',
+    exportedAt: new Date().toISOString(),
+    createdAt: changeSet.createdAt ? new Date(changeSet.createdAt).toISOString() : undefined,
+    source: { tenantId: String(changeSet.tenantId), tenantName: source?.name || '' },
+    components: _redact(JSON.parse(JSON.stringify(
+      (changeSet.components || []).map((c) => ({ componentType: c.componentType, componentKey: c.componentKey, snapshot: c.snapshot })),
+    ))),
+  };
+  pkg.checksum = _checksum(pkg);
+  return pkg;
+};
+
+const _hasBadKey = (v, depth = 0) => {
+  if (depth > 40) return true;
+  if (Array.isArray(v)) return v.some((x) => _hasBadKey(x, depth + 1));
+  if (v && typeof v === 'object') {
+    return Object.entries(v).some(([k, val]) => k.startsWith('$') || k === '__proto__' || k === 'constructor' || _hasBadKey(val, depth + 1));
+  }
+  return false;
+};
+
+/**
+ * Turn an uploaded package into a draft change set in the CURRENT tenant.
+ * The file is untrusted: everything is checked before anything is written, and
+ * no id or tenant from the file is used.
+ */
+const importPackage = async ({ pkg, tenantId, user }) => {
+  const refuse = (msg) => { throw new AppError(`Package refused: ${msg}`, 400); };
+  if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) refuse('the file is not a package.');
+  if (Buffer.byteLength(JSON.stringify(pkg)) > MAX_PACKAGE_BYTES) refuse(`it is larger than ${MAX_PACKAGE_BYTES / 1024 / 1024} MB.`);
+  if (pkg.format !== PACKAGE_FORMAT) refuse('this is not a Salesdam change-set package.');
+  if (pkg.version !== PACKAGE_VERSION) refuse(`package version ${JSON.stringify(pkg.version)} is not supported (expected ${PACKAGE_VERSION}).`);
+  if (typeof pkg.name !== 'string' || !pkg.name.trim() || pkg.name.length > 200) refuse('the package has no valid name.');
+  if (!Array.isArray(pkg.components) || pkg.components.length === 0) refuse('the package has no components.');
+  if (pkg.components.length > MAX_COMPONENTS) refuse(`it has more than ${MAX_COMPONENTS} components.`);
+  if (typeof pkg.checksum !== 'string' || !/^[0-9a-f]{64}$/.test(pkg.checksum)) refuse('the integrity checksum is missing.');
+  if (_hasBadKey(pkg.components)) refuse('it contains forbidden keys.');
+  if (_checksum(pkg) !== pkg.checksum) refuse('the integrity checksum does not match - the file was changed after export.');
+
+  const seen = new Set();
+  const components = [];
+  for (const c of pkg.components) {
+    if (!c || typeof c.componentType !== 'string' || typeof c.componentKey !== 'string') refuse('a component is malformed.');
+    if (!COMPONENT_TYPES.includes(c.componentType)) refuse(`unknown component type '${c.componentType.slice(0, 60)}'.`);
+    if (!c.snapshot || typeof c.snapshot !== 'object' || Array.isArray(c.snapshot)) refuse(`component ${c.componentKey.slice(0, 80)} has no payload.`);
+    if (c.componentKey.length > 300) refuse('a component key is too long.');
+    const snapshot = { ...c.snapshot };
+    ID_KEYS.forEach((k) => delete snapshot[k]);
+    if (KEY_FROM_SNAPSHOT[c.componentType](snapshot) !== c.componentKey) refuse(`component ${c.componentKey.slice(0, 80)} does not match its own payload.`);
+    const dupe = `${c.componentType}:${c.componentKey}`;
+    if (seen.has(dupe)) refuse(`component ${c.componentKey.slice(0, 80)} appears twice.`);
+    seen.add(dupe);
+    components.push({ componentType: c.componentType, componentKey: c.componentKey, snapshot });
+  }
+
+  let name = pkg.name.trim();
+  if (await ChangeSet.exists({ tenantId, name })) name = `${name} (imported ${new Date().toISOString().slice(0, 16).replace('T', ' ')})`;
+  return ChangeSet.create({
+    tenantId,
+    name,
+    description: typeof pkg.description === 'string' ? pkg.description.slice(0, 2000) : '',
+    components,
+    createdBy: user?._id,
+    origin: { type: 'file', sourceTenantName: String(pkg.source?.tenantName || '').slice(0, 200), checksum: pkg.checksum, importedAt: new Date() },
+  });
+};
+
+/* ── Sandbox deletion ────────────────────────────────────────────────────── */
+
+const deleteSandbox = async ({ tenantId, confirmName, currentTenantIds = [] }) => {
+  const tenant = await Tenant.findById(tenantId);
+  if (!tenant) throw new AppError('Tenant not found.', 404);
+  if (!tenant.isSandbox || !tenant.clonedFromTenantId) {
+    throw new AppError('Only a sandbox created by cloning can be deleted here.', 403);
+  }
+  if (currentTenantIds.map(String).includes(String(tenant._id))) {
+    throw new AppError('You cannot delete the tenant you are signed in to. Switch to another tenant first.', 409);
+  }
+  if (typeof confirmName !== 'string' || confirmName !== tenant.name) {
+    throw new AppError('Type the sandbox name exactly to confirm.', 400);
+  }
+  const db = mongoose.connection.db;
+  const collections = await db.listCollections().toArray();
+  let removed = 0;
+  for (const { name } of collections) {
+    if (name === 'tenants' || name.startsWith('system.')) continue;
+    const r = await db.collection(name).deleteMany({ tenantId: tenant._id }).catch(() => ({ deletedCount: 0 }));
+    removed += r.deletedCount || 0;
+  }
+  await Tenant.deleteOne({ _id: tenant._id });
+  logger.info(`Sandbox tenant ${tenant._id} deleted (${removed} documents)`);
+  return { name: tenant.name, removed };
 };
 
 export default {
@@ -995,5 +1418,8 @@ export default {
   rollback,
   cloneConfiguration,
   collectAll,
+  exportPackage,
+  importPackage,
+  deleteSandbox,
   listDeploymentLog,
 };

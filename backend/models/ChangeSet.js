@@ -11,6 +11,9 @@ export const COMPONENT_TYPES = [
   'approval_process',
   'duplicate_rule',
   'tenant_config',
+  'validation_rule',
+  'custom_code',
+  'pdf_template',
 ];
 
 const componentSchema = new mongoose.Schema(
@@ -61,6 +64,8 @@ const changeSetSchema = new mongoose.Schema(
       default: 'draft',
     },
     components: { type: [componentSchema], default: [] },
+    // Where the package came from when it was imported from a file.
+    origin: { type: mongoose.Schema.Types.Mixed },
     validations: { type: [validationSchema], default: [] },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

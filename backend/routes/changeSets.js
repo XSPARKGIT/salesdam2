@@ -8,6 +8,9 @@ import {
   deploymentLog,
   rollbackDeployment,
   cloneSandbox,
+  exportChangeSet,
+  importChangeSet,
+  deleteSandboxTenant,
 } from '../controllers/changeSetController.js';
 import {
   requireAuth,
@@ -30,6 +33,9 @@ router.post(
   rollbackDeployment,
 );
 router.post('/sandbox', requireSuperuser, cloneSandbox);
+router.delete('/sandbox/:id', requireSuperuser, deleteSandboxTenant);
+router.post('/import', requireSuperuser, importChangeSet);
+router.get('/:id/export', requireSuperuser, exportChangeSet);
 router.post('/:id/validate', requireSuperuser, validateChangeSet);
 router.post('/:id/deploy', requireSuperuser, deployChangeSet);
 

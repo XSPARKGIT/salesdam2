@@ -1,6 +1,7 @@
 import ChangeSet from '../models/ChangeSet.js';
 import DeploymentLog from '../models/DeploymentLog.js';
 import changeSetService from '../services/changeSetService.js';
+import { hasSystemPermission } from '../services/systemPermissionService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 
 const createChangeSet = asyncHandler(async (req, res) => {
@@ -65,6 +66,7 @@ const deployChangeSet = asyncHandler(async (req, res) => {
   if (!changeSet) throw new AppError('Change set not found.', 404);
   const { targetTenantId } = req.body || {};
   if (!targetTenantId) throw new AppError('targetTenantId is required.', 400);
+  await assertCanDeployCode(req.user, changeSet.components);
 
   const result = await changeSetService.deploy({
     changeSet,
@@ -112,7 +114,39 @@ const cloneSandbox = asyncHandler(async (req, res) => {
   );
 });
 
+// Custom code needs the Deploy Custom Code right on top of deployment itself.
+const assertCanDeployCode = async (user, components = []) => {
+  if (components.some((c) => c.componentType === 'custom_code') && !(await hasSystemPermission(user, 'canDeployCustomCode'))) {
+    throw new AppError('Deploying custom code requires the Deploy Custom Code permission.', 403);
+  }
+};
+
+const exportChangeSet = asyncHandler(async (req, res) => {
+  const changeSet = await ChangeSet.findOne({ _id: req.params.id, tenantId: req.tenantId });
+  if (!changeSet) throw new AppError('Change set not found.', 404);
+  sendSuccess(res, { data: await changeSetService.exportPackage({ changeSet }) }, 'Package exported');
+});
+
+const importChangeSet = asyncHandler(async (req, res) => {
+  const pkg = req.body?.package;
+  await assertCanDeployCode(req.user, Array.isArray(pkg?.components) ? pkg.components : []);
+  const changeSet = await changeSetService.importPackage({ pkg, tenantId: req.tenantId, user: req.user });
+  sendSuccess(res, { data: changeSet }, 'Package imported as a change set', 201);
+});
+
+const deleteSandboxTenant = asyncHandler(async (req, res) => {
+  const result = await changeSetService.deleteSandbox({
+    tenantId: req.params.id,
+    confirmName: req.body?.confirmName,
+    currentTenantIds: [req.tenantId, req.user?.tenantId].filter(Boolean),
+  });
+  sendSuccess(res, { data: result }, 'Sandbox deleted');
+});
+
 export {
+  exportChangeSet,
+  importChangeSet,
+  deleteSandboxTenant,
   createChangeSet,
   listChangeSets,
   getChangeSet,
