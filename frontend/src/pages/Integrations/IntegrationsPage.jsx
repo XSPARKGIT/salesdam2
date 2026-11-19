@@ -85,6 +85,7 @@ function CreateKeyModal({ isOpen, onClose, onCreated }) {
     scopes: ['read'],
     expiresAt: '',
     ipWhitelist: '',
+    rateLimitPerMinute: '',
     allowedObjects: [],
   });
   const [saving, setSaving] = useState(false);
@@ -98,6 +99,7 @@ function CreateKeyModal({ isOpen, onClose, onCreated }) {
         scopes: ['read'],
         expiresAt: '',
         ipWhitelist: '',
+    rateLimitPerMinute: '',
         allowedObjects: [],
       });
       api
@@ -148,6 +150,7 @@ function CreateKeyModal({ isOpen, onClose, onCreated }) {
               .filter(Boolean)
           : [],
         allowedObjects: form.allowedObjects, // empty = all objects
+        rateLimitPerMinute: form.rateLimitPerMinute ? Number(form.rateLimitPerMinute) : undefined,
       });
       onCreated(res.data.data);
       onClose();
@@ -313,6 +316,20 @@ function CreateKeyModal({ isOpen, onClose, onCreated }) {
               placeholder="192.168.1.1, 10.0.0.0/24"
             />
             <p className={styles.keyHint}>Comma-separated. Empty = any IP</p>
+          </div>
+          <div className={styles.keyField}>
+            <label className={styles.keyLabel}>Rate limit (requests per minute)</label>
+            <input
+              className={styles.keyInput}
+              type="number"
+              min="1"
+              value={form.rateLimitPerMinute}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, rateLimitPerMinute: e.target.value }))
+              }
+              placeholder="300"
+            />
+            <p className={styles.keyHint}>Leave blank for the default of 300 per minute</p>
           </div>
         </div>
       </div>
@@ -685,6 +702,8 @@ function UsageModal({ keyItem, isOpen, onClose }) {
 function KeyCard({
   keyItem: k,
   onRevoke,
+  onRotate,
+  onToggle,
   onDelete,
   onViewUsage,
   revoked,
@@ -795,6 +814,16 @@ function KeyCard({
             <BarChart2 size={13} /> Usage
           </button>
         )}
+        {!revoked && onRotate && (
+          <button className={styles.keyActionBtn} onClick={() => onRotate(k)} title="Create a replacement key and revoke this one">
+            Rotate
+          </button>
+        )}
+        {onToggle && (!revoked || !k.revokedAt) && (
+          <button className={styles.keyActionBtn} onClick={() => onToggle(k)} title={k.isActive ? 'Switch the key off (can be switched back on)' : 'Switch the key back on'}>
+            {k.isActive ? 'Deactivate' : 'Activate'}
+          </button>
+        )}
         {!revoked && onRevoke && (
           <button
             className={`${styles.keyActionBtn} ${styles.revokeBtn}`}
@@ -859,8 +888,29 @@ export default function IntegrationsPage() {
       await api.delete(`/api-keys/${k._id}/revoke`);
       toast.success('Key revoked.');
       load();
-    } catch {
-      toast.error('Revoke failed');
+    } catch (err) {
+      toast.error(err.message || 'Revoke failed');
+    }
+  };
+
+  const handleRotate = async (k) => {
+    if (!window.confirm(`Rotate "${k.name}"? A new key is created and the old one stops working immediately.`)) return;
+    try {
+      const r = await api.post(`/api-keys/${k._id}/rotate`);
+      handleCreated(r.data.data);
+      toast.success('Key rotated. Copy the new key now.');
+    } catch (err) {
+      toast.error(err.message || 'Rotate failed');
+    }
+  };
+
+  const handleToggle = async (k) => {
+    try {
+      await api.post(`/api-keys/${k._id}/${k.isActive ? 'deactivate' : 'activate'}`);
+      toast.success(k.isActive ? 'Key deactivated.' : 'Key activated.');
+      load();
+    } catch (err) {
+      toast.error(err.message || 'Could not change the key');
     }
   };
 
@@ -893,9 +943,14 @@ export default function IntegrationsPage() {
               programmatically
             </p>
           </div>
-          <Button icon={<Plus size={14} />} onClick={() => setCreateOpen(true)}>
-            New API Key
-          </Button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button variant="secondary" onClick={() => { window.location.href = '/integrations/monitor'; }}>
+              Webhooks &amp; Integration Log
+            </Button>
+            <Button icon={<Plus size={14} />} onClick={() => setCreateOpen(true)}>
+              New API Key
+            </Button>
+          </div>
         </div>
 
         {/* Security banner */}
@@ -906,7 +961,7 @@ export default function IntegrationsPage() {
             <p>
               Keys are SHA-256 hashed and never stored in plain text. Each key
               supports scopes, IP whitelisting, and expiry dates. All API calls
-              are rate-limited to <strong>300 req/min</strong> per key.
+              are rate-limited per key (default <strong>300 req/min</strong>, set when you create the key).
             </p>
           </div>
         </div>
@@ -1034,6 +1089,8 @@ export default function IntegrationsPage() {
                   keyItem={k}
                   allObjects={allObjects}
                   onRevoke={handleRevoke}
+                  onRotate={handleRotate}
+                  onToggle={handleToggle}
                   onDelete={handleDelete}
                   onViewUsage={setUsageKey}
                 />
@@ -1058,6 +1115,7 @@ export default function IntegrationsPage() {
                   keyItem={k}
                   allObjects={allObjects}
                   revoked
+                  onToggle={handleToggle}
                   onDelete={handleDelete}
                 />
               ))}

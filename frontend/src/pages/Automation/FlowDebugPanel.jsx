@@ -42,6 +42,7 @@ const TYPE_META = {
   action_update_related_records: { color: '#10b981', label: 'Update Related Records' },
   action_generate_pdf: { color: '#ef4444', label: 'Generate PDF' },
   action_webhook: { color: '#f59e0b', label: 'Webhook' },
+  action_custom_event: { color: '#f59e0b', label: 'Business Event' },
   custom_code: { color: '#475569', label: 'Custom Code' },
   navigate: { color: '#ec4899', label: 'Navigate' },
   subflow: { color: '#0ea5e9', label: 'Subflow' },

@@ -219,6 +219,12 @@ const STEP_TYPES = {
     color: '#f59e0b',
     group: 'Actions',
   },
+  action_custom_event: {
+    label: 'Raise Business Event',
+    icon: <Zap size={16} />,
+    color: '#f59e0b',
+    group: 'Actions',
+  },
   action_toast: {
     label: 'Show Toast',
     icon: <Bell size={16} />,
@@ -1162,6 +1168,8 @@ function StepCard({
           : 'Not configured';
       case 'action_http_request':
         return c.url ? `${c.method || 'POST'} ${c.url}` : 'Not configured';
+      case 'action_custom_event':
+        return c.eventName ? `custom.${c.eventName}` : 'Not configured';
       case 'screen':
         return c.title ? `Screen: ${c.title}` : 'Not configured';
       case 'navigate':
@@ -1379,6 +1387,19 @@ function StepCard({
             variables={variables}
             outputVariables={outputVariables}
           />
+        );
+      case 'action_custom_event':
+        return (
+          <div className={styles.cfgSection}>
+            <Row label="Event name">
+              <input
+                className={styles.inp}
+                value={c.eventName || ''}
+                onChange={(e) => setConfig({ ...c, eventName: e.target.value })}
+                placeholder="e.g. claim_escalated (webhooks subscribe to custom.claim_escalated)"
+              />
+            </Row>
+          </div>
         );
       case 'action_toast':
         return (

@@ -44,6 +44,7 @@ import LayoutAssignment from './pages/Layouts/LayoutAssignment';
 import EmailTemplateList from './pages/EmailTemplates/EmailTemplateList';
 import EmailTemplateEditor from './pages/EmailTemplates/EmailTemplateEditor';
 import IntegrationsPage from './pages/Integrations/IntegrationsPage';
+import IntegrationMonitorPage from './pages/Integrations/IntegrationMonitorPage';
 import DashboardList from './pages/Dashboards/DashboardList';
 import DashboardView from './pages/Dashboards/DashboardView';
 import DashboardBuilder from './pages/Dashboards/DashboardBuilder';
@@ -463,6 +464,16 @@ export default function App() {
           element={
             <Guard requirePermission="canManageIntegrations">
               <IntegrationsPage />
+            </Guard>
+          }
+        />
+      )}
+      {FEATURES.integrations && (
+        <Route
+          path="/integrations/monitor"
+          element={
+            <Guard requirePermission="canManageIntegrations">
+              <IntegrationMonitorPage />
             </Guard>
           }
         />
