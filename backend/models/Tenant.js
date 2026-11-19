@@ -41,7 +41,7 @@ const tenantSchema = new mongoose.Schema(
       dateFormat: { type: String, default: 'MM/DD/YYYY' },
       currency: { type: String, default: 'ZAR' },
       language: { type: String, default: 'en' },
-      primaryColor: { type: String, default: '#0066FF' },
+      primaryColor: { type: String, default: '#244c64' },
     },
     operatingCurrency: {
       code: { type: String, default: 'ZAR' }, // ISO 4217 code

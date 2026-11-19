@@ -1,3 +1,5 @@
+import Tenant from '../models/Tenant.js';
+import currencyService from '../services/currencyService.js';
 import mongoose from 'mongoose';
 import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
@@ -421,6 +423,14 @@ const createRecord = asyncHandler(async (req, res) => {
     const editableBody = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => editableFieldNames.includes(k)),
     );
+
+    // BRD §14: a record created without a currency gets the tenant's default currency
+    // (tenant value → platform value → built-in), not a hard-coded one.
+    if (fields.some((f) => f.apiName === 'currency' && ['text', 'picklist'].includes(f.type))
+        && editableFieldNames.includes('currency')
+        && (editableBody.currency === undefined || editableBody.currency === null || editableBody.currency === '')) {
+      editableBody.currency = (await currencyService.effectiveCurrency(await Tenant.findById(req.tenantId).select('_id operatingCurrency').lean())).code;
+    }
 
     // Validate and sanitize input data
     const { data: validatedData, errors, fieldErrors } = await validateRecordData(

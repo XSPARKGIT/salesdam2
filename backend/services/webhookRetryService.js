@@ -21,7 +21,7 @@ export const processWebhookRetries = async () => {
   let processed = 0;
   for (const log of due) {
     try {
-      const webhook = await Webhook.findOne({ _id: log.webhookId, tenantId: log.tenantId });
+      const webhook = await Webhook.findOne({ _id: log.webhookId, tenantId: log.tenantId }).select('+secret');
       if (!webhook || !webhook.isActive) {
         log.status = 'failed';
         log.error = 'Webhook inactive or deleted';

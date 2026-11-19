@@ -1,4 +1,10 @@
 import mongoose from 'mongoose';
+import { encryptSecret as _enc, decryptSecret, isEncrypted } from '../utils/secretCrypto.js';
+
+// Credentials are AES-256-GCM encrypted at rest; plaintext rows written before this change still read back.
+const SALT = 'salesdam-integration-salt';
+const encryptSecret = (v, salt) => (isEncrypted(v) ? v : _enc(v, salt));
+
 
 const webhookSchema = new mongoose.Schema({
   tenantId: {
@@ -10,7 +16,7 @@ const webhookSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String },
   url: { type: String, required: true },
-  secret: { type: String, select: false }, // HMAC secret for signature verification
+  secret: { type: String, select: false, set: (v) => (v ? encryptSecret(v, SALT) : v), get: (v) => decryptSecret(v, SALT) }, // HMAC secret for signature verification
   isActive: { type: Boolean, default: true },
 
   // Which events trigger this webhook

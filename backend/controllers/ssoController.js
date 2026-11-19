@@ -51,7 +51,7 @@ const getTenantSsoConfig = async (tenantId) => {
   const tenant = await Tenant.findById(tenantId).select('_id plan');
   if (!tenant) return { tenant: null };
   const keys = ['auth.sso_enabled', 'auth.sso_provider', 'auth.sso_issuer', 'auth.sso_client_id', 'auth.sso_client_secret'];
-  const resolved = await configurationService.resolveMany(keys, tenantId);
+  const resolved = await configurationService.resolveMany(keys, tenantId, { includeSecrets: true });
   const enabled = Boolean(resolved['auth.sso_enabled']) && tenant.plan === 'enterprise';
   return {
     tenant,

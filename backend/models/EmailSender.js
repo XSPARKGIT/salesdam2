@@ -1,4 +1,10 @@
 import mongoose from 'mongoose';
+import { encryptSecret as _enc, decryptSecret, isEncrypted } from '../utils/secretCrypto.js';
+
+// Credentials are AES-256-GCM encrypted at rest; plaintext rows written before this change still read back.
+const SALT = 'salesdam-integration-salt';
+const encryptSecret = (v, salt) => (isEncrypted(v) ? v : _enc(v, salt));
+
 
 /**
  * EmailSender — a configured "from" address that automations and users can
@@ -26,7 +32,7 @@ const emailSenderSchema = new mongoose.Schema({
   smtpPort:   { type: Number, default: 587 },
   smtpSecure: { type: Boolean, default: false }, // true = TLS on port 465
   smtpUser:   { type: String, trim: true, select: false },
-  smtpPass:   { type: String, select: false },
+  smtpPass:   { type: String, select: false, set: (v) => (v ? encryptSecret(v, SALT) : v), get: (v) => decryptSecret(v, SALT) },
 
   // Status
   isActive:  { type: Boolean, default: true },

@@ -2,6 +2,16 @@ import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { CHANNELS } from '../models/ChannelAccount.js';
 import logger from '../utils/logger.js';
+import configurationService from './configurationService.js';
+
+/**
+ * A channel account's own credential wins; only when it has none does the tenant's configuration
+ * value apply, and then the platform default (BRD §14.2.12). Always resolved for the account's own
+ * tenant, so one tenant's secret can never reach another.
+ */
+export const credentialOrConfig = async (account, own, configKey) =>
+  own || (await configurationService.resolve(configKey, account?.tenantId, '')) || '';
+
 
 /**
  * Channel provider abstraction (Core BRD §18.5, §16.4).
@@ -38,7 +48,8 @@ const isConfigured = (account) =>
 
 /** WhatsApp Cloud API send — plain text or an approved template. */
 const _sendWhatsapp = async (account, message) => {
-  const { accessToken, phoneNumberId } = account.credentials || {};
+  const { phoneNumberId } = account.credentials || {};
+  const accessToken = await credentialOrConfig(account, account.credentials?.accessToken, 'integration.whatsapp.access_token');
   if (!accessToken || !phoneNumberId) {
     return { status: 'queued', providerStatus: 'not_configured', note: 'Missing accessToken/phoneNumberId.' };
   }
@@ -80,6 +91,10 @@ const _sendWhatsapp = async (account, message) => {
     return { status: 'failed', providerStatus: 'error', note: err.message };
   }
 };
+
+/** The config key that signs inbound calls for a channel when the account has no secret of its own. */
+export const inboundSecretKey = (channel) =>
+  ({ whatsapp: 'integration.meta.app_secret', facebook: 'integration.meta.app_secret', instagram: 'integration.meta.app_secret', telephony: 'integration.telephony.api_key', sms: 'integration.telephony.api_key' })[channel] || null;
 
 /** Meta Send API — Messenger (facebook) and Instagram share this endpoint shape. */
 const _sendMeta = async (account, message) => {
@@ -215,8 +230,8 @@ export const capabilitiesFor = (channel) => getAdapter(channel).capabilities;
  * account with no signing secret rejects every webhook rather than accepting
  * unauthenticated inbound payloads.
  */
-export const verifyWebhookSignature = (account, req) => {
-  const secret = account?.webhookSecret;
+export const verifyWebhookSignature = (account, req, fallbackSecret = '') => {
+  const secret = account?.webhookSecret || fallbackSecret;
   if (!secret) return false;
   const header =
     req.headers['x-salesdam-signature'] || req.headers['x-hub-signature-256'];

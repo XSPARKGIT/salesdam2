@@ -6,6 +6,8 @@ import DynamicRecord from '../models/DynamicRecord.js';
 import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import consentService from './consentService.js';
+import configurationService from './configurationService.js';
+import MessageTemplate from '../models/MessageTemplate.js';
 import channelProviders from './channelProviders.js';
 import messageTemplateService from './messageTemplateService.js';
 import duplicateDetectionService from './duplicateDetectionService.js';
@@ -397,6 +399,19 @@ const sendEmailToRecord = async ({ tenantId, objectApiName, recordId, to, subjec
 const sendTemplateToRecord = async ({ tenantId, objectApiName, recordId, channel, to, templateId, channelAccountId, extraValues = {}, user }) => {
   if (!channel) throw new AppError('channel is required.', 400);
   if (!to) throw new AppError('A recipient identifier (phone/email/handle) is required.', 400);
+
+  // BRD §14.2.8: with no template named, use the tenant's default communication template
+  // (tenant value → platform value), given as a template name or id, for this channel.
+  if (!templateId) {
+    const ref = String(await configurationService.resolve('communication.default_template', tenantId, '') || '').trim();
+    if (ref) {
+      const or = [{ name: ref }];
+      if (/^[a-f0-9]{24}$/i.test(ref)) or.push({ _id: ref });
+      const t = await MessageTemplate.findOne({ tenantId, channel, isActive: true, $or: or }).select('_id').lean();
+      if (t) templateId = String(t._id);
+    }
+  }
+  if (!templateId) throw new AppError('A template is required and no default communication template is set for this channel.', 400);
 
   const account = channelAccountId
     ? await ChannelAccount.findOne({ _id: channelAccountId, tenantId, channel }).select('+credentials')

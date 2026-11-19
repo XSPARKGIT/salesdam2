@@ -5,7 +5,8 @@ import Message from '../models/Message.js';
 import Activity from '../models/Activity.js';
 import DynamicRecord from '../models/DynamicRecord.js';
 import { AppError } from '../utils/errors.js';
-import { getAdapter, verifyWebhookSignature } from './channelProviders.js';
+import { getAdapter, verifyWebhookSignature, inboundSecretKey } from './channelProviders.js';
+import configurationService from './configurationService.js';
 
 /**
  * Channel & inbound ingestion service (Core BRD §16.1-16.4, §18.2-18.3).
@@ -371,7 +372,9 @@ const resolveWebhookAccount = async ({ channel, accountId, req }) => {
   );
   if (!account) throw new AppError('Channel account not found.', 404);
   if (!account.isActive) throw new AppError('Channel account is inactive.', 403);
-  if (!verifyWebhookSignature(account, req)) {
+  const key = inboundSecretKey(channel);
+  const fallback = !account.webhookSecret && key ? await configurationService.resolve(key, account.tenantId, '') : '';
+  if (!verifyWebhookSignature(account, req, fallback)) {
     throw new AppError('Invalid webhook signature.', 401);
   }
   return account;

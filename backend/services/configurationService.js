@@ -34,7 +34,7 @@ export const SYSTEM_DEFAULTS = {
     dataType: 'string',
     category: 'platform',
     label: 'Default Currency',
-    description: 'ISO 4217 currency code used when none is specified.',
+    description: 'ISO 4217 currency code shown across the app and given to new records that have a currency field and none supplied.',
     editableByTenant: true,
   },
   'deals.minimum_value': {
@@ -75,7 +75,7 @@ export const SYSTEM_DEFAULTS = {
     editableByTenant: true,
   },
   'branding.primary_color': {
-    value: '#0066FF',
+    value: '#244c64',
     dataType: 'string',
     category: 'branding',
     label: 'Primary Brand Colour',
@@ -122,7 +122,7 @@ export const SYSTEM_DEFAULTS = {
     dataType: 'string',
     category: 'integration',
     label: 'WhatsApp Access Token',
-    description: 'WhatsApp Business API access token. Stored encrypted.',
+    description: 'WhatsApp Cloud API token used to send WhatsApp messages when the channel account has no token of its own. Stored encrypted.',
     editableByTenant: true,
     isSecret: true,
   },
@@ -131,7 +131,7 @@ export const SYSTEM_DEFAULTS = {
     dataType: 'string',
     category: 'integration',
     label: 'Meta App Secret',
-    description: 'Meta (Facebook) app secret. Stored encrypted.',
+    description: 'Meta app secret that signs inbound WhatsApp, Messenger and Instagram webhooks when the channel account has no signing secret of its own. Stored encrypted.',
     editableByTenant: true,
     isSecret: true,
   },
@@ -140,7 +140,7 @@ export const SYSTEM_DEFAULTS = {
     dataType: 'string',
     category: 'integration',
     label: 'Telephony API Key',
-    description: 'Telephony provider API key. Stored encrypted.',
+    description: 'Shared key that signs inbound telephony and SMS provider callbacks when the channel account has no signing secret of its own. Stored encrypted.',
     editableByTenant: true,
     isSecret: true,
   },
@@ -149,7 +149,7 @@ export const SYSTEM_DEFAULTS = {
     dataType: 'string',
     category: 'integration',
     label: 'Webhook Secret',
-    description: 'Shared secret for incoming webhooks. Stored encrypted.',
+    description: 'Signing secret checked on inbound webhooks sent to this tenant. Stored encrypted.',
     editableByTenant: true,
     isSecret: true,
   },
@@ -158,15 +158,15 @@ export const SYSTEM_DEFAULTS = {
     dataType: 'string',
     category: 'communication',
     label: 'Default Communication Template',
-    description: 'Default template used for outbound communications.',
+    description: 'Name (or id) of the message template used when a flow or send action names none for the channel.',
     editableByTenant: true,
   },
   'records.call_recording_retention_days': {
-    value: 30,
+    value: 0,
     dataType: 'number',
     category: 'records',
     label: 'Call Recording Retention (days)',
-    description: 'How long call recordings are retained.',
+    description: 'Days to keep call recording links before they are removed. 0 keeps them indefinitely.',
     editableByTenant: true,
   },
 
@@ -383,7 +383,7 @@ const resolve = async (key, tenantId = null, fallback = undefined) => {
  * Resolve many keys at once. Returns a plain { key: value } object; keys that
  * resolve to undefined and have no fallback are omitted.
  */
-const resolveMany = async (keys, tenantId = null) => {
+const resolveMany = async (keys, tenantId = null, { includeSecrets = false } = {}) => {
   const scope = tenantId ? [tenantId, null] : [null];
   const docs = await TenantConfiguration.find({
     key: { $in: keys },
@@ -392,6 +392,9 @@ const resolveMany = async (keys, tenantId = null) => {
 
   const result = {};
   for (const key of keys) {
+    // Secrets never reach CONFIG() formulas (validation rules, flows, approvals) — and so never
+    // their results, errors or execution history. Only callers that pass includeSecrets get them.
+    if (!includeSecrets && metaFor(key, docs.find((d) => d.key === key) || {}).isSecret) continue;
     const tenantDoc = tenantId
       ? docs.find(
           (d) =>
@@ -514,7 +517,11 @@ const set = async ({ key, tenantId = null, value, dataType, category, label, des
  * Clears the tenant override when tenantId is set, otherwise the system default.
  */
 const clear = async (key, tenantId = null) => {
-  const res = await TenantConfiguration.deleteOne({ key, tenantId });
+  // Delete by _id: a deleteOne on the {key, tenantId} filter was seen to hang until the
+  // socket timed out for a few keys on the hosted database, while the same row deleted by id is instant.
+  const existing = await TenantConfiguration.findOne({ key, tenantId }).select('_id').lean();
+  if (!existing) return false;
+  const res = await TenantConfiguration.deleteOne({ _id: existing._id });
   return res.deletedCount > 0;
 };
 

@@ -1,4 +1,17 @@
 import mongoose from 'mongoose';
+import { encryptSecret as _enc, decryptSecret, isEncrypted } from '../utils/secretCrypto.js';
+
+// Provider credentials and the signing secret are AES-256-GCM encrypted at rest (BRD §14.2.11).
+// Rows written before this change are plain and still read back; they are encrypted on next save.
+const SALT = 'salesdam-integration-salt';
+const sealObject = (v) => (v && typeof v === 'object' && Object.keys(v).length ? _enc(JSON.stringify(v), SALT) : v);
+const openObject = (v) => {
+  if (!isEncrypted(v)) return v;
+  try { return JSON.parse(decryptSecret(v, SALT)); } catch { return {}; }
+};
+const sealString = (v) => (v && !isEncrypted(v) ? _enc(v, SALT) : v);
+const openString = (v) => (isEncrypted(v) ? decryptSecret(v, SALT) : v);
+
 
 /**
  * ChannelAccount — a tenant's configuration for one messaging/telephony
@@ -58,8 +71,8 @@ const channelAccountSchema = new mongoose.Schema(
 
     // Provider credentials and the webhook signing secret are secrets: never
     // selected by default so they cannot leak through list/get responses.
-    credentials: { type: mongoose.Schema.Types.Mixed, default: {}, select: false },
-    webhookSecret: { type: String, select: false },
+    credentials: { type: mongoose.Schema.Types.Mixed, default: {}, select: false, set: sealObject, get: openObject },
+    webhookSecret: { type: String, select: false, set: sealString, get: openString },
 
     // Object created when an agent "creates a record" from a conversation
     // (§16.4). Falls back to the first match rule's object when unset.

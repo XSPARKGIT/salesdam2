@@ -71,6 +71,18 @@ const sweepRecycleBin = async () => {
   }
 };
 setTimeout(sweepRecycleBin, 60000);
+
+// Call-recording retention (BRD 14.2.10) — same cadence; only tenants with a positive window are touched.
+const sweepCallRecordings = async () => {
+  try {
+    const { default: svc } = await import('./services/callRecordingRetentionService.js');
+    await svc.purgeExpiredRecordings();
+  } catch (err) {
+    logger.error(`Call recording purge error: ${err.message}`);
+  }
+};
+setTimeout(sweepCallRecordings, 90000);
+setInterval(sweepCallRecordings, RECYCLE_BIN_SWEEP_MS);
 setInterval(sweepRecycleBin, RECYCLE_BIN_SWEEP_MS);
 
 app.listen(PORT, () => {

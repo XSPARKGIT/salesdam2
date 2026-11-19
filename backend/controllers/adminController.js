@@ -1,3 +1,5 @@
+import currencyService from '../services/currencyService.js';
+import configurationService from '../services/configurationService.js';
 import Tenant from '../models/Tenant.js';
 import User from '../models/User.js';
 import AuditLog from '../models/AuditLog.js';
@@ -73,7 +75,7 @@ const getAuditLogs = asyncHandler(async (req, res) => {
  * GET /api/admin/settings
  */
 const getAdminSettings = asyncHandler(async (req, res) => {
-  const tenant = await Tenant.findById(req.user.tenantId)
+  const tenant = await Tenant.findById(req.tenantId)
     .select(
       'name phone features companyProfile revenueTargets salesTargets invoiceQuoteSettings operatingCurrency leadApprovalSettings',
     )
@@ -86,7 +88,7 @@ const getAdminSettings = asyncHandler(async (req, res) => {
     throw new AppError('Tenant not found', 404);
   }
 
-  sendSuccess(res, { data: tenant });
+  sendSuccess(res, { data: { ...tenant.toObject(), operatingCurrency: await currencyService.effectiveCurrency(tenant) } });
 });
 
 /**
@@ -527,7 +529,13 @@ const updateAdminSettings = asyncHandler(async (req, res) => {
   if (revenueTargets) update.revenueTargets = revenueTargets;
   if (salesTargets) update.salesTargets = salesTargets;
   if (invoiceQuoteSettings) update.invoiceQuoteSettings = invoiceQuoteSettings;
-  if (operatingCurrency) update.operatingCurrency = operatingCurrency;
+  if (operatingCurrency) {
+    update.operatingCurrency = operatingCurrency;
+    // The Configuration setting is the source of truth (tenant value → platform → built-in).
+    if (currencyService.byCode(operatingCurrency.code)) {
+      await configurationService.set({ key: 'platform.default_currency', tenantId: req.tenantId, value: operatingCurrency.code, updatedBy: req.user._id });
+    }
+  }
   if (leadApprovalSettings) {
     Object.entries(leadApprovalSettings).forEach(([k, v]) => {
       update[`leadApprovalSettings.${k}`] = v;
@@ -535,7 +543,7 @@ const updateAdminSettings = asyncHandler(async (req, res) => {
   }
 
   const tenant = await Tenant.findByIdAndUpdate(
-    req.user.tenantId,
+    req.tenantId,
     { $set: update },
     { new: true, runValidators: true },
   ).select(

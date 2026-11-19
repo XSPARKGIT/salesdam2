@@ -25,11 +25,14 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 router.post('/', checkAppPermission('canManageWebhooks'), asyncHandler(async (req, res) => {
   const secret = crypto.randomBytes(32).toString('hex');
+  // Only the editable fields come from the caller: tenantId, createdBy and the signing secret never do.
+  const fields = Object.fromEntries(['name', 'description', 'url', 'events', 'isActive', 'objectFilters', 'headers', 'retryCount']
+    .filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]]));
   const webhook = await Webhook.create({
+    ...fields,
     tenantId: req.tenantId,
     createdBy: req.user._id,
     secret,
-    ...req.body,
   });
   // Return webhook with secret only on creation
   sendSuccess(res, { data: { ...webhook.toObject(), secret } }, 'Webhook created', 201);

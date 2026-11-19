@@ -16,6 +16,8 @@ import EmailSender from '../../models/EmailSender.js';
 import * as commTemplates from './communicationTemplates.js';
 import * as commService from './communicationService.js';
 import logger from '../../utils/logger.js';
+import consentService from '../consentService.js';
+import { CONSENT_CHANNELS } from '../../models/Consent.js';
 
 const COMMUNICATION_CHANNELS = ['email', 'whatsapp', 'sms', 'post'];
 const COMMUNICATION_STATUSES = {
@@ -150,6 +152,15 @@ export const deliverCommunication = async (tenantId, communication) => {
       const p = policy.data instanceof Map ? Object.fromEntries(policy.data) : policy.data;
       context.policy = { policy_number: p.policy_number };
       if (p.current_premium) context.transaction = { amount: p.current_premium };
+    }
+  }
+
+  // BRD §14.2.9: the tenant's consent settings apply to queued policy communications too.
+  // With enforcement off (the default) nothing changes; when on, an opted-out client is not contacted.
+  if (client && CONSENT_CHANNELS.includes(channel)) {
+    const verdict = await consentService.canContact(tenantId, 'client', client, channel);
+    if (verdict.enforced && !verdict.allowed) {
+      return { success: false, error: `Contact blocked: ${verdict.reason}.` };
     }
   }
 

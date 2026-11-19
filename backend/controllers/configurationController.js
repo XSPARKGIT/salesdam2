@@ -1,6 +1,37 @@
 import configurationService from '../services/configurationService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
+import Tenant from '../models/Tenant.js';
+import mongoose from 'mongoose';
+
+const BRANDING_KEYS = ['branding.company_name', 'branding.primary_color', 'branding.logo_url', 'branding.login_logo_url'];
+const MAX_LOGO_CHARS = 700_000; // ~500 KB image as a data URI
+
+/** A stored secret is never sent back, not even in its encrypted form. */
+const maskedDoc = (doc) => {
+  const o = doc.toObject ? doc.toObject() : { ...doc };
+  if (o.isSecret) o.value = o.value ? '••••••••' : '';
+  return o;
+};
+
+/** Reject unsafe or unusable branding values before they are stored (empty = clear to default). */
+const validateBrandingValue = (key, value) => {
+  if (!key.startsWith('branding.')) return;
+  const v = value === null || value === undefined ? '' : String(value).trim();
+  if (v === '') return;
+  if (key === 'branding.company_name' && v.length > 80) {
+    throw new AppError('Company name must be 80 characters or fewer.', 400);
+  }
+  if (key === 'branding.primary_color' && !/^#[0-9a-fA-F]{6}$/.test(v)) {
+    throw new AppError('Primary colour must be a hex colour such as #0066FF.', 400);
+  }
+  if (key === 'branding.logo_url' || key === 'branding.login_logo_url') {
+    if (v.length > MAX_LOGO_CHARS) throw new AppError('Logo is too large (500 KB maximum).', 400);
+    if (!/^(https:\/\/|http:\/\/|data:image\/(png|jpeg|gif|webp);base64,)/i.test(v)) {
+      throw new AppError('Logo must be an http(s) URL or a PNG, JPEG, GIF or WebP image.', 400);
+    }
+  }
+};
 
 /**
  * GET /api/v1/configuration
@@ -30,6 +61,7 @@ const updateTenantConfig = asyncHandler(async (req, res) => {
   if (req.body?.value === undefined) {
     throw new AppError('A "value" is required.', 400);
   }
+  validateBrandingValue(key, req.body.value);
 
   // Core BRD §21.6: SSO is an enterprise-plan capability.
   if (key === 'auth.sso_enabled' && (req.body.value === true || req.body.value === 'true')) {
@@ -55,7 +87,7 @@ const updateTenantConfig = asyncHandler(async (req, res) => {
     details: { key },
     req,
   });
-  sendSuccess(res, { data: doc }, 'Configuration saved');
+  sendSuccess(res, { data: maskedDoc(doc) }, 'Configuration saved');
 });
 
 /**
@@ -98,6 +130,7 @@ const setSystemDefault = asyncHandler(async (req, res) => {
   if (req.body?.value === undefined) {
     throw new AppError('A "value" is required.', 400);
   }
+  validateBrandingValue(key, req.body.value);
   const doc = await configurationService.set({
     key,
     tenantId: null,
@@ -109,7 +142,7 @@ const setSystemDefault = asyncHandler(async (req, res) => {
     editableByTenant: req.body.editableByTenant,
     updatedBy: req.user._id,
   });
-  sendSuccess(res, { data: doc }, 'Platform default saved');
+  sendSuccess(res, { data: maskedDoc(doc) }, 'Platform default saved');
 });
 
 /**
@@ -126,7 +159,29 @@ const resetSystemDefault = asyncHandler(async (req, res) => {
   );
 });
 
+/** Unauthenticated: branding for the login page. ?tenant=<slug or id>; otherwise the platform default. */
+const getPublicBranding = asyncHandler(async (req, res) => {
+  const ref = String(req.query.tenant || '').trim().toLowerCase();
+  let tenantId = null;
+  if (ref && ref.length <= 64) {
+    const t = mongoose.isValidObjectId(ref)
+      ? await Tenant.findById(ref).select('_id').lean()
+      : await Tenant.findOne({ slug: ref }).select('_id').lean();
+    tenantId = t?._id || null;
+  }
+  const v = await configurationService.resolveMany(BRANDING_KEYS, tenantId);
+  sendSuccess(res, {
+    data: {
+      companyName: v['branding.company_name'],
+      primaryColor: v['branding.primary_color'],
+      logoUrl: v['branding.logo_url'],
+      loginLogoUrl: v['branding.login_logo_url'],
+    },
+  });
+});
+
 export {
+  getPublicBranding,
   getEffectiveConfig,
   updateTenantConfig,
   resetTenantConfig,

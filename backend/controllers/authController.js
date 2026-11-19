@@ -1,3 +1,4 @@
+import currencyService from '../services/currencyService.js';
 import User from '../models/User.js';
 import Tenant from '../models/Tenant.js';
 import Workspace from '../models/Workspace.js';
@@ -231,11 +232,7 @@ const register = asyncHandler(async (req, res) => {
           _id: result.tenant._id,
           name: result.tenant.name,
           features: result.tenant.features,
-          operatingCurrency: result.tenant.operatingCurrency || {
-            code: 'ZAR',
-            name: 'South African Rand',
-            symbol: 'R',
-          },
+          operatingCurrency: await currencyService.effectiveCurrency(result.tenant),
         },
       },
     },
@@ -428,11 +425,7 @@ const login = asyncHandler(async (req, res) => {
           slug: activeTenant.slug,
           settings: activeTenant.settings,
           features: activeTenant.features,
-          operatingCurrency: activeTenant.operatingCurrency || {
-            code: 'ZAR',
-            name: 'South African Rand',
-            symbol: 'R',
-          },
+          operatingCurrency: await currencyService.effectiveCurrency(activeTenant),
         },
         // Tenant/Role/user policy requires MFA but this user has not
         // enrolled yet — let them in, but the frontend must prompt
@@ -776,11 +769,7 @@ const getMe = asyncHandler(async (req, res) => {
       },
       tenant: {
         ...tenant.toObject(),
-        operatingCurrency: tenant.operatingCurrency || {
-          code: 'ZAR',
-          name: 'South African Rand',
-          symbol: 'R',
-        },
+        operatingCurrency: await currencyService.effectiveCurrency(tenant),
       },
     },
   });
