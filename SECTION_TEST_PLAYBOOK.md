@@ -474,3 +474,17 @@ roles Claims Manager (parent) and Claims Handler, Approval Threshold Amount = **
 **Lessons:** a new object needs adding to the workspace *and* the session workspace must match; objects are deleted with `DELETE /objects/x?force=true`; an action-button `location: record_list` on a native action is silently normalised to `record_detail` (by design, not a bug).
 
 **Second pass (manual walked literally in the UI):** wording corrected from the screen — the sidebar item is **Object Settings** (not Object Manager); workspaces are at `/workspaces` (not under Setup); the object switch is **Allow Search**; list-view sort comes from clicking the column header (once ascending, twice descending) and columns from **Choose columns**, then **New List View…** saves both; Kanban/Calendar pickers only offer picklist/date fields. Field delete uses `window.confirm` (marked Needs a person); object delete is a typed-name modal. Re-indexing takes several seconds on the remote DB and the top-bar box ignores a repeated identical query, so search a different word or wait. Suites after the `DynamicRecord` pre-save hook: section10-search-views 36/36, action-buttons 24/24, record-merge 23/23, section15-custom-code 13/13, duplicate-detection 21/21.
+
+---
+
+## 15. Where Section 11 ended
+
+**Tested:** §11.1–§11.3. Clicked in the report builder on Insured Life / Policy (all five functions, group-by, filter, roll-up totals, save and reopen, one-level cross-object by Policy Number and Status), Analytics Quick Report and dashboard widgets (figures checked against the data), Allow Reports off. Suites: `section11-reporting` 91/91 (grown from 54), `app-access` 26/26, `sharing-model` 58/58. Manual: 13 tests, `tools/manual-docx/section11-test-manual.html`.
+
+**Already built:** `/reports/run` with aggregates, filters, one-hop `crossObject`; saved reports; dashboards; the same five functions as roll-ups everywhere.
+
+**Fixed (uncommitted):** `/reports/run` ignored Allow Reports, field security and the related object's record visibility, never checked that the lookup field really was a relationship, and interpolated the function name into a Mongo operator (operator injection) — new `utils/reportGuards.js`; View/Manage Analytics now gate `/reports` (they were stored but unchecked); **dashboard `widget-data` checked nothing** (no Read, no record visibility, no Allow Reports, no field security) — now guarded; the widget object picker only offered the current App's objects; Analytics Quick Report swallowed errors (now shows the message) and accepted any lookup text; a cross-object group is labelled with the related field; Min/Max wording aligned.
+
+**Known and not fixed:** `/analytics/report` stays Read-based (BRD 5.3, proven by app-access), so View Analytics gates only the `/reports` API and the menu; lookups to User cannot be followed one level (Users are not a reportable object) and grouping on them shows ids; dashboard widgets are single-object; no fixture Lookup between reportable objects (the suite builds one); the table header for an ungrouped count reads "Category".
+
+**Lessons:** the pane can read 0x0, so recharts draws nothing: `resize_window` 1200x800 then read `svg text` (reset afterwards); the pane once bounced to /login after backend restarts although the session was valid, so just navigate again; `extract.py` drops `<div class="aside">`, so use a `callout warn` for caveats; `/reports/run` and `/analytics/report` are two separate runners, change both.

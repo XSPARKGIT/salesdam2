@@ -1,0 +1,392 @@
+<title>Reporting Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Reporting and Analytics</h1>
+    <p class="standfirst">A step-by-step script for BRD Section&nbsp;11. You are checking that a report or dashboard widget can be built on any object, that a report can follow one relationship to a related record, and that charts use the same five functions as Roll-Up Summary fields. It uses the Policy and Insured Life objects already in the system, and you delete what you create at the end.</p>
+    <div class="mast-meta"><span><b>Scope</b> BRD §11.1 – §11.3</span><span><b>Tests</b> 13</span><span><b>Time</b> ~35 minutes</span><span><b>Issued</b> 19 Nov 2026</span></div>
+  </header>
+  <div class="progress-bar"><span class="count" id="count">0 of 13 complete</span><div class="track"><div class="fill" id="fill"></div></div><button class="btn-reset" id="reset" type="button">Reset</button></div>
+  <h2>Before you start</h2>
+  <div class="callout"><h3>Signing in</h3><dl class="creds"><dt>Address</dt><dd>http://localhost:5173</dd><dt>Administrator</dt><dd>admin@example.com (System Admin, Super User)</dd><dt>Workspace</dt><dd>My Company → Insurance</dd></dl>
+  <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">Ask your Salesdam contact for the administrator password. The figures below come from the six Insured Life records across policies POL-TEST-001 and POL-CL-001; if your data differs, compare against your own list instead. Pages can take 10–30 seconds to fill because the database is remote.</p></div>
+  <h2>Reports on any object</h2>
+<p class="sec-note">BRD §11.1 — the report builder works on any object you may read, standard or custom, and is not limited to the pre-defined Sales dashboards.</p>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. A report can be built on a custom object, not just a built-in one</span>
+        <span class="refs"><span class="ref">§11.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Click <b>Reports</b> in the left menu, then <b>New Report</b>. Set <b>Object</b> to <b>Insured Life</b> (the list offers every object you may read: Broker, Claim, Insured Life, Policy, S9 Case).</li><li>Set <b>Group By</b> to <b>Relationship</b>. Under <b>AGGREGATIONS</b> choose <b>Sum</b> and the field <b>Sum Assured</b>. Under <b>CHART TYPE</b> click <b>Table</b>, then click <b>Run</b> (top right).</li><li>Compare with the data: open the <b>Insured Lives</b> list and add up <b>Sum Assured</b> by relationship (six lives: two Main Members, two Spouses, two Children).</li></ol>
+      <div class="expect"><b>Expected</b>The table has two columns, <b>Relationship</b> and <b>Sum of Sum Assured</b>: <b>Main Member 350,000</b>, <b>Spouse 230,000</b>, <b>Child 70,000</b>. The totals equal what you add up from the list.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. Count, Average, Min and Max agree with each other and with the data</span>
+        <span class="refs"><span class="ref">§11.1</span><span class="ref">§11.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Staying on the same report, change the function (the first list under <b>AGGREGATIONS</b>) to <b>Count</b> and click <b>Run</b>. Then <b>Average</b>, <b>Min</b> and <b>Max</b>, each time choosing the field <b>Sum Assured</b> and clicking <b>Run</b>.</li></ol>
+      <div class="expect"><b>Expected</b><b>Count</b>: 2 in each group. <b>Average</b>: Main Member 175,000, Spouse 115,000, Child 35,000. <b>Min</b>: 100,000 / 80,000 / 20,000. <b>Max</b>: 250,000 / 150,000 / 50,000. Each average is the group total from Test 1 divided by 2.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. A report can total a Roll-Up Summary field</span>
+        <span class="refs"><span class="ref">§11.1</span><span class="ref">§11.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Click <b>Reports</b> in the left menu, then <b>New Report</b>. Set <b>Object</b> to <b>Policy</b>, <b>Group By</b> to <b>Policy Number</b>, choose <b>Table</b>, then <b>Sum</b> of <b>Total Sum Assured</b> and click <b>Run</b>.</li><li>Open the policies in the <b>Policies</b> list and read each one's <b>Total Sum Assured</b>.</li></ol>
+      <div class="expect"><b>Expected</b><b>POL-TEST-001 450,000</b>, <b>POL-CL-001 200,000</b>, <b>POL-FP-001 0</b>: the same figures the Roll-Up Summary field shows on each policy. The aggregate dropdown for numbers lists the Roll-Up fields (Total Insured Lives, Total Sum Assured, Spouse Cover Total) next to Claims Lodged, Commission Rate and Monthly Premium.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. Filters narrow the report</span>
+        <span class="refs"><span class="ref">§11.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Click <b>Reports</b> in the left menu, then <b>New Report</b>. Set <b>Object</b> to <b>Insured Life</b>, <b>Table</b>, leave <b>Group By</b> on <b>None (raw records)</b> and the function on <b>Count</b>.</li><li>Click <b>Add Filter</b>. Choose the field <b>Sum Assured</b>, the operator <b>&gt;</b>, type <b>100000</b> in <b>Value</b> and click <b>Run</b>.</li></ol>
+      <div class="expect"><b>Expected</b>First run: a single <b>Count</b> of <b>2</b> (two lives are insured for more than 100,000). The operator list offers =, ≠, &gt;, ≥, &lt;, ≤, contains, not contains, starts with, in, is empty, is not empty and between.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. A saved report reopens exactly as it was built</span>
+        <span class="refs"><span class="ref">§11.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Build the report in Test 6 (below), type <b>S11 Sum Assured by Policy</b> in <b>Name</b>, and click <b>Save</b>. You land on the saved report.</li><li>Click <b>Reports</b> in the left menu, open <b>S11 Sum Assured by Policy</b>, then click <b>Refresh</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The saved report shows the same chart with the same figures every time (it is re-run on the live data, not stored as a picture). <b>Edit</b> opens it back in the builder with every choice still set. <b>Needs a person:</b> look at the bar chart itself; the checking tool read the labels and values but cannot judge the picture.</div>
+    </div>
+  </div>
+<h2>Reports across a relationship (one level)</h2>
+<p class="sec-note">BRD §11.2 — a report can follow one Lookup or Master-Detail relationship to the related object's fields.</p>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. Insured Life grouped by the parent Policy's Policy Number (Master-Detail)</span>
+        <span class="refs"><span class="ref">§11.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Click <b>Reports</b> in the left menu, then <b>New Report</b>. Set <b>Object</b> to <b>Insured Life</b>, <b>Sum</b> of <b>Sum Assured</b>, and leave <b>Group By</b> on <b>None (raw records)</b>.</li><li>Under <b>CROSS-OBJECT</b> set <b>Lookup Field</b> to <b>Policy → policy</b>. A new list <b>Group by (related)</b> appears; choose <b>Policy Number</b>. Choose <b>Bar</b> and click <b>Run</b>.</li></ol>
+      <div class="expect"><b>Expected</b>Two bars: <b>POL-TEST-001</b> (450,000) and <b>POL-CL-001</b> (200,000). The axis is titled <b>Policy: Policy Number</b>, so you can tell the group comes from the parent record. The figures equal the sum of each policy&rsquo;s own lives in the Insured Lives list. POL-FP-001 has no lives, so it does not appear.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. The same report grouped by the parent Policy's Status</span>
+        <span class="refs"><span class="ref">§11.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Change <b>Group by (related)</b> to <b>Policy Status</b>, choose <b>Table</b> and click <b>Run</b>.</li></ol>
+      <div class="expect"><b>Expected</b>One row: <b>Active — 650,000</b>. All lives belong to Active policies and the total is the sum of every life (350,000 + 230,000 + 70,000).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. Only one relationship is followed; a second level is refused</span>
+        <span class="refs"><span class="ref">§11.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Look at <b>Group by (related)</b>: it lists only the fields of the Policy itself (for example Policy Number, Policy Status, Type), never fields of records Policy points to.</li><li><b>Needs a person / not clicked:</b> there is no screen that lets you type a path such as <i>policy.broker.name</i>; it can only be sent to the server directly.</li></ol>
+      <div class="expect"><b>Expected</b>No second hop can be chosen on screen. Sent directly, the server refuses a path through a second relationship, a field that is not a relationship, and a relationship that does not point at the named object, each with a plain message (proven by the automated suite, 91 checks). A <b>Lookup</b> field is handled by exactly the same code as the <b>Master-Detail</b> used here; the suite builds one (Task → Project) and reports across it, because this system's sample objects hold no Lookup between two reportable objects.</div>
+    </div>
+  </div>
+<h2>One calculation model</h2>
+<p class="sec-note">BRD §11.3 — charts and reports use the same five functions as Roll-Up Summary fields.</p>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. The report and dashboard function lists match the Roll-Up function list</span>
+        <span class="refs"><span class="ref">§11.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In <b>Reports → New Report</b> open the function list under <b>AGGREGATIONS</b>.</li><li>Open <b>Dashboards</b>, any dashboard, click <b>Edit</b>, then <b>Add Widget</b> or the <b>Configure</b> button on a widget, and open <b>Value function</b>.</li><li>Go to <b>Setup → Object Settings</b>, open an object, <b>Fields → Add Field</b>, choose type <b>Roll-Up Summary</b> and look at its function list (this last list was read from the form's code, not clicked; it was proven by the Section 3 manual).</li></ol>
+      <div class="expect"><b>Expected</b>All three offer the same five functions: <b>Count, Sum, Average, Min, Max</b> (Roll-Up shows them with a short description, e.g. “Average — mean value”). Nothing is missing and nothing extra is offered. Anything else (for example “median”) sent directly to the server is refused with “Unsupported function”.</div>
+    </div>
+  </div>
+<h2>Which objects, which people</h2>
+<p class="sec-note">Reports follow the object setting <b>Allow Reports</b> and each person's rights.</p>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. An object with Allow Reports switched off is refused with a clear message</span>
+        <span class="refs"><span class="ref">§11.1</span><span class="ref">§3.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Object Settings → S9 Case → Edit</b>, untick <b>Allow Reports</b> (“Include in Analytics and report building”) and save.</li><li>In <b>Reports → New Report</b> choose the object <b>S9 Case</b> and click <b>Run</b>.</li><li>Open <b>Analytics</b> in the left menu and, under <b>Quick Report</b>, choose <b>S9 Case</b>.</li><li>Tick <b>Allow Reports</b> again on S9 Case and save.</li></ol>
+      <div class="expect"><b>Expected</b>Both places say <b>Reporting is turned off for S9 Case.</b> and show no data. Quick Report on <b>Policy</b> still draws its chart. After step 4 S9 Case reports again. (Steps 1 and 4 were done through the screen's underlying request in the check: the switch itself was not clicked.)</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. Dashboard widgets can use any object, and match the report figures</span>
+        <span class="refs"><span class="ref">§11.1</span><span class="ref">§11.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Dashboards</b> and click <b>New Dashboard</b>. Type <b>S11 Insured Lives</b> in <b>Name</b> and click <b>Save</b>, then <b>Add Widget</b> three times.</li><li><b>Configure</b> each: (a) type <b>Metric</b>, title <i>Total sum assured</i>, <b>CRM Object</b> Insured Life, <b>Value function</b> Sum, <b>Numeric field</b> Sum Assured; (b) the same with function <b>Max</b>, title <i>Max sum assured</i>; (c) type <b>Bar Chart</b>, title <i>Average by relationship</i>, <b>Group by field</b> Relationship, function <b>Average</b>, field Sum Assured. Click <b>Save Widget</b> each time, then <b>Save</b> and <b>Preview</b>.</li></ol>
+      <div class="expect"><b>Expected</b><b>Total sum assured 650,000</b>, <b>Max sum assured 250,000</b>, and a bar chart with <b>Main Member</b> (175,000), <b>Spouse</b> (115,000), <b>Child</b> (35,000). The <b>CRM Object</b> list offers Broker, Claim, Insured Life, Policy and S9 Case wherever you are in the system. (The dashboard was created through the screen's underlying request and its three widgets were opened and read; the <b>New Dashboard</b> dialog was opened but not saved.) Dashboard widgets group by a field of their own object; to go across a relationship use a report (Tests 6–7).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. View Analytics, Manage Analytics, record visibility and field security apply to reports</span>
+        <span class="refs"><span class="ref">§11.1</span><span class="ref">§9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs a person:</b> sign in as a second, non-administrator user (the pane can only hold one session). Their Role or Permission Set needs <b>View Analytics</b> to open and run reports, and <b>Manage Analytics</b> to save, change or delete one.</li><li>Run the automated suite instead: <code>node tests/section11-reporting.e2e.mjs</code> from the backend folder.</li></ol>
+      <div class="expect"><b>Expected</b>The suite proves, with real non-administrator users: no View Analytics → the report list and running a report are refused; View Analytics → reports run (including across a relationship) but <b>cannot be saved or deleted</b>; Manage Analytics → can save and delete; a user who may see no records gets 0 in a report and in a dashboard widget; a field the user may not see cannot be grouped on, filtered on, totalled, or appear in raw rows; an object with Allow Reports off is refused in reports and widgets. Section 9 separately proved that Read on an object (not the App) is what lets someone report on it.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. Clean up</span>
+        <span class="refs"><span class="ref">§11.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Reports</b>, open <b>S11 Sum Assured by Policy</b> and delete it (the Delete control on the report). Open <b>Dashboards</b> and delete <b>S11 Insured Lives</b>.</li><li>Confirm <b>Allow Reports</b> is ticked on <b>S9 Case</b>.</li></ol>
+      <div class="expect"><b>Expected</b>No report or dashboard created by this manual remains and no object setting is changed. (The delete confirmations use a browser pop-up that the checking tool cannot press; deletion was done through the request the screen sends.)</div>
+    </div>
+  </div>
+<h2>Not covered by clicking</h2>
+<div class="callout warn"><h3>Proven another way, or not proven here</h3><ul><li>A report across a Lookup (rather than Master-Detail) relationship, a second relationship level, and View/Manage Analytics as a second signed-in user were proven by the automated suite only.</li><li>Lookups to the User object (for example Record Owner) can be grouped on directly, but cannot be followed one level, because Users are not a reportable object.</li><li>Bar-chart appearance and the delete confirmations need a person. This manual has not been rendered in Word.</li></ul></div>
+  <footer>Salesdam V3 · Reporting and Analytics acceptance script · issued 19 November 2026. Tick-box progress is remembered in this browser only.</footer>
+</div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s11-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>
