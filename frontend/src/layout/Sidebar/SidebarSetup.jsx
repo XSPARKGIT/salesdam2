@@ -37,7 +37,14 @@ const SidebarSetup = ({
     hasPermission('canManageTenantSettings') ||
     hasPermission('canManageAutomations') ||
     hasPermission('canManageIntegrations') ||
-    hasPermission('canManageCommunicationTemplates');
+    hasPermission('canManageCommunicationTemplates') ||
+    hasPermission('canManageApprovals') ||
+    hasPermission('canCustomizeApplication') ||
+    hasPermission('canManageDocumentTemplates') ||
+    hasPermission('canManageCustomCode') ||
+    hasPermission('canDeployCustomCode') ||
+    hasPermission('canImportData') ||
+    hasPermission('canExportData');
 
   if (!hasSetupAccess) {
     return null;
@@ -69,7 +76,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {FEATURES.emailTemplates && hasPermission('canManageAutomations') && (
+      {FEATURES.emailTemplates && hasPermission('canManageCommunicationTemplates') && (
         <SidebarNavItem
           to="/email-templates"
           icon={<Mail size={15} />}
@@ -109,7 +116,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {isAdmin && (
+      {(isAdmin || hasPermission('canManageApprovals')) && (
         <SidebarNavItem
           to="/setup/approval-processes"
           icon={<ClipboardCheck size={15} />}
@@ -119,7 +126,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {isAdmin && (
+      {(isAdmin || hasPermission('canManageApprovals')) && (
         <SidebarNavItem
           to="/setup/approver-groups"
           icon={<Users2 size={15} />}
@@ -129,7 +136,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {isAdmin && (
+      {(isAdmin || hasPermission('canManageObjects')) && (
         <SidebarNavItem
           to="/setup/duplicate-rules"
           icon={<CopyCheck size={15} />}
@@ -139,7 +146,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {isAdmin && (
+      {(isAdmin || hasPermission('canManageObjects')) && (
         <SidebarNavItem
           to="/setup/global-value-sets"
           icon={<List size={15} />}
@@ -160,7 +167,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {isAdmin && (
+      {(isAdmin || hasPermission('canCustomizeApplication')) && (
         <SidebarNavItem
           to="/workspaces"
           icon={<Briefcase size={15} />}
@@ -182,7 +189,7 @@ const SidebarSetup = ({
           />
         )}
 
-      {FEATURES.pdfTemplates && isAdmin && (
+      {FEATURES.pdfTemplates && (isAdmin || hasPermission('canManageDocumentTemplates')) && (
         <SidebarNavItem
           to="/setup/pdf-templates"
           icon={<FileText size={16} />}
@@ -212,7 +219,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {isAdmin && (
+      {(isAdmin || hasPermission('canManageTenantSettings') || hasPermission('canCustomizeApplication') || hasPermission('canImportData') || hasPermission('canExportData')) && (
         <SidebarNavItem
           to="/admin/settings"
           icon={<Shield size={16} />}
@@ -222,7 +229,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {isAdmin && (
+      {(isAdmin || hasPermission('canManageCustomCode')) && (
         <SidebarNavItem
           to="/admin/custom-code"
           icon={<FileCode size={15} />}
@@ -232,7 +239,7 @@ const SidebarSetup = ({
         />
       )}
 
-      {isAdmin && (
+      {(isAdmin || hasPermission('canDeployCustomCode') || hasPermission('canManageCustomCode')) && (
         <SidebarNavItem
           to="/admin/deployments"
           icon={<Package size={16} />}

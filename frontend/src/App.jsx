@@ -275,7 +275,7 @@ export default function App() {
       <Route
         path="/setup/objects"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageObjects">
             <ObjectsManager />
           </Guard>
         }
@@ -283,7 +283,7 @@ export default function App() {
       <Route
         path="/setup/objects/new"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageObjects">
             <ObjectBuilder />
           </Guard>
         }
@@ -291,7 +291,7 @@ export default function App() {
       <Route
         path="/setup/objects/:apiName"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageObjects">
             <ObjectBuilder />
           </Guard>
         }
@@ -299,7 +299,7 @@ export default function App() {
       <Route
         path="/setup/objects/:apiName/layout"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageLayouts">
             <LayoutBuilder />
           </Guard>
         }
@@ -307,7 +307,7 @@ export default function App() {
       <Route
         path="/setup/objects/:apiName/layout-assignment"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageLayouts">
             <LayoutAssignment />
           </Guard>
         }
@@ -315,7 +315,7 @@ export default function App() {
       <Route
         path="/setup/schema-builder"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageObjects">
             <SchemaBuilder />
           </Guard>
         }
@@ -325,7 +325,7 @@ export default function App() {
         <Route
           path="/setup/pdf-templates"
           element={
-            <Guard requireAdmin>
+            <Guard requirePermission="canManageDocumentTemplates">
               <PdfTemplateList />
             </Guard>
           }
@@ -336,7 +336,7 @@ export default function App() {
         <Route
           path="/setup/pdf-templates/new"
           element={
-            <Guard requireAdmin>
+            <Guard requirePermission="canManageDocumentTemplates">
               <PdfTemplateEditor />
             </Guard>
           }
@@ -347,7 +347,7 @@ export default function App() {
         <Route
           path="/setup/pdf-templates/:id"
           element={
-            <Guard requireAdmin>
+            <Guard requirePermission="canManageDocumentTemplates">
               <PdfTemplateEditor />
             </Guard>
           }
@@ -433,7 +433,7 @@ export default function App() {
         <Route
           path="/email-templates"
           element={
-            <Guard requirePermission="canManageAutomations">
+            <Guard requirePermission="canManageCommunicationTemplates">
               <EmailTemplateList />
             </Guard>
           }
@@ -443,7 +443,7 @@ export default function App() {
       <Route
         path="/email-templates/new"
         element={
-          <Guard requirePermission="canManageAutomations">
+          <Guard requirePermission="canManageCommunicationTemplates">
             <EmailTemplateEditor />
           </Guard>
         }
@@ -451,7 +451,7 @@ export default function App() {
       <Route
         path="/email-templates/:id"
         element={
-          <Guard requirePermission="canManageAutomations">
+          <Guard requirePermission="canManageCommunicationTemplates">
             <EmailTemplateEditor />
           </Guard>
         }
@@ -542,7 +542,7 @@ export default function App() {
       <Route
         path="/setup/approval-processes"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageApprovals">
             <ApprovalProcessList />
           </Guard>
         }
@@ -550,7 +550,7 @@ export default function App() {
       <Route
         path="/setup/approval-processes/new"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageApprovals">
             <ApprovalProcessEditor />
           </Guard>
         }
@@ -558,7 +558,7 @@ export default function App() {
       <Route
         path="/setup/approval-processes/:id"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageApprovals">
             <ApprovalProcessEditor />
           </Guard>
         }
@@ -575,7 +575,7 @@ export default function App() {
       <Route
         path="/setup/duplicate-rules"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageObjects">
             <DuplicateRules />
           </Guard>
         }
@@ -583,7 +583,7 @@ export default function App() {
       <Route
         path="/setup/global-value-sets"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageObjects">
             <GlobalValueSets />
           </Guard>
         }
@@ -602,7 +602,7 @@ export default function App() {
       <Route
         path="/admin/settings"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <AdminSettings />
           </Guard>
         }
@@ -610,7 +610,7 @@ export default function App() {
       <Route
         path="/admin/settings/company-info"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <CompanyInfo />
           </Guard>
         }
@@ -618,7 +618,7 @@ export default function App() {
       <Route
         path="/admin/settings/sales-targets"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <SalesTargets />
           </Guard>
         }
@@ -626,7 +626,7 @@ export default function App() {
       <Route
         path="/admin/settings/invoice-quote"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <InvoiceQuote />
           </Guard>
         }
@@ -634,7 +634,7 @@ export default function App() {
       <Route
         path="/admin/settings/email"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <EmailConfiguration />
           </Guard>
         }
@@ -642,7 +642,7 @@ export default function App() {
       <Route
         path="/admin/settings/configuration"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <Configuration />
           </Guard>
         }
@@ -650,7 +650,7 @@ export default function App() {
       <Route
         path="/admin/settings/data-import"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canImportData">
             <DataImport />
           </Guard>
         }
@@ -658,7 +658,7 @@ export default function App() {
       <Route
         path="/admin/settings/data-export"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canExportData">
             <DataExport />
           </Guard>
         }
@@ -666,7 +666,7 @@ export default function App() {
       <Route
         path="/admin/settings/data-governance"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <DataGovernance />
           </Guard>
         }
@@ -674,7 +674,7 @@ export default function App() {
       <Route
         path="/admin/settings/billing"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <Billing />
           </Guard>
         }
@@ -682,7 +682,7 @@ export default function App() {
       <Route
         path="/admin/settings/integrations"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageIntegrations">
             <Integrations />
           </Guard>
         }
@@ -690,7 +690,7 @@ export default function App() {
       <Route
         path="/admin/settings/other"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <OtherSettings />
           </Guard>
         }
@@ -698,7 +698,7 @@ export default function App() {
       <Route
         path="/admin/settings/tenders-config"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <TendersConfig />
           </Guard>
         }
@@ -706,7 +706,7 @@ export default function App() {
       <Route
         path="/admin/settings/lead-approvals"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageTenantSettings">
             <LeadApprovalSettings />
           </Guard>
         }
@@ -714,7 +714,7 @@ export default function App() {
       <Route
         path="/admin/settings/storage-usage"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canCustomizeApplication">
             <StorageUsage />
           </Guard>
         }
@@ -722,7 +722,7 @@ export default function App() {
       <Route
         path="/admin/settings/sharing"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canCustomizeApplication">
             <SharingSettings />
           </Guard>
         }
@@ -731,7 +731,7 @@ export default function App() {
       <Route
         path="/admin/users"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageUsers">
             <UserManagement />
           </Guard>
         }
@@ -739,7 +739,7 @@ export default function App() {
       <Route
         path="/admin/users/:id"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageUsers">
             <UserDetail />
           </Guard>
         }
@@ -747,7 +747,7 @@ export default function App() {
       <Route
         path="/admin/users/:id/edit"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageUsers">
             <UserForm />
           </Guard>
         }
@@ -755,7 +755,7 @@ export default function App() {
       <Route
         path="/admin/roles"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageRoles">
             <RoleManagement />
           </Guard>
         }
@@ -764,7 +764,7 @@ export default function App() {
       <Route
         path="/setup/approver-groups"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageApprovals">
             <ApproverGroups />
           </Guard>
         }
@@ -782,7 +782,7 @@ export default function App() {
       <Route
         path="/admin/roles/new"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageRoles">
             <RoleForm />
           </Guard>
         }
@@ -791,7 +791,7 @@ export default function App() {
       <Route
         path="/admin/roles/:roleId/edit"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canManageRoles">
             <RoleForm />
           </Guard>
         }
@@ -858,7 +858,7 @@ export default function App() {
       <Route
         path="/admin/audit-logs"
         element={
-          <Guard>
+          <Guard requirePermission="canViewAuditLog">
             <AuditLogs />
           </Guard>
         }
@@ -876,7 +876,7 @@ export default function App() {
       <Route
         path="/workspaces"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canCustomizeApplication">
             <Layout
               title="Workspaces"
               description="Manage workspaces in this organisation"
@@ -889,7 +889,7 @@ export default function App() {
       <Route
         path="/workspaces/:id"
         element={
-          <Guard requireAdmin>
+          <Guard requirePermission="canCustomizeApplication">
             <Layout
               title="Workspace Details"
               description="Manage workspace members and settings"
