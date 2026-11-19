@@ -1,0 +1,557 @@
+<title>Validation Rules Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Validation Rules</h1>
+    <p class="standfirst">
+      A step-by-step script for testing BRD Section&nbsp;6. The rules are already written on the
+      Policy object in the <b>My&nbsp;Company</b> workspace — you are checking that they are
+      enforced everywhere a record is saved, and that every failing rule is reported at once.
+    </p>
+    <div class="mast-meta">
+      <span><b>Scope</b> BRD §6.1 – §6.2</span>
+      <span><b>Tests</b> 18</span>
+      <span><b>Time</b> ~45 minutes</span>
+      <span><b>Issued</b> 19 Nov 2026</span>
+    </div>
+  </header>
+
+  <div class="progress-bar">
+    <span class="count" id="count">0 of 18 complete</span>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <button class="btn-reset" id="reset" type="button">Reset</button>
+  </div>
+
+  <h2>Before you start</h2>
+  <p class="sec-note">Sign in and confirm the test data is in place. If anything in this list is
+  missing, stop and report it — the rest of the script depends on it.</p>
+
+  <div class="callout">
+    <h3>Signing in</h3>
+    <dl class="creds">
+      <dt>Address</dt><dd>http://localhost:5173</dd>
+      <dt>Email</dt><dd>admin@example.com</dd>
+      <dt>Workspace</dt><dd>My Company → Insurance</dd>
+    </dl>
+    <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">
+      Ask your Salesdam contact for the password. Rules are managed under
+      <b>Setup → Objects → Policy → Validations</b>.
+    </p>
+  </div>
+
+  <div class="callout">
+    <h3>The seven rules on Policy</h3>
+    <ul>
+      <li><b>Funeral Plan needs a policy document link</b> — blocks when Type is Funeral Plan and Policy Document URL is blank. Message shown on <i>Policy Document URL</i>.</li>
+      <li><b>Policy number is locked once saved</b> — <code>ISCHANGED(policy_number)</code>. Shown on <i>Policy Number</i>.</li>
+      <li><b>Monthly premium must be above zero</b> and <b>Start date cannot be in the future</b> — two rules that can fail together. Each shown on its own field.</li>
+      <li><b>Credit Life premium is capped</b> — Type is Credit Life and premium above R10&nbsp;000. Shown at the <b>top of the record</b>.</li>
+      <li><b>Province must be Gauteng (switched off)</b> — inactive; it must never block anything.</li>
+      <li><b>Premium below this company minimum</b> — reads the company setting <code>deals.minimum_value</code> (currently 0, i.e. no minimum).</li>
+    </ul>
+    <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">
+      Existing records: <b>POL-00001</b>, <b>POL-00003</b> (Credit Life) and <b>POL-00004</b> (Funeral Plan, with a document link) all satisfy these rules.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <h3>Things worth knowing before you begin</h3>
+    <ul>
+      <li><b>Pages take a while to open.</b> The application runs on your machine but its database is in the cloud, so a screen can take ten to thirty seconds to fill in. Give a page time before deciding it is stuck.</li>
+      <li><b>Write the formula with <code>==</code> for equals</b> (<code>type == "Funeral Plan"</code>); a single <code>=</code> is refused with a message that says so.</li>
+      <li><b>Tests that create something delete it again.</b> The test records are VR-MAN-1 and VR-MAN-2 (and VR-IMP-1 if you run the import); Test 18 is the final tidy-up. Tests 3 and 14 change a rule and a company setting and put them back.</li>
+      <li><b>Where a field is already marked required on the screen</b> (for example <i>Broker Email</i> on the Policy form) that comes from the page layout, and is reported before any validation rule is looked at.</li>
+    </ul>
+  </div>
+
+  <h2>Part 1 — Writing a rule</h2>
+  <p class="sec-note">BRD §6.1. Rules live on the object under <b>Setup → Objects → [object] → Validations</b>.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. One object can carry many rules, and each object has its own</span>
+        <span class="refs"><span class="ref">§6.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Go to <b>Setup → Objects</b> and open <b>Policy</b>, then the <b>Validations</b> tab.</li><li>Read the tab title and the summary line under the <b>Add Rule</b> button.</li><li>Go back, open <b>Insured Life</b> and look at its <b>Validations</b> tab.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Policy shows <b>Validations (7)</b> and the line <i>6 of 7 rules enforced on save · 1 inactive</i> — seven rules on one object. Insured Life shows <b>Validations (0)</b> and <i>No validation rules yet</i>: rules belong to the object they were written on.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. A rule carries a name, description, formula, message, location and an on/off switch</span>
+        <span class="refs"><span class="ref">§6.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On Policy → <b>Validations</b>, find <b>Funeral Plan needs a policy document link</b>.</li><li>Read its card: name, <i>Active</i> badge, description, <b>BLOCKS SAVE WHEN</b> and <b>MESSAGE</b>.</li><li>Click the pencil (<b>Edit rule</b>). Look at every control in the dialog, then click <b>Cancel</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The card shows the formula <code>type == "Funeral Plan" AND ISBLANK(policy_document_url)</code> and the message <i>Add the policy document link for a Funeral Plan.</i> The dialog offers <b>Rule Name</b>, <b>Description</b>, an <b>Active</b> switch, the formula box with its <b>Error Message</b>, and <b>Error Location</b> with two choices: <b>Top of record</b> or <b>Specific field</b> (here <i>Policy Document URL</i>).</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. A new rule can be added</span>
+        <span class="refs"><span class="ref">§6.1.1</span><span class="ref">§6.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On Policy → Validations click <b>Add Rule</b>.</li><li>Rule Name: <code>Claims lodged is capped</code>. Description: <code>Section 6 test rule</code>.</li><li>In the formula box type <code>claims_lodged &gt; 20</code>. In Error Message type <code>No more than 20 claims can be lodged.</code></li><li>Under Error Location choose <b>Specific field</b> and pick <b>Claims Lodged</b>. Leave <b>Active</b> ticked.</li><li>Click <b>Add Rule</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The dialog closes and the list now reads <b>Validations (8)</b> and <i>7 of 8 rules enforced on save</i>. The new rule shows <i>Active</i>. Changes on this tab save immediately — there is no separate Save step.</div>
+      <div class="aside"><b>Note</b>
+        The rule is removed again in Test 17.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. A rule can be switched off without deleting it, and a switched-off rule never blocks a save</span>
+        <span class="refs"><span class="ref">§6.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the Validations tab find <b>Province must be Gauteng (switched off)</b> — it shows <i>Inactive</i>.</li><li>Click its toggle (<i>Not enforced — click to start enforcing</i>). The summary line changes. Click the toggle again to switch it off.</li><li>Go to <b>Policies → New Policy</b>. Fill in: Type <b>Life Cover</b>, Province <b>Western Cape</b>, Broker Email <code>manual@example.com</code>, Monthly Premium <code>800</code>, Start Date <code>1 January 2026</code>, Policy Number <code>VR-MAN-1</code>. Click <b>Create Record</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Switching the rule on makes the summary read <i>8 of 8 rules enforced on save</i>; switching it off returns it to <i>7 of 8 … · 1 inactive</i>. With the Gauteng rule off, the Western Cape policy <b>saves</b> — the same rule, if it were on, would refuse any province but Gauteng. The new record opens.</div>
+      <div class="aside"><b>Note</b>
+        The record is used in Tests 10–15 and deleted at the end.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. The formula builder offers fields, functions and examples, and checks the formula as you type</span>
+        <span class="refs"><span class="ref">§6.1.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the Validations tab click <b>Add Rule</b>. Click <b>Fields</b>, then <b>Functions</b>, then <b>Examples</b>; in Functions click <b>ISBLANK</b>.</li><li>Clear the formula box. Type <code>monthy_premium &lt; 5</code> and wait a few seconds.</li><li>Replace it with <code>monthly_premium + 1</code>, then with <code>monthly_premium &lt;</code>, then with <code>monthly_premium &lt; 5</code>.</li><li>Click <b>Cancel</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Fields lists the 22 Policy fields; Functions lists 26 and clicking one inserts its template. The live check answers: <i>Unknown field "monthy_premium"</i> for the misspelt name; <i>This must be a true/false condition…</i> for the sum; a syntax message for the unfinished formula; and no complaint for the last one.</div>
+      <div class="aside"><b>Note</b>
+        Saving a rule whose formula names a field that does not exist is refused by the platform in the same way.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. Rules use the same function library as formula fields, plus the record-state functions</span>
+        <span class="refs"><span class="ref">§6.1.3</span><span class="ref">§3.2.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In a rule dialog, open <b>Functions</b> and note which of these are listed: <code>IF</code>, <code>LENGTH</code>, <code>YEAR</code>, <code>TODAY</code>, <code>CONTAINS</code>, <code>REGEX</code>, <code>ISBLANK</code>, <code>AND</code>, <code>OR</code>, <code>NOT</code>, <code>ISCHANGED</code>, <code>CONFIG</code>. Cancel.</li><li>Open <b>Policy → Fields</b>, click <b>Edit field</b> on <b>Annual Premium</b> (a formula field) and open its <b>Functions</b> panel. Click the <i>Show … more</i> link. Cancel.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Both editors are the same component and draw on the same library. The rule editor lists <b>26</b> functions. The formula-field editor lists <b>24</b> — the first 9 are the ones that return a number, and <i>Show 15 more for use inside expressions</i> reveals the rest — and leaves out only <code>ISCHANGED</code> and <code>CONFIG</code>, which need a saved record or the company settings and so make sense only in rules.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. AND, OR and NOT can be nested</span>
+        <span class="refs"><span class="ref">§6.1.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In a new rule dialog type <code>AND(NOT(ISBLANK(start_date)), OR(type == "Credit Life", type == "Funeral Plan"))</code> and wait for the check.</li><li>Replace it with <code>type == "Funeral Plan" AND ISBLANK(policy_document_url)</code> — the style used by the existing rules. Click <b>Cancel</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Both forms are accepted with no complaint. Function style (<code>AND(a, b)</code>) and operator style (<code>a AND b</code>, <code>&amp;&amp;</code>, <code>||</code>) can be mixed and nested freely.</div>
+    </div>
+  </div>
+
+  <h2>Part 2 — When rules run</h2>
+  <p class="sec-note">BRD §6.2. A rule is a condition you want to <b>prevent</b>: when its formula is true, the save is blocked and the message is shown.</p>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. A save that breaks several rules lists every problem at once, and fixing them all saves in one pass</span>
+        <span class="refs"><span class="ref">§6.2.1</span><span class="ref">§6.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Go to <b>Policies → New Policy</b>. Set Type <b>Funeral Plan</b>, Broker Email <code>manual@example.com</code>, Monthly Premium <code>0</code>, Start Date <code>1 January 2099</code>, Policy Number <code>VR-MAN-2</code>. Leave Policy Document URL empty. Click <b>Create Record</b>.</li><li>Read the box at the top of the form and the messages under the fields.</li><li>Without leaving the form: Policy Document URL <code>https://example.com/vr-man-2.pdf</code>, Monthly Premium <code>650</code>, Start Date <code>1 February 2026</code>. Click <b>Create Record</b> again.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The save is refused with <i>Fix these 3 problems before saving</i> and three lines — one per failing rule: <i>Policy Document URL: Add the policy document link for a Funeral Plan.</i>, <i>Monthly Premium: Monthly premium must be greater than zero.</i>, <i>Start Date: Start date cannot be in the future.</i> — each also shown under its own field. After correcting all three the record saves on the next click: nothing was hidden behind the first message.</div>
+      <div class="aside"><b>Note</b>
+        Record <b>VR-MAN-2</b> is created here and deleted in Test 18.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. An error can be shown at the top of the record instead of on a field</span>
+        <span class="refs"><span class="ref">§6.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Go to <b>Policies → New Policy</b>. Set Type <b>Credit Life</b>, Broker Email <code>manual@example.com</code>, Monthly Premium <code>12000</code>, Start Date <code>1 January 2026</code>, Policy Number <code>VR-MAN-3</code>. Click <b>Create Record</b>.</li><li>Read the message and check whether any single field is highlighted. Click <b>Cancel</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The box at the top reads <i>Fix this problem before saving: A Credit Life policy cannot have a monthly premium above R10 000.</i> No field is marked in red — that rule's Error Location is <b>Top of record</b>. Nothing is saved.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. A rule can depend on another field, such as Type</span>
+        <span class="refs"><span class="ref">§6.2.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>VR-MAN-1</b> (Type Life Cover) and click <b>Edit</b>.</li><li>Change Type to <b>Funeral Plan</b> and click <b>Save Changes</b>.</li><li>Change Type back to <b>Life Cover</b> and click <b>Cancel</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With Type = Funeral Plan the save is refused: <i>Policy Document URL: Add the policy document link for a Funeral Plan.</i> The same empty link was accepted a moment earlier when the Type was Life Cover — the rule applies only when Type says so.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. Rules are checked again on every update</span>
+        <span class="refs"><span class="ref">§6.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>VR-MAN-1</b> and click <b>Edit</b>.</li><li>Set Monthly Premium to <code>0</code> and click <b>Save Changes</b>.</li><li>Set Monthly Premium to <code>900</code> and click <b>Save Changes</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The first save is refused with <i>Monthly premium must be greater than zero.</i> and the record is unchanged. The second saves.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. ISCHANGED blocks a change on update — and only a change</span>
+        <span class="refs"><span class="ref">§6.1.3</span><span class="ref">§6.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>VR-MAN-1</b>, click <b>Edit</b>, change Policy Number to <code>VR-MAN-X</code> and click <b>Save Changes</b>.</li><li>Put the number back to <code>VR-MAN-1</code>, change <b>Claims Lodged</b> to <code>1</code> and save.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Changing the number is refused: <i>The policy number cannot be changed once the policy has been saved.</i> Saving with the number unchanged works — the rule <code>ISCHANGED(policy_number)</code> fires only when the value differs from the saved one. On create there is no saved value, which is why the same field could be typed freely in Tests 4 and 9.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. Inline editing in the list is checked too</span>
+        <span class="refs"><span class="ref">§6.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Go to <b>Policies</b>. In the <b>VR-MAN-1</b> row hover the <b>Monthly Premium</b> cell and click its pencil (<i>Edit this field</i>).</li><li>Type <code>0</code> and press <b>Enter</b>. Then press <b>Esc</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The cell shows <i>Monthly premium must be greater than zero.</i> in red and a message appears; the value is not saved. Esc leaves the cell as it was.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. A rule can read a company setting instead of a fixed number</span>
+        <span class="refs"><span class="ref">§6.2.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>VR-MAN-1</b>: Monthly Premium is 900. The rule <b>Premium below this company minimum</b> reads <code>monthly_premium &lt; CONFIG("deals.minimum_value")</code>; the setting is currently <b>0</b>, so it does nothing.</li><li>Go to <code>/admin/settings</code> and click the <b>Configuration</b> card. On <b>Minimum Deal Value</b> type <code>1000</code> and click <b>Save</b>. The badge changes to <i>Company value</i>.</li><li>Open VR-MAN-1, click <b>Edit</b>, change Claims Lodged to <code>2</code> and save.</li><li>Change Monthly Premium to <code>1200</code> and save.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the minimum at 1000 the first save is refused with <i>Monthly premium is below the minimum your company has set.</i> — the rule itself was not edited, only the company's setting. At 1200 it saves. A different company with a different minimum would see a different result from the same rule.</div>
+      <div class="aside"><b>Note</b>
+        Leave the setting at 1000 for the next test; it is reset there.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. Deleting a record never runs the rules</span>
+        <span class="refs"><span class="ref">§6.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the Configuration page set <b>Minimum Deal Value</b> to <code>2000</code> and <b>Save</b>. VR-MAN-1 (premium 1200) now breaks the rule.</li><li>Open VR-MAN-1, click <b>Edit</b>, change Claims Lodged and save — it is refused (this confirms the record is in breach).</li><li>On the record click <b>Delete</b>, then <b>Delete</b> in the confirmation.</li><li>Back on Configuration click <b>Reset</b> on Minimum Deal Value.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The edit is refused, but the delete goes through at once and the record disappears from the list: a record that no longer meets the rules can always be removed. After <b>Reset</b> the badge returns to <i>Platform default</i> and the value to 0. The deleted record sits in the <b>Recycle Bin</b>.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. Imported rows are held to the same rules</span>
+        <span class="refs"><span class="ref">§6.2.1</span><span class="ref">§6.2.2</span> <span class="ref" style="background:#fdf1d8;color:#7a5200">Needs a person</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create a file <code>vr-import.csv</code> containing exactly these three lines:<br><code>Policy Number,Type,Monthly Premium,Start Date,Broker Email,Policy Document URL</code><br><code>VR-IMP-1,Life Cover,800,2026-01-01,imp@example.com,</code><br><code>VR-IMP-2,Funeral Plan,0,2099-01-01,imp@example.com,</code></li><li>On <b>Policies</b> click <b>Import records from CSV</b>, choose the file and run the import.</li><li>Read the result, then delete the imported record <b>VR-IMP-1</b> from the list.</li></ol>
+      <div class="expect"><b>Expected</b>
+        One row is created (VR-IMP-1) and one fails. For row 3 every problem is listed together: <i>Add the policy document link for a Funeral Plan.</i>, <i>Monthly premium must be greater than zero.</i>, <i>Start date cannot be in the future.</i></div>
+      <div class="aside"><b>Needs a person</b>
+        The choice of file is a gesture an automated run cannot make. The same import was run through the application's own import service and produced exactly this result.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. A rule can be deleted</span>
+        <span class="refs"><span class="ref">§6.1.1</span> <span class="ref" style="background:#fdf1d8;color:#7a5200">Needs a person</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On Policy → Validations find <b>Claims lodged is capped</b> and click its bin (<b>Delete rule</b>). Confirm.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The rule disappears and the list returns to <b>Validations (7)</b>, <i>6 of 7 rules enforced on save · 1 inactive</i>.</div>
+      <div class="aside"><b>Needs a person</b>
+        The confirmation is a browser prompt, which an automated run cannot answer; the delete itself was checked through the application's interface instead.</div>
+    </div>
+  </div>
+
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. The test records are put away</span>
+        <span class="refs"><span class="ref">—</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>VR-MAN-2</b> and click <b>Delete</b>, then <b>Delete</b> in the confirmation.</li><li>On the <b>Configuration</b> page check that Minimum Deal Value shows <i>Platform default</i>, and that Policy → Validations shows seven rules.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The Policies list is back to its earlier records and the setting to its default. Deleted records remain in the Recycle Bin, where an administrator can clear them.</div>
+    </div>
+  </div>
+
+  <h2>Still to be covered</h2>
+  <p>These points sit outside this script:</p>
+  <ul>
+    <li><b>Flows, incoming webhooks, record merge and scripts.</b> Writes that do not come from a screen are held to the same rules — a blocked flow step is recorded as a Flow Error, a blocked webhook returns every message, and the same applies to the custom-code <code>createRecord</code>/<code>updateRecord</code> helpers. They need a flow, a webhook caller or a script to drive them, so they are proven by the platform's automated checks: rules and tenant thresholds on update, import, flow step and webhook (18 checks); rule behaviour including ISCHANGED, inline edit and toggling (22 checks); rule changes written to the audit log (29 checks).</li>
+    <li><b>System-driven insurance workflows.</b> The Insurance module moves policies through their lifecycle (for example status changes at billing and reinstatement) with its own internal writes. Those writes are not run through an object's validation rules, so a rule cannot stop the platform itself from moving a policy to <i>Lapsed</i>.</li>
+    <li><b>Administrator import with validation bypass.</b> An administrator can tick <i>bypass validation</i> for a one-off import; rules are then skipped by design. A normal import always enforces them.</li>
+    <li><b>Layout-only rules.</b> A field a page layout marks Required (or Read-only) is enforced on the screen, not by the API; validation rules are enforced everywhere.</li>
+    <li><b>Existing records that no longer pass.</b> A new or tightened rule is not applied to records already saved; such a record is simply refused the next time anyone edits it, until it is corrected.</li>
+  </ul>
+
+  <h3>Reporting a problem</h3>
+  <p>For anything that does not match the expected result, note the test number, what you saw
+  instead, and the record you were working on. A screenshot of the screen as it looked
+  when it went wrong is usually enough for us to reproduce it.</p>
+
+  <footer>
+    Salesdam V3 · Validation Rules acceptance script · issued 19 November 2026.
+    Tick-box progress is remembered in this browser only.
+  </footer>
+
+</div>
+</div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s6-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>

@@ -335,3 +335,52 @@ Brokers), Insurance reordered (Policies, Insured Lives; lands on Policies), and 
   your DOM dumps instead of listing every control.
 - Existing Apps' sidebar order now follows each App's object list; if an App was set
   up in an arbitrary order, that is the order people will now see.
+
+---
+
+## 11. Where Section 6 ended
+
+**Tested:** all of §6.1–§6.2 through the UI (rule list, add/edit/toggle, formula
+builder, create/update/inline-edit/delete on Policy, top-of-record and per-field
+errors, `CONFIG("deals.minimum_value")` via Setup → Configuration), plus the suites
+`validation-evaluation` 18/18, `validation-rules` 22/22, `section20-validation-rule-audit`
+29/29, `section15-custom-code` 13/13, `section12-import-export` 15/15, `section14-config`
+14/14, `configuration` 18/18 and `remediation.validationService` 13/13. Manual: 18 tests,
+`tools/manual-docx/section6-test-manual.html` (built from the Section 5 page shell by a
+small throwaway script; the HTML is the source).
+`flow-definition` is 24/25 — one scheduled-trigger check fails the same way on a clean
+copy of HEAD, so it is not from this work.
+
+**Already built before Section 6:** rule model and tab, ISCHANGED, CONFIG, enforcement
+on create/update/import/merge/inbox/flows/webhooks, all-failures-together reporting.
+
+**Fixed (uncommitted):**
+- A rule naming a field that does not exist (a typo) was accepted and silently never
+  fired. Now refused on save and flagged live in the builder (`knownFields` option on
+  `validateFormula`; rules only — formula fields unchanged).
+- Custom-code `createRecord` / `updateRecord` bypassed rules; now blocked.
+- Two suites needed updating (`section20` fixture fields; new checks in `validation-rules`).
+
+**Fixtures left:** seven rules on Policy (Funeral Plan link, ISCHANGED policy number,
+premium > 0, start date not future, Credit Life premium cap at top of record, inactive
+Province rule, CONFIG minimum). POL-00004 got a document link and POL-00003 a commission
+rate so earlier manuals still save. The Credit Life rule was deliberately written on
+premium (not commission) because Section 4's POL-TEST-NEW step saves a Credit Life policy
+without one. Recycle Bin holds soft-deleted test records. `deals.minimum_value` is at its default.
+
+**Known and not fixed:** insurance-module system writes (`services/insurance/*`) and
+other internal writers (tenders, facebook leads, deal/quote conversion, recurring tasks)
+do not run rules; admin import "bypass validation" skips them by design; layout-required
+fields are reported before rules; the POL-00003/00004 `policy_status` was set to Active
+while checking edits (earlier value not recorded).
+
+**Lessons**
+- A new rule can shadow older fixtures: re-check every earlier manual's edit/create steps.
+- Layout-required fields and field defaults (Province defaults to Gauteng) hide a rule —
+  pick a rule field with no default and no layout requirement.
+- Rules use `==`, not `=`; the save refuses `=` with a clear message.
+- The custom-code sandbox does not await scripts; a blocked write shows as a rejection
+  inside the script, so probe it with try/catch plus a visible marker write.
+- The in-pane record Delete is an in-page modal (clickable); only rule delete uses `window.confirm`.
+- `git archive HEAD backend` into the scratchpad (symlink `node_modules`, copy `.env`) is
+  a safe way to prove a test fails without your changes — never stash.

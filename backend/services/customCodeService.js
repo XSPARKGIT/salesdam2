@@ -76,6 +76,10 @@ export const executeCustomCode = async (tenantId, name, inputs = {}, context = {
       const ObjectMeta = (await import('../models/ObjectMeta.js')).default;
       const obj = await ObjectMeta.findOne({ tenantId, apiName: objectApiName });
       if (!obj) throw new Error(`Object ${objectApiName} not found`);
+      // BRD 6.2: a script's writes are held to the object's validation rules.
+      const { checkRecordRules } = await import('./validationService.js');
+      const failures = await checkRecordRules({ tenantId, objectApiName, data: data || {} });
+      if (failures.length) throw new Error(`Create blocked by validation rules: ${failures.join('; ')}`);
       const rec = await DynamicRecord.create({ tenantId, objectId: obj._id, objectApiName, ownerId: context.userId || null, createdBy: context.userId || null, lastModifiedBy: context.userId || null, data });
       Object.entries(data || {}).forEach(([k, v]) => rec.setField(k, v));
       await rec.save();
@@ -86,6 +90,11 @@ export const executeCustomCode = async (tenantId, name, inputs = {}, context = {
       const DynamicRecord = (await import('../models/DynamicRecord.js')).default;
       const rec = await DynamicRecord.findOne({ _id: id, tenantId, objectApiName, isDeleted: false });
       if (!rec) throw new Error('Record not found');
+      // BRD 6.2: a script's writes are held to the object's validation rules.
+      const { checkRecordRules } = await import('./validationService.js');
+      const prev = Object.fromEntries(rec.data instanceof Map ? rec.data : Object.entries(rec.data || {}));
+      const failures = await checkRecordRules({ tenantId, objectApiName, data: { ...prev, ...(data || {}) }, prev });
+      if (failures.length) throw new Error(`Update blocked by validation rules: ${failures.join('; ')}`);
       Object.entries(data || {}).forEach(([k, v]) => rec.setField(k, v));
       await rec.save();
       return { id: rec._id };

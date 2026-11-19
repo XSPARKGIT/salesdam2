@@ -30,6 +30,7 @@ import Tenant from '../models/Tenant.js';
 import User from '../models/User.js';
 import Role from '../models/Role.js';
 import ObjectMeta from '../models/ObjectMeta.js';
+import FieldMeta from '../models/FieldMeta.js';
 import AuditLog from '../models/AuditLog.js';
 import { seedDefaultRoles } from '../services/roleService.js';
 
@@ -73,6 +74,8 @@ try {
 
   const obj = await ObjectMeta.create({ tenantId, apiName: `vr_obj_${RUN}`, name: 'VR Obj', label: 'VR Obj', pluralLabel: 'VR Objs', createdBy: user._id });
   const apiName = obj.apiName;
+  // Rules may only name fields that exist on the object (a typo would otherwise do nothing).
+  await FieldMeta.create(['amount', 'name', 'api_key'].map((f) => ({ tenantId, objectId: obj._id, objectApiName: apiName, name: f, label: f, apiName: f, type: f === 'amount' ? 'number' : 'text', createdBy: user._id })));
 
   // ── 1. Create a rule ────────────────────────────────────────────────────
   const rule1 = { name: 'Amount Required', description: 'blocks blank amount', expression: 'ISBLANK(amount)', errorMessage: 'Amount is required', errorField: '', isActive: true };

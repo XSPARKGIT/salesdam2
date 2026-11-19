@@ -786,6 +786,8 @@ function evaluateFormula(expression, context) {
  * @param  {object} [options.fieldKinds]   - { fieldApiName: kind }, for inference
  * @param  {boolean} [options.asCondition] - A validation rule: the formula
  *         must be true/false (worded for rules rather than return types).
+ * @param  {Set<string>} [options.knownFields] - When given, a reference to any
+ *         other name is invalid (used for validation rules).
  * @param  {boolean} [options.allowRecordState=true] - Whether ISCHANGED may be
  *         used. It compares against the value stored before a save, so only
  *         places that have one (validation rules, flow entry conditions) can.
@@ -796,7 +798,7 @@ function evaluateFormula(expression, context) {
  * @returns {{ valid: boolean, error?: string, returnType?: string }}
  */
 function validateFormula(expression, sampleContext = {}, options = {}) {
-  const { fieldKinds = {}, allowRecordState = true, asCondition = false } = options;
+  const { fieldKinds = {}, allowRecordState = true, asCondition = false, knownFields = null } = options;
   const allowConfig = options.allowConfig ?? allowRecordState;
   const expectedType = asCondition ? 'boolean' : options.expectedType;
   try {
@@ -809,6 +811,18 @@ function validateFormula(expression, sampleContext = {}, options = {}) {
         if (n.name === 'CONFIG' && !allowConfig) ruleOnly = n.name;
       });
       if (ruleOnly) return { valid: false, error: RULE_ONLY_FUNCTIONS[ruleOnly] };
+    }
+    // A field name that is not on the object never matches anything, so a typo
+    // would leave a validation rule silently doing nothing. Callers pass
+    // `knownFields` when they want that caught.
+    if (knownFields) {
+      let unknown = null;
+      walk(ast, (n) => {
+        if (!unknown && n.k === 'ref' && !knownFields.has(n.name)) unknown = n.name;
+      });
+      if (unknown) {
+        return { valid: false, error: `Unknown field "${unknown}". Check the spelling against the Fields list.` };
+      }
     }
     // CONFIG must name its key literally so the key can be checked and loaded.
     let badConfig = false;

@@ -182,6 +182,12 @@ try {
   await saveRules(rules.map((x) => (x.name === 'Amount must be positive' ? { ...x, isActive: false } : x)));
   r = await patch(openId, { amount: -5 });
   check('switching a rule off stops it being enforced', r.status === 200, `HTTP ${r.status} ${r.json?.message || ''}`);
+
+  // ── A misspelt field name is refused rather than silently never firing ───
+  r = await live('amnount < 0', 'rule');
+  check('live check flags a rule naming a field that does not exist', r.json?.data?.valid === false && /Unknown field/.test(r.json?.data?.error || ''), JSON.stringify(r.json?.data));
+  r = await saveRules([...rules, { name: 'Typo', expression: 'amnount < 0', errorMessage: 'x', errorField: '', isActive: true }]);
+  check('saving a rule that names a missing field is refused', r.status === 400 && /Unknown field/.test(r.json?.message || ''), `HTTP ${r.status} ${r.json?.message || ''}`);
 } catch (err) {
   check('test harness ran without error', false, err.stack || err.message);
 } finally {

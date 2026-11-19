@@ -121,6 +121,7 @@ router.post('/validate-formula', asyncHandler(async (req, res) => {
     expectedType: isRule ? undefined : returnType || undefined,
     asCondition: isRule,
     fieldKinds: buildFieldKindMap(contextFields),
+    knownFields: context === 'rule' ? new Set([...contextFields.map((f) => f.apiName), 'id', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy', 'ownerId']) : null,
     // Approval entry criteria can't use ISCHANGED (nothing to compare with) but can read CONFIG().
     allowRecordState: context === 'rule',
     allowConfig: isRule,

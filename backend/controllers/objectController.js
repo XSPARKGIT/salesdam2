@@ -576,6 +576,7 @@ const updateObject = asyncHandler(async (req, res) => {
       const result = validateFormula(rule.expression.trim(), sampleCtx, {
         asCondition: true,
         fieldKinds,
+        knownFields: new Set([...fieldNames, 'id', 'createdAt', 'updatedAt', 'createdBy', 'lastModifiedBy', 'ownerId']),
       });
       if (!result.valid) {
         invalidRules.push(`${label}: ${result.error}`);
