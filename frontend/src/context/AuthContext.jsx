@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
 
       const isSuper = userData?.role?.name?.toLowerCase() === 'superuser';
       if (isSuper) {
-        api.get('/admin/tenants').then((r) => {
+        api.get('/admin/tenants', { params: { limit: 500 } }).then((r) => {
           setTenants(r.data?.data || []);
         }).catch(() => setTenants([]));
       } else {

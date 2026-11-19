@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Package, Copy, Upload, Play, CheckCircle, XCircle, RotateCcw, Plus, Trash2 } from 'lucide-react';
+import { Package, Copy, Upload, Play, CheckCircle, XCircle, RotateCcw, Plus, Trash2, Download } from 'lucide-react';
 import api from '../../services/api';
 import AdminSettingsPage from './AdminSettingsPage';
 import Button from '../../components/common/Button/Button';
 import toast from 'react-hot-toast';
 import styles from './AdminSettingsPage.module.css';
 
-const COMPONENT_TYPES = ['object', 'field', 'layout', 'layout_assignment', 'validation_rule', 'flow', 'approver_group', 'approval_process', 'tenant_config', 'duplicate_rule'];
+const COMPONENT_TYPES = ['object', 'field', 'layout', 'layout_assignment', 'validation_rule', 'custom_code', 'pdf_template', 'flow', 'approver_group', 'approval_process', 'tenant_config', 'duplicate_rule'];
 // The component key each type expects, shown as the input's hint.
 const KEY_HINTS = {
   object: 'object api name (e.g. widget)',
@@ -18,6 +18,9 @@ const KEY_HINTS = {
   approval_process: 'object:process name',
   duplicate_rule: 'object:rule name',
   tenant_config: 'configuration key',
+  validation_rule: 'object:rule name (e.g. policy:Premium above zero)',
+  custom_code: 'snippet name (only its active version travels)',
+  pdf_template: 'template api name',
 };
 
 export default function Deployments() {
@@ -34,12 +37,84 @@ export default function Deployments() {
   const [compType, setCompType] = useState('field');
   const [compKey, setCompKey] = useState('');
   const [components, setComponents] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [delTenantId, setDelTenantId] = useState('');
+  const [delOpen, setDelOpen] = useState(false);
+  const [delName, setDelName] = useState('');
+  const sandboxes = tenants.filter((t) => t.isSandbox && t.clonedFromTenantId);
+  const currentTenantId = (() => { try { return localStorage.getItem('tenantId'); } catch { return null; } })();
+  const delTenant = sandboxes.find((t) => t._id === delTenantId);
+
+  const exportCs = async (cs) => {
+    try {
+      const res = await api.get(`/change-sets/${cs._id}/export`);
+      const pkg = res.data?.data;
+      const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${String(cs.name).replace(/[^a-z0-9-_]+/gi, '-')}.salesdam-package.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('Package file exported');
+    } catch (e) {
+      toast.error(e.message || 'Export failed');
+    }
+  };
+
+  const importPackageFile = async (file) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return toast.error('Package refused: the file is larger than 5 MB.');
+    try {
+      const pkg = JSON.parse(await file.text());
+      await api.post('/change-sets/import', { package: pkg });
+      toast.success('Package imported as a change set');
+      load();
+    } catch (e) {
+      toast.error(e instanceof SyntaxError ? 'Package refused: the file is not valid JSON.' : (e.message || 'Import failed'));
+    }
+  };
+
+  const deleteSandbox = async () => {
+    try {
+      await api.delete(`/change-sets/sandbox/${delTenantId}`, { data: { confirmName: delName } });
+      toast.success('Sandbox deleted');
+      setDelOpen(false); setDelName(''); setDelTenantId('');
+      load();
+    } catch (e) {
+      toast.error(e.message || 'Delete failed');
+    }
+  };
+
+  const loadLogs = async (tid) => {
+    if (!tid) return setLogs([]);
+    try {
+      const res = await api.get('/change-sets/deployment-log', { params: { targetTenantId: tid } });
+      setLogs(res.data?.data || []);
+    } catch (e) {
+      setLogs([]);
+    }
+  };
+  useEffect(() => { loadLogs(targetTenantId); }, [targetTenantId]);
+
+  const rollbackLog = async (logId) => {
+    try {
+      await api.post(`/change-sets/deployment-log/${logId}/rollback`);
+      toast.success('Rolled back');
+      load();
+      loadLogs(targetTenantId);
+    } catch (e) {
+      toast.error(e.message || 'Rollback failed');
+    }
+  };
 
   const load = async () => {
     try {
       const [csRes, tRes] = await Promise.all([
         api.get('/change-sets'),
-        api.get('/admin/tenants').catch(() => ({ data: { data: [] } })),
+        api.get('/admin/tenants', { params: { limit: 500 } }).catch(() => ({ data: { data: [] } })),
       ]);
       setChangeSets(csRes.data?.data || []);
       const t = tRes.data?.data || [];
@@ -113,8 +188,11 @@ export default function Deployments() {
       await api.post(`/change-sets/${id}/deploy`, { targetTenantId });
       toast.success('Deployed');
       load();
+      loadLogs(targetTenantId);
     } catch (e) {
       toast.error(e.message || 'Deploy failed');
+      load();
+      loadLogs(targetTenantId);
     }
   };
 
@@ -127,6 +205,7 @@ export default function Deployments() {
       await api.post(`/change-sets/deployment-log/${log._id}/rollback`);
       toast.success('Rolled back');
       load();
+      loadLogs(targetTenantId);
     } catch (e) {
       toast.error(e.message || 'Rollback failed');
     }
@@ -162,7 +241,7 @@ export default function Deployments() {
         <div className={styles.field}>
           <label className={styles.label}>Create Change Set</label>
           <p className={styles.hint}>
-            Package metadata components (fields, flows, validation rules) for deployment to another tenant.
+            Package metadata components (fields, flows, validation rules, custom code, document templates) for deployment to another tenant.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
             <input className={styles.input} placeholder="Change set name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -191,6 +270,51 @@ export default function Deployments() {
               </Button>
             </div>
           </div>
+        </div>
+
+        {/* Import package file */}
+        <div className={styles.field}>
+          <label className={styles.label}>Import Package File</label>
+          <p className={styles.hint}>
+            Import a package file exported from another tenant. It becomes a draft change set in the tenant you are working in, then goes through Validate, Deploy and Rollback like any other. The file is checked for size, version, content and integrity before anything is created.
+          </p>
+          <input
+            id="import-package-file"
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => { importPackageFile(e.target.files?.[0]); e.target.value = ''; }}
+            style={{ marginTop: 8 }}
+          />
+        </div>
+
+        {/* Delete sandbox */}
+        <div className={styles.field}>
+          <label className={styles.label}>Delete Sandbox Tenant</label>
+          <p className={styles.hint}>
+            Only tenants created by Clone Sandbox are listed. A tenant you are working in cannot be deleted. Deleting removes the sandbox's configuration, users, change sets and logs for good.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            <select className={styles.input} value={delTenantId} onChange={(e) => { setDelTenantId(e.target.value); setDelOpen(false); setDelName(''); }} style={{ flex: 1, minWidth: 200 }}>
+              <option value="">Sandbox to delete...</option>
+              {sandboxes.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
+            </select>
+            <Button variant="secondary" disabled={!delTenantId || delTenantId === currentTenantId} onClick={() => setDelOpen(true)}>
+              <Trash2 size={13} /> Delete sandbox…
+            </Button>
+          </div>
+          {delTenantId && delTenantId === currentTenantId && (
+            <p className={styles.hint}>You are working in this sandbox. Switch to another tenant in the top bar first.</p>
+          )}
+          {delOpen && delTenant && (
+            <div role="dialog" aria-label="Confirm sandbox deletion" style={{ marginTop: 12, padding: 12, border: '1px solid var(--color-danger, #dc2626)', borderRadius: 'var(--border-radius)' }}>
+              <p style={{ margin: 0, fontSize: 'var(--font-size-sm)' }}>This permanently deletes <strong>{delTenant.name}</strong> and everything in it. Type its name to confirm.</p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <input className={styles.input} placeholder="Type the sandbox name" value={delName} onChange={(e) => setDelName(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+                <Button disabled={delName !== delTenant.name} onClick={deleteSandbox}>Delete permanently</Button>
+                <Button variant="secondary" onClick={() => { setDelOpen(false); setDelName(''); }}>Cancel</Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Target Tenant */}
@@ -244,6 +368,9 @@ export default function Deployments() {
                         <Button size="sm" onClick={() => deploy(cs._id)} disabled={!targetTenantId || cs.status !== 'validated'} style={{ marginLeft: 8 }}>
                           <Play size={13} /> Deploy
                         </Button>
+                        <Button size="sm" variant="secondary" onClick={() => exportCs(cs)} style={{ marginLeft: 8 }}>
+                          <Download size={13} /> Export
+                        </Button>
                         {cs.status === 'deployed' && (
                           <Button size="sm" variant="secondary" onClick={() => rollback(cs._id)} style={{ marginLeft: 8 }}>
                             <RotateCcw size={13} /> Rollback
@@ -259,11 +386,53 @@ export default function Deployments() {
 
           {validation && (
             <div style={{ marginTop: 12, padding: 12, background: 'var(--color-gray-50)', borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)' }}>
-              <strong>Validation Result:</strong>
-              <pre style={{ marginTop: 8, fontSize: 'var(--font-size-xs)', overflow: 'auto' }}>
-                {JSON.stringify(validation, null, 2)}
-              </pre>
+              <strong>Validation Result:</strong>{' '}
+              <span data-testid="validation-summary">{validation.valid ? 'All dependencies are present - ready to deploy.' : `Blocked - ${validation.missing?.length || 0} required dependenc${validation.missing?.length === 1 ? 'y is' : 'ies are'} missing in the target tenant.`}</span>
+              {!validation.valid && (
+                <ul style={{ marginTop: 8, fontSize: 'var(--font-size-sm)', paddingLeft: 18 }}>
+                  {(validation.missing || []).map((m, i) => (
+                    <li key={i}>Missing {String(m.dependency).replace(/_/g, ' ')}: <code>{m.key}</code>{m.via ? <> (needed by <code>{m.via}</code>)</> : null}</li>
+                  ))}
+                </ul>
+              )}
             </div>
+          )}
+        </div>
+
+        {/* Deployment Log */}
+        <div className={styles.field}>
+          <label className={styles.label}>Deployment Log (selected target tenant)</label>
+          {!targetTenantId ? (
+            <p className={styles.hint}>Select a target tenant to see what has been deployed to it.</p>
+          ) : logs.length === 0 ? (
+            <p className={styles.hint}>Nothing has been deployed to this tenant yet.</p>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)', marginTop: 8 }}>
+              <thead>
+                <tr style={{ background: 'var(--color-gray-50)', borderBottom: '1px solid var(--border-color)' }}>
+                  {['When', 'Change set', 'From', 'By', 'Status', 'Components', ''].map((h) => (
+                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((l) => (
+                  <tr key={l._id} style={{ borderBottom: '1px solid var(--border-color)' }} title={(l.missing || []).map((m) => `${m.dependency}: ${m.key}`).join('; ')}>
+                    <td style={{ padding: '8px 12px' }}>{new Date(l.at).toLocaleString()}</td>
+                    <td style={{ padding: '8px 12px' }}>{l.changeSetName}</td>
+                    <td style={{ padding: '8px 12px' }}>{l.sourceTenantId?.name || '-'}</td>
+                    <td style={{ padding: '8px 12px' }}>{l.by ? `${l.by.firstName || ''} ${l.by.lastName || ''}`.trim() || l.by.email : '-'}</td>
+                    <td style={{ padding: '8px 12px' }}>{l.status === 'rolled_back' ? 'rolled back' : l.status}</td>
+                    <td style={{ padding: '8px 12px' }}>{l.status === 'blocked' ? `${(l.missing || []).length} missing` : l.componentCount}</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      {l.status === 'deployed' && (
+                        <Button size="sm" variant="secondary" onClick={() => rollbackLog(l._id)}><RotateCcw size={13} /> Rollback</Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
