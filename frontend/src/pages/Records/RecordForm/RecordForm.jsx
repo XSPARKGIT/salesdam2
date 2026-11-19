@@ -20,11 +20,12 @@ import notFoundStyles from '../../NotFound.module.css';
 import Layout from '../../../layout/Layout';
 import RecordFormHeader from './RecordFormHeader/RecordFormHeader';
 import RecordFormContent from './RecordFormContent/RecordFormContent';
-import { buildFormSections } from './utils/buildFormSections';
+import { buildFormSections, fieldsHiddenByLayout } from './utils/buildFormSections';
 import {
   initializeFormData,
   cloneableValues,
   validateFormData,
+  applyLayoutOverrides,
   clearFieldError,
   extractServerErrors,
   convertDatetimeToUTC,
@@ -57,7 +58,10 @@ const RecordForm = () => {
     enabled: !!objectApiName,
   });
 
-  const fields = useMemo(() => bundle?.fields || [], [bundle]);
+  const fields = useMemo(
+    () => applyLayoutOverrides(bundle?.fields || [], bundle?.layout),
+    [bundle],
+  );
   const layout = bundle?.layout;
 
   // Fetch record data if editing
@@ -128,7 +132,7 @@ const RecordForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const errs = validateFormData(formData, fields);
+    const errs = validateFormData(formData, fields, fieldsHiddenByLayout(layout, formData));
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       const errorList = Object.values(errs).join(', ');
@@ -247,7 +251,7 @@ const RecordForm = () => {
     );
   }
 
-  const sections = buildFormSections(layout, fields, formData, isEdit);
+  const sections = buildFormSections(layout, fields, formData);
   const pageTitle = isEdit
     ? `Edit ${objMeta?.label || objectApiName}`
     : `New ${objMeta?.label || objectApiName}`;

@@ -16,15 +16,71 @@ import {
   Filter,
   X,
   Users,
+  Lock,
+  Asterisk,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import Button from '../../components/common/Button/Button';
 import Layout from '../../layout/Layout';
 import { withoutHelperFields } from '../../utils/fieldVisibility';
+import { isPlaceableField, isFieldRequired } from '../../utils/layoutBackfill';
+import { getRelatedObjects } from '../../services/api/objects';
+import RelatedListsPanel from './RelatedListsPanel';
 import styles from './LayoutBuilder.module.css';
 
 const SYSTEM_SECTION = 'Information';
+
+/** Sections cycle 1 -> 2 -> 3 -> 1 columns (BRD 4.1.2). */
+const nextColumnCount = (current) => ((current || 2) >= 3 ? 1 : (current || 2) + 1);
+
+/**
+ * One visibility condition: "<field> <operator> <value>". Used for a whole
+ * section and for a single field (BRD 4.1.5), so both read the same way.
+ */
+function ConditionEditor({ rule, fields, label, onChange, onClose }) {
+  const set = (patch) => onChange({ operator: 'eq', value: '', ...rule, ...patch });
+  return (
+    <div className={styles.conditionEditor}>
+      <span className={styles.conditionLabel}>{label}</span>
+      <select
+        className={styles.conditionSelect}
+        value={rule?.field || ''}
+        onChange={(e) => (e.target.value ? set({ field: e.target.value }) : onChange(null))}
+      >
+        <option value="">— always show —</option>
+        {fields.map((f) => (
+          <option key={f.apiName} value={f.apiName}>{f.label}</option>
+        ))}
+      </select>
+      {rule?.field && (
+        <>
+          <select
+            className={styles.conditionSelect}
+            value={rule.operator || 'eq'}
+            onChange={(e) => set({ operator: e.target.value })}
+          >
+            <option value="eq">equals</option>
+            <option value="neq">does not equal</option>
+            <option value="is_set">is set</option>
+            <option value="is_blank">is blank</option>
+          </select>
+          {(rule.operator === 'eq' || rule.operator === 'neq' || !rule.operator) && (
+            <input
+              className={styles.conditionInput}
+              placeholder="value"
+              value={rule.value || ''}
+              onChange={(e) => set({ value: e.target.value })}
+            />
+          )}
+        </>
+      )}
+      <button className={styles.conditionClose} onClick={onClose} title="Close">
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
 
 export default function LayoutBuilder() {
   const { apiName } = useParams();
@@ -51,6 +107,9 @@ export default function LayoutBuilder() {
   const [leftTab, setLeftTab] = useState('fields'); // 'fields' | 'flows'
   // Index of the section whose condition editor is open, or null
   const [conditionEditorIdx, setConditionEditorIdx] = useState(null);
+  const [fieldConditionKey, setFieldConditionKey] = useState(null);
+  const [relatedLists, setRelatedLists] = useState([]);
+  const [relatedCandidates, setRelatedCandidates] = useState([]);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -81,6 +140,8 @@ export default function LayoutBuilder() {
           list.find((l) => l.isDefault) ||
           list[0];
         setLayout(initial || null);
+        setRelatedLists(initial?.relatedLists || []);
+        getRelatedObjects(apiName).then(setRelatedCandidates);
         setLayoutName(initial?.name || 'Default Layout');
         setMakeDefault(initial ? !!initial.isDefault : true);
         setSections(
@@ -107,6 +168,8 @@ export default function LayoutBuilder() {
       target?.sections?.length > 0 ? target.sections : buildDefaultSections(fields),
     );
     setConditionEditorIdx(null);
+    setFieldConditionKey(null);
+    setRelatedLists(target?.relatedLists || []);
   };
 
   const nameTaken = (name, exceptId) =>
@@ -191,7 +254,7 @@ export default function LayoutBuilder() {
     ),
   );
   const unplacedFields = allFields.filter(
-    (f) => !placedApiNames.has(f.apiName) && f.type !== 'auto_number' && f.type !== 'formula' && !f.isReadOnly,
+    (f) => !placedApiNames.has(f.apiName) && isPlaceableField(f),
   );
 
   const handleDragEnd = (result) => {
@@ -303,20 +366,43 @@ export default function LayoutBuilder() {
     setSections((prev) =>
       prev.map((s, i) => {
         if (i !== idx) return s;
-        const newCols = s.columns === 2 ? 1 : 2;
+        // 1 -> 2 -> 3 -> 1. Fields are re-dealt across the new columns in
+        // reading order so nothing is lost when the count changes.
+        const newCols = nextColumnCount(s.columns);
         const all = (s.columnData || []).flatMap((c) => c.fields || []);
         return {
           ...s,
           columns: newCols,
-          columnData:
-            newCols === 1
-              ? [{ fields: all }]
-              : [
-                  { fields: all.filter((_, i) => i % 2 === 0) },
-                  { fields: all.filter((_, i) => i % 2 !== 0) },
-                ],
+          columnData: Array.from({ length: newCols }, (_, col) => ({
+            fields: all.filter((_, i) => i % newCols === col),
+          })),
         };
       }),
+    );
+  };
+
+  // Per-field settings on THIS layout only: Required, Read-only, and a
+  // visibility condition (BRD 4.1.3 / 4.1.5). `undefined` removes the override
+  // so the field falls back to its own definition.
+  const updateFieldItem = (secIdx, colIdx, apiName, patch) => {
+    setSections((prev) =>
+      prev.map((s, i) =>
+        i !== secIdx
+          ? s
+          : {
+              ...s,
+              columnData: (s.columnData || []).map((col, c) =>
+                c !== colIdx
+                  ? col
+                  : {
+                      ...col,
+                      fields: (col.fields || []).map((f) =>
+                        f.fieldApiName === apiName ? { ...f, ...patch } : f,
+                      ),
+                    },
+              ),
+            },
+      ),
     );
   };
 
@@ -342,6 +428,27 @@ export default function LayoutBuilder() {
         type: 'detail',
         useTabs: false,
         sections,
+        // Copied field by field so Mongo's own _id keys never round-trip.
+        relatedLists: relatedLists.map((c) => ({
+          objectApiName: c.objectApiName,
+          relationshipField: c.relationshipField,
+          through: !!c.through,
+          label: c.label || '',
+          columns: c.columns || [],
+          sortField: c.sortField || '',
+          sortOrder: c.sortOrder || 'desc',
+          limit: c.limit || 5,
+          filters: (c.filters || []).map((f) => ({
+            field: f.field,
+            operator: f.operator,
+            value: f.value,
+          })),
+          buttons: {
+            new: c.buttons?.new !== false,
+            edit: c.buttons?.edit !== false,
+            delete: c.buttons?.delete !== false,
+          },
+        })),
       };
       const res = layout?._id
         ? await api.put(`/layouts/${layout._id}`, layoutData)
@@ -728,11 +835,9 @@ export default function LayoutBuilder() {
                                   <button
                                     className={styles.sectionBtn}
                                     onClick={() => toggleColumns(secIdx)}
-                                    title={
-                                      section.columns === 2
-                                        ? 'Switch to 1 column'
-                                        : 'Switch to 2 columns'
-                                    }
+                                    title={`Switch to ${nextColumnCount(section.columns)} ${
+                                      nextColumnCount(section.columns) === 1 ? 'column' : 'columns'
+                                    }`}
                                   >
                                     <Columns size={14} />
                                     {section.columns} col
@@ -758,65 +863,13 @@ export default function LayoutBuilder() {
 
                             {/* Inline condition editor */}
                             {conditionEditorIdx === secIdx && (
-                              <div className={styles.conditionEditor}>
-                                <span className={styles.conditionLabel}>Show this section only when</span>
-                                <select
-                                  className={styles.conditionSelect}
-                                  value={section.visibilityRule?.field || ''}
-                                  onChange={(e) => {
-                                    const field = e.target.value;
-                                    if (!field) {
-                                      updateSectionVisibilityRule(secIdx, null);
-                                    } else {
-                                      updateSectionVisibilityRule(secIdx, {
-                                        field,
-                                        operator: section.visibilityRule?.operator || 'eq',
-                                        value: section.visibilityRule?.value || '',
-                                      });
-                                    }
-                                  }}
-                                >
-                                  <option value="">— always show —</option>
-                                  {allFields.map((f) => (
-                                    <option key={f.apiName} value={f.apiName}>{f.label}</option>
-                                  ))}
-                                </select>
-                                {section.visibilityRule?.field && (
-                                  <>
-                                    <select
-                                      className={styles.conditionSelect}
-                                      value={section.visibilityRule?.operator || 'eq'}
-                                      onChange={(e) => updateSectionVisibilityRule(secIdx, {
-                                        ...section.visibilityRule,
-                                        operator: e.target.value,
-                                      })}
-                                    >
-                                      <option value="eq">equals</option>
-                                      <option value="neq">does not equal</option>
-                                      <option value="is_set">is set</option>
-                                      <option value="is_blank">is blank</option>
-                                    </select>
-                                    {(section.visibilityRule?.operator === 'eq' || section.visibilityRule?.operator === 'neq') && (
-                                      <input
-                                        className={styles.conditionInput}
-                                        placeholder="value"
-                                        value={section.visibilityRule?.value || ''}
-                                        onChange={(e) => updateSectionVisibilityRule(secIdx, {
-                                          ...section.visibilityRule,
-                                          value: e.target.value,
-                                        })}
-                                      />
-                                    )}
-                                  </>
-                                )}
-                                <button
-                                  className={styles.conditionClose}
-                                  onClick={() => setConditionEditorIdx(null)}
-                                  title="Close"
-                                >
-                                  <X size={13} />
-                                </button>
-                              </div>
+                              <ConditionEditor
+                                rule={section.visibilityRule}
+                                fields={allFields}
+                                label="Show this section only when"
+                                onChange={(rule) => updateSectionVisibilityRule(secIdx, rule)}
+                                onClose={() => setConditionEditorIdx(null)}
+                              />
                             )}
 
                             {section.type === 'flow' ? (
@@ -910,7 +963,7 @@ export default function LayoutBuilder() {
                                                             ''}
                                                         </span>
                                                       </div>
-                                                      {fieldMeta?.isRequired && (
+                                                      {(isFieldRequired(fieldMeta) || fieldItem.required) && (
                                                         <span
                                                           className={
                                                             styles.required
@@ -918,6 +971,64 @@ export default function LayoutBuilder() {
                                                         >
                                                           *
                                                         </span>
+                                                      )}
+                                                      <div className={styles.fieldFlags}>
+                                                        <button
+                                                          type="button"
+                                                          className={`${styles.fieldFlag} ${fieldItem.required ? styles.fieldFlagOn : ''}`}
+                                                          title={
+                                                            isFieldRequired(fieldMeta)
+                                                              ? 'Already required on the field itself'
+                                                              : 'Required on this layout'
+                                                          }
+                                                          disabled={isFieldRequired(fieldMeta)}
+                                                          onClick={() =>
+                                                            updateFieldItem(secIdx, colIdx, fieldItem.fieldApiName, {
+                                                              required: fieldItem.required ? undefined : true,
+                                                            })
+                                                          }
+                                                        >
+                                                          <Asterisk size={11} />
+                                                        </button>
+                                                        <button
+                                                          type="button"
+                                                          className={`${styles.fieldFlag} ${fieldItem.readonly ? styles.fieldFlagOn : ''}`}
+                                                          title="Read-only on this layout"
+                                                          onClick={() =>
+                                                            updateFieldItem(secIdx, colIdx, fieldItem.fieldApiName, {
+                                                              readonly: fieldItem.readonly ? undefined : true,
+                                                            })
+                                                          }
+                                                        >
+                                                          <Lock size={11} />
+                                                        </button>
+                                                        <button
+                                                          type="button"
+                                                          className={`${styles.fieldFlag} ${fieldItem.visibilityRule?.field ? styles.fieldFlagOn : ''}`}
+                                                          title="Show this field only when…"
+                                                          onClick={() =>
+                                                            setFieldConditionKey(
+                                                              fieldConditionKey === `${secIdx}-${colIdx}-${fieldItem.fieldApiName}` ? null : `${secIdx}-${colIdx}-${fieldItem.fieldApiName}`,
+                                                            )
+                                                          }
+                                                        >
+                                                          <Filter size={11} />
+                                                        </button>
+                                                      </div>
+                                                      {fieldConditionKey === `${secIdx}-${colIdx}-${fieldItem.fieldApiName}` && (
+                                                        <div className={styles.fieldConditionRow}>
+                                                          <ConditionEditor
+                                                            rule={fieldItem.visibilityRule}
+                                                            fields={allFields}
+                                                            label="Show this field only when"
+                                                            onChange={(rule) =>
+                                                              updateFieldItem(secIdx, colIdx, fieldItem.fieldApiName, {
+                                                                visibilityRule: rule || undefined,
+                                                              })
+                                                            }
+                                                            onClose={() => setFieldConditionKey(null)}
+                                                          />
+                                                        </div>
                                                       )}
                                                     </div>
                                                   )}
@@ -950,6 +1061,12 @@ export default function LayoutBuilder() {
               <button className={styles.addSection} onClick={addSection}>
                 <Plus size={16} /> Add Section
               </button>
+
+              <RelatedListsPanel
+                candidates={relatedCandidates}
+                value={relatedLists}
+                onChange={setRelatedLists}
+              />
             </div>
           </div>
         </DragDropContext>

@@ -176,11 +176,14 @@ router.post('/', checkAppPermission('canManageLayouts'), asyncHandler(async (req
     );
   }
 
+  // Body first, identity last: a caller must not be able to name another
+  // tenant (or object) by sending tenantId / objectId in the payload.
   const layout = await Layout.create({
+    ...req.body,
     tenantId: req.tenantId,
     objectId: obj._id,
+    objectApiName,
     createdBy: req.user._id,
-    ...req.body,
   });
 
   await audit({

@@ -133,6 +133,7 @@ const RelatedList = ({
   isThrough = false,
   junctionObjectMeta = null,
   junctionRelatedField = null,
+  layoutConfig = null, // this list's settings from the active layout (BRD 4.1.4)
 }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -154,7 +155,18 @@ const RelatedList = ({
   const [isCreating, setIsCreating] = useState(false);
   const [duplicates, setDuplicates] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const PAGE_SIZE = 5;
+  const PAGE_SIZE = layoutConfig?.limit > 0 ? layoutConfig.limit : 5;
+
+  // Default sort and filters come from the layout; without them the list is
+  // newest-first and unfiltered, as it always was.
+  const sortParam = layoutConfig?.sortField
+    ? `${layoutConfig.sortOrder === 'asc' ? '' : '-'}${layoutConfig.sortField}`
+    : '-createdAt';
+  const layoutFilters = useMemo(
+    () => (layoutConfig?.filters || []).filter((c) => c?.field && c?.operator),
+    [layoutConfig],
+  );
+  const layoutColumns = layoutConfig?.columns?.length > 0 ? layoutConfig.columns : null;
 
   // Default column selection: first 4 non-system fields
   const defaultCols = useMemo(() => {
@@ -173,15 +185,18 @@ const RelatedList = ({
   useEffect(() => {
     if (!relatedField) return;
 
-    const cols =
-      relatedField?.relatedListConfig?.columns?.length > 0
+    // The layout's columns win; otherwise the list's own saved picks, then the
+    // first few fields.
+    const cols = layoutColumns
+      ? layoutColumns
+      : relatedField?.relatedListConfig?.columns?.length > 0
         ? relatedField.relatedListConfig.columns
             .sort((a, b) => a.order - b.order)
             .map((c) => c.fieldApiName)
         : defaultCols;
 
     setSelectedCols(cols);
-  }, [relatedField, defaultCols]);
+  }, [relatedField, defaultCols, layoutColumns]);
 
   // Query key for related records
   const relatedQueryKey = [
@@ -192,6 +207,9 @@ const RelatedList = ({
     relatedField?.apiName,
     isThrough ? 'through' : 'direct',
     page,
+    sortParam,
+    PAGE_SIZE,
+    layoutFilters,
   ];
 
   // Fetch related records using useQuery
@@ -230,7 +248,7 @@ const RelatedList = ({
             page,
             limit: PAGE_SIZE,
             filter: JSON.stringify({ _id: { $in: otherIds } }),
-            sort: '-createdAt',
+            sort: sortParam,
           },
         });
         return {
@@ -240,13 +258,21 @@ const RelatedList = ({
       }
 
       // Direct relationship query
-      const filter = { [relatedField.apiName]: parentId };
+      // With layout filters the condition-array shape is used (the same one
+      // saved list views use); without them the plain map is kept as it was.
+      const filter =
+        layoutFilters.length > 0
+          ? [
+              { field: relatedField.apiName, operator: 'eq', value: parentId },
+              ...layoutFilters,
+            ]
+          : { [relatedField.apiName]: parentId };
       const res = await api.get(`/records/${relatedObjectMeta.apiName}`, {
         params: {
           page,
           limit: PAGE_SIZE,
           filter: JSON.stringify(filter),
-          sort: '-createdAt',
+          sort: sortParam,
         },
       });
       return {
@@ -558,7 +584,11 @@ const RelatedList = ({
   };
 
   const objLabel =
-    relatedObjectMeta?.pluralLabel || relatedObjectMeta?.apiName || 'Related';
+    layoutConfig?.label ||
+    relatedObjectMeta?.pluralLabel ||
+    relatedObjectMeta?.apiName ||
+    'Related';
+  const showNewButton = layoutConfig?.buttons?.new !== false;
 
   return (
     <div className={styles.relatedList}>
@@ -600,7 +630,7 @@ const RelatedList = ({
           >
             <Columns size={13} />
           </button>
-          {!isThrough && !['quote', 'invoice'].includes(relatedObjectMeta?.apiName) && (
+          {showNewButton && !isThrough && !['quote', 'invoice'].includes(relatedObjectMeta?.apiName) && (
             <button
               className={styles.addBtn}
               onClick={openCreateModal}
@@ -677,7 +707,7 @@ const RelatedList = ({
               {records.length === 0 ? (
                 <div className={styles.empty}>
                   No {objLabel.toLowerCase()} found.
-                  {!isThrough && !['quote', 'invoice'].includes(relatedObjectMeta?.apiName) && (
+                  {showNewButton && !isThrough && !['quote', 'invoice'].includes(relatedObjectMeta?.apiName) && (
                     <>
                       {' '}
                       <button
@@ -726,8 +756,8 @@ const RelatedList = ({
                               <ActionMenu
                                 onEdit={() => handleEditRecord(rowId)}
                                 onDelete={() => handleDeleteRecord(rowId)}
-                                canEdit={perms?.canUpdate}
-                                canDelete={perms?.canDelete}
+                                canEdit={perms?.canUpdate && layoutConfig?.buttons?.edit !== false}
+                                canDelete={perms?.canDelete && layoutConfig?.buttons?.delete !== false}
                               />
                             </td>
                             {displayFields.map((f) => (

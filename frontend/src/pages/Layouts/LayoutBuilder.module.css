@@ -518,6 +518,7 @@
 /* ─── Placed fields ───────────────────────────────────────── */
 .placedField {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-2);
   padding: var(--spacing-2) var(--spacing-3);
@@ -687,4 +688,42 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+
+/* ─── Per-field layout settings (required / read-only / condition) ─── */
+.fieldFlags {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.fieldFlag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-gray-400);
+  cursor: pointer;
+}
+.fieldFlag:hover:not(:disabled) {
+  background: var(--color-gray-100);
+  color: var(--color-gray-700);
+}
+.fieldFlag:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.fieldFlagOn {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-primary-light, #e8f0ff);
+}
+.fieldConditionRow {
+  flex-basis: 100%;
+  margin-top: var(--spacing-1);
 }

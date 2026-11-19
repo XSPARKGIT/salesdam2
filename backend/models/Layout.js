@@ -30,7 +30,7 @@ const columnSchema = new mongoose.Schema({
 const sectionSchema = new mongoose.Schema({
   id: { type: String, required: true },
   label: { type: String, required: true },
-  columns: { type: Number, enum: [1, 2], default: 2 },
+  columns: { type: Number, enum: [1, 2, 3], default: 2 },
   collapsible: { type: Boolean, default: false },
   collapsed: { type: Boolean, default: false },
   columnData: [columnSchema],
@@ -93,15 +93,32 @@ const layoutSchema = new mongoose.Schema({
   // Buttons/actions
   buttons: [buttonSchema],
 
-  // Related lists (objects to show at the bottom)
+  // Related lists shown beneath the record (BRD 4.1.4). Empty means "show
+  // every child relationship"; once any are listed, only those show, in this
+  // order. Each carries its own columns, default sort, default filters and the
+  // buttons it offers.
   relatedLists: [{
     objectApiName: { type: String, required: true },
     relationshipField: { type: String, required: true },
+    // A many-to-many list reached through a junction object.
+    through: { type: Boolean, default: false },
     label: { type: String },
     columns: [{ type: String }], // field api names to display
     sortField: { type: String },
     sortOrder: { type: String, enum: ['asc', 'desc'], default: 'desc' },
-    limit: { type: Number, default: 5 },
+    limit: { type: Number, default: 5, min: 1, max: 50 },
+    // Same condition shape as a saved list view: { field, operator, value }.
+    filters: [{
+      field: { type: String, required: true },
+      operator: { type: String, default: 'eq' },
+      value: { type: mongoose.Schema.Types.Mixed },
+      _id: false,
+    }],
+    buttons: {
+      new: { type: Boolean, default: true },
+      edit: { type: Boolean, default: true },
+      delete: { type: Boolean, default: true },
+    },
   }],
 
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

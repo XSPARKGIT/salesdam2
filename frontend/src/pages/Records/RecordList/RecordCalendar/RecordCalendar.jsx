@@ -26,18 +26,36 @@ function RecordCalendar({ records, objectMeta, objectApiName, fields = [] }) {
   const dateFieldApiName = calendarConfig.dateFieldApiName;
   const titleFieldApiName = calendarConfig.titleFieldApiName || objectMeta.nameFieldApiName || 'name';
 
-  const getEventTitle = (record) => {
-    const data = record.data || {};
-    if (data instanceof Map) {
-      return data.get(titleFieldApiName) || data.get('name') || record.recordName || `${objectMeta.label} Record`;
-    }
-    return data[titleFieldApiName] || data.name || record.recordName || `${objectMeta.label} Record`;
+  // The records API returns fields flat on the record (record.start_date), with
+  // the id as `id`. Older callers passed a { data: {...} } wrapper, so both are
+  // read.
+  const valueOf = (record, key) => {
+    if (record[key] !== undefined && record[key] !== null) return record[key];
+    const data = record.data;
+    if (!data) return undefined;
+    return data instanceof Map ? data.get(key) : data[key];
   };
+  const idOf = (record) => record._id || record.id;
+
+  const getEventTitle = (record) =>
+    valueOf(record, titleFieldApiName) ||
+    valueOf(record, 'name') ||
+    record.recordName ||
+    `${objectMeta.label} Record`;
+
+  // A date-only field is a calendar day, not an instant: "2026-11-01" must land
+  // on 1 November whatever the viewer's timezone, so it is read as written
+  // rather than converted (midnight UTC is still the 31st west of Greenwich).
+  const dateFieldIsDateOnly =
+    fields.find((f) => f.apiName === dateFieldApiName)?.type === 'date';
 
   const getEventDate = (record) => {
-    const data = record.data || {};
-    const val = data instanceof Map ? data.get(dateFieldApiName) : data[dateFieldApiName];
+    const val = valueOf(record, dateFieldApiName);
     if (!val) return null;
+    if (dateFieldIsDateOnly) {
+      const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    }
     const d = new Date(val);
     return isNaN(d.getTime()) ? null : d;
   };
@@ -73,7 +91,7 @@ function RecordCalendar({ records, objectMeta, objectApiName, fields = [] }) {
   const handleToday = () => setCurrentDate(new Date());
 
   const handleRecordClick = (record) => {
-    navigate(`/o/${objectApiName}/${record._id}`);
+    navigate(`/o/${objectApiName}/${idOf(record)}`);
   };
 
   const monthCalendar = useMemo(() => {
@@ -160,7 +178,7 @@ function RecordCalendar({ records, objectMeta, objectApiName, fields = [] }) {
                   <div className={styles.dayEvents}>
                     {dayEvents.slice(0, 2).map((r) => (
                       <div
-                        key={r._id}
+                        key={idOf(r)}
                         className={styles.eventBadge}
                         onClick={(e) => { e.stopPropagation(); handleRecordClick(r); }}
                         title={getEventTitle(r)}
@@ -200,7 +218,7 @@ function RecordCalendar({ records, objectMeta, objectApiName, fields = [] }) {
                 <div className={styles.weekDayEvents}>
                   {dayEvents.map((r) => (
                     <div
-                      key={r._id}
+                      key={idOf(r)}
                       className={styles.weekEventItem}
                       onClick={() => handleRecordClick(r)}
                     >
@@ -228,7 +246,7 @@ function RecordCalendar({ records, objectMeta, objectApiName, fields = [] }) {
         {dayEvents.length > 0 ? (
           <div className={styles.dayEventList}>
             {dayEvents.map((r) => (
-              <div key={r._id} className={styles.dayEventItem} onClick={() => handleRecordClick(r)}>
+              <div key={idOf(r)} className={styles.dayEventItem} onClick={() => handleRecordClick(r)}>
                 <div>
                   <div className={styles.dayEventTitle}>{getEventTitle(r)}</div>
                   <div className={styles.dayEventMeta}>

@@ -31,6 +31,7 @@ import CommunicationPanel from '../../../components/records/CommunicationPanel';
 import FieldHistoryTab from './FieldHistoryTab/FieldHistoryTab';
 import resolveLookupLabel from '../utils/resolveLookupLabel';
 import { withoutHelperFields } from '../../../utils/fieldVisibility';
+import { fieldsToBackfill } from '../../../utils/layoutBackfill';
 
 const RecordDetail = () => {
   const queryClient = useQueryClient();
@@ -328,6 +329,25 @@ const RecordDetail = () => {
     }
   };
 
+  // BRD 4.1.4: a layout that lists related lists shows exactly those, in that
+  // order, each with its own settings. A layout that lists none shows every
+  // child relationship, as before.
+  const visibleRelated = (() => {
+    const configured = layout?.relatedLists || [];
+    if (configured.length === 0) return relatedObjects || [];
+    return configured
+      .map((cfg) => {
+        const match = (relatedObjects || []).find(
+          (o) =>
+            o.objectMeta.apiName === cfg.objectApiName &&
+            o.relatedField.apiName === cfg.relationshipField &&
+            !!o.isThrough === !!cfg.through,
+        );
+        return match ? { ...match, layoutConfig: cfg } : null;
+      })
+      .filter(Boolean);
+  })();
+
   const buildSections = () => {
     if (layout?.sections?.length > 0) {
       const visibleFieldApiNames = new Set(withoutHelperFields(fields).map((f) => f.apiName));
@@ -350,20 +370,20 @@ const RecordDetail = () => {
           (sec.columnData || []).flatMap((col) => (col.fields || []).map((f) => f.fieldApiName))
         )
       );
-      const missing = withoutHelperFields(fields).filter(
-        (f) => !inLayout.has(f.apiName) && visibleFieldApiNames.has(f.apiName)
+      const missing = fieldsToBackfill(withoutHelperFields(fields), inLayout).filter((f) =>
+        visibleFieldApiNames.has(f.apiName)
       );
 
       if (missing.length > 0 && layoutSections.length > 0) {
         const first = layoutSections[0];
-        const col0 = [...(first.columnData?.[0]?.fields || [])];
-        const col1 = [...(first.columnData?.[1]?.fields || [])];
+        const cols = Math.max(first.columnData?.length || 0, 1);
+        const columnData = Array.from({ length: cols }, (_, c) => ({
+          fields: [...(first.columnData?.[c]?.fields || [])],
+        }));
         missing.forEach((f, idx) => {
-          const entry = { fieldApiName: f.apiName, label: f.label };
-          if (idx % 2 === 0) col0.push(entry);
-          else col1.push(entry);
+          columnData[idx % cols].fields.push({ fieldApiName: f.apiName, label: f.label });
         });
-        layoutSections[0] = { ...first, columnData: [{ fields: col0 }, { fields: col1 }] };
+        layoutSections[0] = { ...first, columnData };
       }
 
       return layoutSections;
@@ -494,14 +514,15 @@ const RecordDetail = () => {
 
         <CommunicationPanel objectApiName={objectApiName} recordId={id} />
 
-        {relatedObjects?.length > 0 && (
+        {visibleRelated.length > 0 && (
           <div className={styles.relatedSection}>
             <h3 className={styles.relatedSectionTitle}>Related</h3>
             <div className={styles.relatedLists}>
-              {relatedObjects?.map(
-                ({ objectMeta, relatedField, fields: relFields, isThrough, junctionObjectMeta, junctionRelatedField }) => (
+              {visibleRelated.map(
+                ({ objectMeta, relatedField, fields: relFields, isThrough, junctionObjectMeta, junctionRelatedField, layoutConfig }) => (
                   <RelatedList
                     key={`${objectMeta.apiName}-${relatedField.apiName}${isThrough ? '-through' : ''}`}
+                    layoutConfig={layoutConfig}
                     parentObjectApiName={objectApiName}
                     parentId={id}
                     relatedField={relatedField}

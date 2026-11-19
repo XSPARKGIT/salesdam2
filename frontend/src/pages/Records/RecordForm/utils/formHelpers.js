@@ -88,12 +88,44 @@ export const cloneableValues = (fields, source) => {
 };
 
 /**
+ * Fold a layout's per-field settings into the field definitions (BRD 4.1.3).
+ *
+ * A layout can make a field Required or Read-only for the people who see that
+ * layout, whatever the field's own default. It can only tighten: a field that
+ * is required on its own definition stays required, because that rule is also
+ * enforced by the API and no layout can switch it off.
+ */
+export const applyLayoutOverrides = (fields, layout) => {
+  const items = new Map();
+  (layout?.sections || []).forEach((sec) =>
+    (sec.columnData || []).forEach((col) =>
+      (col.fields || []).forEach((fi) => {
+        if (fi.required || fi.readonly) items.set(fi.fieldApiName, fi);
+      }),
+    ),
+  );
+  if (items.size === 0) return fields;
+
+  return fields.map((f) => {
+    const o = items.get(f.apiName);
+    if (!o) return f;
+    return {
+      ...f,
+      ...(o.required ? { isRequired: true } : {}),
+      ...(o.readonly ? { isReadOnly: true } : {}),
+    };
+  });
+};
+
+/**
  * Validate form data against field requirements
  */
-export const validateFormData = (formData, fields) => {
+export const validateFormData = (formData, fields, hiddenFields = new Set()) => {
   const errors = {};
 
   fields.forEach((f) => {
+    // A field the layout is hiding is not on screen; it cannot be required.
+    if (hiddenFields.has(f?.apiName)) return;
     if (f?.isRequired || f?.validations?.required) {
       const val = formData[f.apiName];
       if (val === undefined || val === null || val === '') {

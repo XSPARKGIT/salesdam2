@@ -1,12 +1,34 @@
 import { withoutHelperFields } from '../../../../utils/fieldVisibility';
 import { evaluateVisibilityRule } from '../../../../utils/evaluateVisibilityRule';
+import { fieldsToBackfill } from '../../../../utils/layoutBackfill';
+
+/**
+ * Field api names the layout currently hides for this data, either because
+ * their own condition fails or because the section they sit in is hidden
+ * (BRD 4.1.5). Hidden fields are not on screen, so they cannot be required.
+ */
+export const fieldsHiddenByLayout = (layout, formData = {}) => {
+  const hidden = new Set();
+  (layout?.sections || []).forEach((sec) => {
+    const sectionHidden = !evaluateVisibilityRule(sec.visibilityRule, formData);
+    (sec.columnData || []).forEach((col) =>
+      (col.fields || []).forEach((fi) => {
+        if (sectionHidden || !evaluateVisibilityRule(fi.visibilityRule, formData)) {
+          hidden.add(fi.fieldApiName);
+        }
+      }),
+    );
+  });
+  return hidden;
+};
 
 /**
  * Build form sections from layout or field grouping.
  * Combines layout sections with any missing required fields.
- * Pass formData to apply conditional visibility rules.
+ * Pass formData to apply conditional visibility rules; they apply on create as
+ * well as edit, re-evaluating as the user fills the form in.
  */
-export const buildFormSections = (layout, allFields, formData = {}, isEdit = false) => {
+export const buildFormSections = (layout, allFields, formData = {}) => {
   // Helper fields are computed feeds for other calculations — never editable
   // and never shown on a form.
   const fields = withoutHelperFields(allFields);
@@ -17,14 +39,14 @@ export const buildFormSections = (layout, allFields, formData = {}, isEdit = fal
   // Use layout sections if available
   if (layout?.sections?.length > 0) {
     sections = layout.sections
-      .filter((sec) => !isEdit || evaluateVisibilityRule(sec.visibilityRule, formData))
+      .filter((sec) => evaluateVisibilityRule(sec.visibilityRule, formData))
       .map((sec) => ({
         id: sec.id,
         label: sec.label,
         columns: sec.columns || 2,
         columnData: (sec.columnData || []).map((col) => ({
           fields: (col.fields || []).filter((fi) =>
-            !isEdit || evaluateVisibilityRule(fi.visibilityRule, formData)
+            evaluateVisibilityRule(fi.visibilityRule, formData)
           ),
         })),
       }));
@@ -71,23 +93,20 @@ export const buildFormSections = (layout, allFields, formData = {}, isEdit = fal
 
   // Merge fields not in the layout into the first section's columns so they
   // appear alongside existing fields, not in a separate orphan group.
-  const missingFields = fields.filter((f) => !fieldsInLayout.has(f.apiName));
+  const missingFields = fieldsToBackfill(fields, fieldsInLayout, { forForm: true });
 
   if (missingFields.length > 0) {
     if (sections.length > 0) {
       // Deep-clone the first section so we don't mutate cached layout data.
       const first = sections[0];
-      const col0 = [...(first.columnData?.[0]?.fields || [])];
-      const col1 = [...(first.columnData?.[1]?.fields || [])];
+      const cols = Math.max(first.columnData?.length || 0, 1);
+      const columnData = Array.from({ length: cols }, (_, c) => ({
+        fields: [...(first.columnData?.[c]?.fields || [])],
+      }));
       missingFields.forEach((f, idx) => {
-        const entry = { fieldApiName: f.apiName, label: f.label };
-        if (idx % 2 === 0) col0.push(entry);
-        else col1.push(entry);
+        columnData[idx % cols].fields.push({ fieldApiName: f.apiName, label: f.label });
       });
-      sections[0] = {
-        ...first,
-        columnData: [{ fields: col0 }, { fields: col1 }],
-      };
+      sections[0] = { ...first, columnData };
     } else {
       sections.push({
         id: 'auto_section',
