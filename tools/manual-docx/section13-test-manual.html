@@ -1,0 +1,457 @@
+<title>Deployment Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Deployment and Environments</h1>
+    <p class="standfirst">A step-by-step script for BRD Section&nbsp;13. You copy a tenant into a sandbox, bundle several kinds of configuration and custom code into one package, prove that a package with a missing dependency is refused, deploy a complete one, read the deployment log, and roll deployments back. Everything happens in throwaway tenants; your working tenant is never deployed into.</p>
+    <div class="mast-meta"><span><b>Scope</b> BRD §13</span><span><b>Tests</b> 20</span><span><b>Time</b> ~60 minutes</span><span><b>Issued</b> 19 Nov 2026</span></div>
+  </header>
+  <div class="progress-bar"><span class="count" id="count">0 of 20 complete</span><div class="track"><div class="fill" id="fill"></div></div><button class="btn-reset" id="reset" type="button">Reset</button></div>
+<h2>Before you start</h2><div class="callout"><h3>Signing in</h3><dl class="creds"><dt>Address</dt><dd>http://localhost:5173</dd><dt>Who</dt><dd>An administrator (Super User) of the tenant being tested</dd></dl>
+  <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">Ask your Salesdam contact for the sign-in details. Pages can take 10–30 seconds to fill because the database is remote. Deployments and sandboxes are Super User screens: <b>Setup → Deployments</b> and <b>Setup → Custom Code</b>. The <b>Tenant</b> switcher in the top bar decides which tenant you are looking at, and a new change set is built from that tenant.</p></div>
+<div class="callout"><h3>What can travel in a package</h3><ul>
+<li><b>Yes:</b> objects, fields, validation rules (alone or inside their object), layouts, layout assignments, flows, approval processes, approver groups, duplicate rules, configuration values, <b>custom code</b> (active version only) and <b>document (PDF) templates</b>.</li>
+<li><b>Checked for dependencies:</b> objects, fields (used by layouts, layout assignments and validation rules), layouts, roles, approver groups, custom code, document templates and integrations (a flow's integration is found by name).</li>
+<li><b>Not packaged:</b> integration configurations themselves (they hold credentials), email and message templates, users and records. Flows are checked for the objects, fields (on Update/Create/Get/Delete Record steps) and sub-flows they use; other step types are not inspected.</li></ul></div>
+<div class="callout warn"><h3>Cautions</h3><ul>
+<li>Use only throwaway tenants as targets. Deploying changes the target's live configuration.</li>
+<li>Validate first. A deployment re-checks the same dependencies and refuses to start if anything is missing.</li>
+<li>Rolling back a package puts each component back to its state before the deployment; it does not touch records.</li></ul></div>
+<h2>Sandbox and package</h2><p class="sec-note">BRD §13.1–§13.2 — copy a tenant's configuration without its data, and bundle components into a package.</p>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. A sandbox is a full copy of a tenant's configuration, built in one click</span>
+        <span class="refs"><span class="ref">§13.1 (sandbox / test tenant)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Sign in as an administrator. In the top bar open the <b>Tenant</b> switcher and choose the tenant you want to copy (for the acceptance run, <b>My Company</b>). Open <b>Setup → Deployments</b>.</li><li>Under <b>Clone Sandbox Tenant</b> choose <b>My Company</b> in <b>Source tenant…</b>, type <b>S13 Sandbox A</b> in <b>Sandbox name</b> and click <b>Clone</b>.</li><li>Wait for the green message (it can take up to a minute on the remote database).</li></ol>
+      <div class="expect"><b>Expected</b>The message reads <b>Sandbox created (N components)</b>. For My Company we saw <b>67 components</b>: 5 objects, 48 fields, 2 layouts, 1 flow, 3 approval processes and the 7 Policy validation rules (rules travel inside their object). The Apps (workspaces) are copied too, so the objects show in the sandbox's sidebar, but not their members. Counts were read from the database by the Salesdam team.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. A sandbox contains no business records</span>
+        <span class="refs"><span class="ref">§13.1 (no production data)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In the top bar open the <b>Tenant</b> switcher and choose <b>S13 Sandbox A</b>. Open Policies, Insured Lives, Claims and Brokers from the sidebar.</li><li>Switch back to <b>My Company</b> and open Policies for comparison.</li></ol>
+      <div class="expect"><b>Expected</b>The Policies list reads <b>0 records</b> and <b>No policies found.</b> (clicked). Insured Life, Claim and Broker lists were not clicked; their counts in the sandbox were <b>0</b> in the database (My Company held 8, 6, 8 and 0).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. Several different components can be bundled into one package</span>
+        <span class="refs"><span class="ref">§13.2 (change set)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Make something to package. In the <b>S13 Sandbox A</b> tenant add two text fields on Policy (<b>S13 Reference</b>, <b>S13 Note</b>, API names <b>s13_ref</b>, <b>s13_note</b>), one validation rule named <b>S13 Note not BAD</b> (<code>s13_note == "BAD"</code>), a Custom Code snippet <b>s13_calc</b> made active, a document template with API name <b>s13_letter</b> and a flow <b>s13_flow</b> that calls the snippet and generates that template. (The Salesdam team created these directly for the acceptance run.)</li><li>With <b>S13 Sandbox A</b> selected in the top bar, open <b>Setup → Deployments</b>. Under <b>Create Change Set</b> type the name <b>S13 Mixed Package</b>.</li><li>Add six components one at a time: choose the type, type the key, click <b>Add</b>: <b>field</b> <code>policy.s13_ref</code>; <b>field</b> <code>policy.s13_note</code>; <b>validation_rule</b> <code>policy:S13 Note not BAD</code>; <b>custom_code</b> <code>s13_calc</code>; <b>pdf_template</b> <code>s13_letter</code>; <b>flow</b> <code>s13_flow</code>. Click <b>Create Change Set</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The six lines appear in the list and then the green message <b>Change set created</b>. The table under <b>Change Sets</b> shows <b>S13 Mixed Package</b>, status <b>draft</b>, <b>6</b> components. A wrong key (for example a typo in the field name) is refused with <b>Components not found</b>.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. A change set exports as a package file that carries no credentials</span>
+        <span class="refs"><span class="ref">§13.2 (deployable package)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>With the source tenant selected in the top bar, find <b>S13 Mixed Package</b> in the <b>Change Sets</b> table and click <b>Export</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The message <b>Package file exported</b> appears and a file named <b>S13-Mixed-Package.salesdam-package.json</b> downloads (about 5 KB). It holds <b>format</b>, <b>version 1</b>, the source tenant's name and id, the creation time, the six components with their settings, and a <b>checksum</b>. Anything that looks like a password, token, secret or API key is blanked; integration configurations are never included. The save dialog itself needs a person; we read the file's content from the page.</div>
+    </div>
+  </div>
+<h2>Package files</h2><p class="sec-note">BRD §13.2 — export to a file, import into another tenant, refuse a tampered file.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. A package file imports into another tenant as a change set that follows the normal path</span>
+        <span class="refs"><span class="ref">§13.2 (import into another tenant)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Switch the top-bar <b>Tenant</b> to the tenant that should receive the package (<b>S13 Sandbox target</b>). Under <b>Import Package File</b> choose the file you exported. <b>Needs a person:</b> the file chooser cannot be driven by our tool; we supplied the same file to the same screen handler instead.</li><li>A new row <b>S13 Mixed Package</b> (draft, 6 components) appears in <b>Change Sets</b>. Choose a target tenant (a tenant without the object is blocked at <b>Validate</b> with <b>Missing object: policy</b>; <b>S13 Sandbox Del</b>, another clone, passes), click <b>Validate</b> then <b>Deploy</b>, and read the <b>Deployment Log</b>.</li></ol>
+      <div class="expect"><b>Expected</b>Import message: <b>Package imported as a change set</b>. Validate and Deploy behave exactly as in the earlier tests: the log row reads <b>deployed</b> with 6 components, the By column names the administrator, and <b>Rollback</b> removes the components again (clicked end to end).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. A changed, forged or oversized package file is refused and leaves nothing behind</span>
+        <span class="refs"><span class="ref">§13.2 (untrusted file)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In the receiving tenant, import a copy of the file in which you changed one setting (for example edit the snippet's description) without recalculating the checksum.</li><li>Import copies in which: the <b>version</b> is 2; a component type is changed to <b>user</b>; the file is not JSON at all.</li><li>Look at the <b>Change Sets</b> table after each attempt.</li></ol>
+      <div class="expect"><b>Expected</b>Each is refused with a red message: <b>Package refused: the integrity checksum does not match – the file was changed after export.</b>, <b>package version 2 is not supported (expected 1)</b>, the same checksum message for the changed type, and <b>the file is not valid JSON</b>. No row is added (clicked). Also refused, proved by the automated suite only: an unknown component type or an operator key with a valid checksum, a component whose key does not match its settings, a file over 5 MB, and any import by a non-Super User.</div>
+    </div>
+  </div>
+<h2>Dependency checks</h2><p class="sec-note">BRD §13.2 — a package is refused when something it needs is missing in the target.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. A package is blocked when the object it needs does not exist in the target</span>
+        <span class="refs"><span class="ref">§13.2.1, §13.2.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Under <b>Target Tenant</b> choose a tenant that has none of your objects (the acceptance run used an empty tenant, <b>ZZ_S13 Bare Target</b>). In the <b>S13 Mixed Package</b> row click <b>Validate</b>.</li></ol>
+      <div class="expect"><b>Expected</b><b>Validation Result</b> reads <b>Blocked – 1 required dependency is missing in the target tenant</b> and lists <b>Missing object: policy</b>. The <b>Deploy</b> button stays greyed out.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. A package is blocked when a flow's custom code or document template is missing</span>
+        <span class="refs"><span class="ref">§13.2.3, §13.2.6, §13.2.8, §13.2.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create a second change set, <b>S13 Flow Only</b>, containing only the <b>flow</b> <code>s13_flow</code>.</li><li>Under <b>Target Tenant</b> choose the second sandbox (<b>S13 Sandbox target</b>, a clone of My Company, which has Policy but no snippet or template). Click <b>Validate</b> on <b>S13 Flow Only</b>.</li></ol>
+      <div class="expect"><b>Expected</b><b>Blocked – 2 required dependencies are missing</b>: <b>Missing custom code: s13_calc (needed by flow:s13_flow)</b> and <b>Missing document template: s13_letter (needed by flow:s13_flow)</b>.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. A package is blocked when a field its validation rule uses is missing</span>
+        <span class="refs"><span class="ref">§13.2.2, §13.2.5, §13.2.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create a third change set, <b>S13 Rule Only</b>, containing only the <b>validation_rule</b> <code>policy:S13 Note not BAD</code>. With the same target selected click <b>Validate</b>.</li></ol>
+      <div class="expect"><b>Expected</b><b>Blocked – 1 required dependency is missing</b>: <b>Missing field: policy.s13_note (needed by validation_rule:policy:S13 Note not BAD)</b>.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. A flow is blocked when a field, object or sub-flow it uses is missing in the target</span>
+        <span class="refs"><span class="ref">§13.2.1, §13.2.2, §13.2.3, §13.2.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Package a flow whose steps write a field, create records on an object, or call a sub-flow that the target does not have, and click <b>Validate</b> against that target.</li></ol>
+      <div class="expect"><b>Expected</b>Blocked with <b>Missing field: policy.&lt;field&gt;</b>, <b>Missing object: &lt;object&gt;</b> or <b>Missing flow: &lt;sub-flow&gt;</b>. Putting the sub-flow in the same package clears its entry. Not clicked: proved by the automated suite. Fields are checked for Update Record, Create Record, Get Records and Delete Records steps; other step types are not inspected.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. A blocked deployment is refused and recorded, never half-applied</span>
+        <span class="refs"><span class="ref">§13.2.9, §13.3 (log)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Deploy is disabled in the screen until a package validates, so this step uses the API: with <b>S13 Sandbox A</b> selected, call <code>POST /api/v1/change-sets/&lt;id of S13 Flow Only&gt;/deploy</code> with the target tenant id. (The Salesdam team did this from the browser; it needs a person who can call the API.)</li><li>Under <b>Target Tenant</b> choose <b>S13 Sandbox target</b> and read the <b>Deployment Log</b> at the bottom of the page.</li></ol>
+      <div class="expect"><b>Expected</b>The API answers <b>409 Deployment blocked: missing dependencies (s13_calc, s13_letter)</b>. The log gains a row, status <b>blocked</b>, <b>2 missing</b> (hover the row to see which). Nothing was created in the target.</div>
+    </div>
+  </div>
+<h2>Deployment, log and rollback</h2><p class="sec-note">BRD §13.1.2, §13.3 — deploy, read what happened, and undo it.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. Dependencies that are present let the whole package deploy</span>
+        <span class="refs"><span class="ref">§13.2, §13.1.3 (configuration and custom code together)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Select <b>S13 Sandbox target</b> as the target and click <b>Validate</b> on <b>S13 Mixed Package</b>, then <b>Deploy</b>.</li></ol>
+      <div class="expect"><b>Expected</b><b>All dependencies are present – ready to deploy.</b> The package status becomes <b>deployed</b>, 6 components, and a <b>Rollback</b> button appears. Switch to the target tenant and open <b>Setup → Custom Code</b>: <b>s13_calc</b> shows <b>Active: v1 · 1 version</b> with the note <b>Deployed from change set</b> (clicked). The fields, rule, template and flow were read from the database: both fields, the rule, the template, and the flow whose PDF step points at the target's own template, not the source's. Those Setup screens were not clicked.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. The deployment log says what was deployed, when and by whom</span>
+        <span class="refs"><span class="ref">§13.3 (deployment log)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>With <b>S13 Sandbox target</b> still chosen under <b>Target Tenant</b>, read the <b>Deployment Log</b> table.</li></ol>
+      <div class="expect"><b>Expected</b>One row per attempt with <b>When</b> (date and time), <b>Change set</b>, <b>From</b> (source tenant), <b>By</b> (the administrator's name), <b>Status</b> (deployed / blocked / rolled back) and <b>Components</b>. Blocked and rolled-back attempts stay in the log.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. Promoting a new custom-code version keeps the one it replaces</span>
+        <span class="refs"><span class="ref">§13.1.2, §13.3.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In <b>S13 Sandbox A</b> make a second version of <b>s13_calc</b> active (Setup → Custom Code → <b>Activate v2</b>; the acceptance run set it directly).</li><li>Create a change set <b>S13 Code Update</b> with the single component <b>custom_code</b> <code>s13_calc</code>. Choose <b>S13 Sandbox target</b>, click <b>Validate</b>, then <b>Deploy</b>.</li></ol>
+      <div class="expect"><b>Expected</b>Validation passes and the log shows <b>S13 Code Update – deployed – 1</b>. In the target the snippet now has <b>v2 active</b> and <b>v1 archived</b> (read from the database). Only the active (approved) version is ever packaged, never a draft.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. Rolling back a code deployment returns the immediately preceding active version</span>
+        <span class="refs"><span class="ref">§13.3.1, §13.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In the <b>Deployment Log</b> of <b>S13 Sandbox target</b>, find the <b>S13 Code Update</b> row and click its <b>Rollback</b> button.</li></ol>
+      <div class="expect"><b>Expected</b>The row's status changes to <b>rolled back</b> and its Rollback button disappears. In the target the snippet is back to <b>v1 active</b> with only v1 present (the previous state, exactly).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. Rolling back a mixed package removes everything it added</span>
+        <span class="refs"><span class="ref">§13.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In the same log click <b>Rollback</b> on the <b>S13 Mixed Package</b> row.</li></ol>
+      <div class="expect"><b>Expected</b>Status becomes <b>rolled back</b>. The snippet is gone from the target's Custom Code page; in the database the target again had no <b>s13_</b> fields, no rule, no template and no flow. A component that already existed before the deployment would instead be put back as it was.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. An administrator can restore an earlier custom-code version from the Custom Code page</span>
+        <span class="refs"><span class="ref">§13.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Custom Code</b> in <b>S13 Sandbox A</b>. Find <b>s13_calc</b> (<b>Active: v2 · 2 versions</b>) and click <b>View code</b>.</li><li>Click <b>Restore v1</b> (the browser may ask you to confirm).</li></ol>
+      <div class="expect"><b>Expected</b>The heading changes to <b>Active: v1 · 2 versions</b>; v1 reads active, v2 archived. The previous version was kept all along, so nothing is lost.</div>
+    </div>
+  </div>
+<h2>Cases checked by the test suite only</h2><p class="sec-note">BRD §13.1.3, §13.2.7 — not clickable on a standard screen.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. Code that has only a draft cannot be packaged for deployment</span>
+        <span class="refs"><span class="ref">§13.1.3, §13.2.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create a snippet that has only a draft version, add it to a change set as a <b>custom_code</b> component and click <b>Validate</b> against any tenant.</li></ol>
+      <div class="expect"><b>Expected</b>Blocked with <b>Missing custom code approved version: &lt;snippet name&gt;</b>. Not clicked: proved by the automated suite (<b>section13-deployment</b>).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t19">
+      <span class="test-title"><span class="t">19. A flow that calls an integration is blocked until the target has that integration</span>
+        <span class="refs"><span class="ref">§13.2.7, §13.2.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Package a flow whose HTTP step uses an Integration (external object) and validate it against a tenant without an integration of the same name.</li></ol>
+      <div class="expect"><b>Expected</b>Blocked with <b>Missing integration: &lt;name&gt;</b>. Not clicked: proved by the automated suite. The integration itself is not packaged (it holds addresses and credentials); each tenant sets up its own and the package finds it by name.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t20">
+      <span class="test-title"><span class="t">20. A sandbox can be deleted, but only a sandbox, and only deliberately</span>
+        <span class="refs"><span class="ref">§13.1 (clean-up of test tenants)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Under <b>Delete Sandbox Tenant</b> open <b>Sandbox to delete…</b>. Only tenants created with <b>Clone</b> are listed; a tenant that was not made by cloning (for example the empty target) and your real tenants are absent.</li><li>Choose the sandbox you are currently working in: <b>Delete sandbox…</b> is greyed out and the note <b>You are working in this sandbox. Switch to another tenant in the top bar first.</b> appears.</li><li>Switch to another tenant, choose a sandbox, click <b>Delete sandbox…</b>, type a wrong name (the <b>Delete permanently</b> button stays disabled), then type the exact name and click <b>Delete permanently</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The message <b>Sandbox deleted</b> appears and the sandbox leaves both pickers (clicked). Its configuration, users, roles, change sets and logs are removed; the source tenant is untouched. The server also refuses (suite): a non-clone tenant, the tenant you are signed in to, a wrong name and a non-Super User.</div>
+    </div>
+  </div>
+<h2>Known limits</h2><div class="callout warn"><h3>Worth knowing</h3><ul>
+<li>A package file is JSON with a checksum; it is checked before anything is created, but it is not encrypted or signed, so treat it like any other company file.</li>
+<li>A deployment does not carry users, records, email/message templates or the credentials of an integration.</li>
+<li>Deploying a custom-code component adds it as the next version in the target and activates it; the target's earlier version stays in its history.</li>
+<li>Sandbox cloning copies configuration, Apps and every custom-code version (drafts included), but no records, users, App members or files. The sandbox starts without members, so only Super Users see its Apps until you add people.</li></ul></div>  <footer>Salesdam V3 · Deployment and Environments acceptance script · issued 19 November 2026. Tick-box progress is remembered in this browser only.</footer>
+</div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s13-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>
