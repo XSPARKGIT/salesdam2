@@ -161,6 +161,8 @@ objectMetaSchema.pre('deleteOne', { document: true, query: false }, async functi
     model('AutoNumberCounter').deleteMany({ tenantId, objectApiName: apiName }),
     model('CustomScreen').deleteMany({ tenantId, objectApiName: apiName }),
     model('ObjectTypeConfig').deleteMany({ tenantId, objectApiName: apiName }),
+    model('ListView').deleteMany({ tenantId, objectApiName: apiName }),
+    model('RecentlyViewed').deleteMany({ tenantId, objectApiName: apiName }),
   ]);
 
   // References held elsewhere — workspace visibility and sidebar groups, the

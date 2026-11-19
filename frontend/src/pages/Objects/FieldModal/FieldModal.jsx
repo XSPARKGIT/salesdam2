@@ -70,6 +70,7 @@ const BLANK = {
   rollupField: '',
   rollupFilter: '',
   isHidden: false,
+  isSearchable: true,
   autoNumberPrefix: '',
   autoNumberPadding: 4,
   autoNumberStartAt: 1,
@@ -844,6 +845,26 @@ const FieldModal = ({
               The value is still stored and can be referenced by formulas and
               rollup summaries. Use for intermediate values that only exist to
               feed another calculation.
+            </span>
+          </span>
+        </label>
+
+        {/* ── SEARCHABLE (BRD 10.1) ─────────────────── */}
+        <label className={`${styles.full} ${styles.toggleCard}`}>
+          <input
+            type="checkbox"
+            name="isSearchable"
+            className={styles.toggleInput}
+            checked={fieldForm.isSearchable !== false}
+            onChange={handleChange}
+          />
+          <span className={styles.toggleText}>
+            <span className={styles.toggleTitle}>
+              Searchable — include in Global Search
+            </span>
+            <span className={styles.toggleHint}>
+              Records are found by this field&apos;s value. Turn off for fields
+              that should never match a search.
             </span>
           </span>
         </label>

@@ -548,8 +548,9 @@ const updateField = asyncHandler(async (req, res) => {
   field.lastModifiedBy = req.user._id;
   await field.save();
 
-  // If isSearchable was just turned on, rebuild _searchText for all existing records
-  if (!wasSearchable && field.isSearchable) {
+  // Turning searchable on or off changes what each record's text blob holds, so rebuild
+  // it for existing records (off must stop old text matching, on must make it findable).
+  if (Boolean(wasSearchable) !== Boolean(field.isSearchable)) {
     reindexObject(req.tenantId, field.objectApiName).catch(() => {});
   }
 
@@ -574,6 +575,8 @@ const deleteField = asyncHandler(async (req, res) => {
     );
 
   await FieldMeta.deleteOne({ _id: field._id });
+  // A deleted searchable field must stop matching: rebuild the text blobs without it.
+  if (field.isSearchable) reindexObject(req.tenantId, field.objectApiName).catch(() => {});
 
   await audit({
     tenantId: req.tenantId,

@@ -77,6 +77,18 @@ dynamicRecordSchema.index({ tenantId: 1, isDeleted: 1 });
 // Full-text search index on searchText
 dynamicRecordSchema.index({ _searchText: 'text', tenantId: 1 });
 
+// Keep the search text current for every writer (flows, custom code, inbox, conversions,
+// insurance services), not only the record controller. Skips saves where the caller already
+// rebuilt it; searchable fields come from field metadata, so no per-object code is involved.
+dynamicRecordSchema.pre('save', async function () {
+  if (!this.isNew && !this.isModified('data')) return;
+  if (this.isModified('_searchText')) return;
+  const FieldMeta = mongoose.model('FieldMeta');
+  const fields = await FieldMeta.find({ tenantId: this.tenantId, objectApiName: this.objectApiName }).lean();
+  const { buildSearchText } = await import('../services/searchService.js');
+  this._searchText = await buildSearchText(this, fields);
+});
+
 // Retrieve a specific field from data map
 dynamicRecordSchema.methods.getField = function (apiName) {
   return this.data.get(apiName);
