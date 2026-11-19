@@ -107,10 +107,18 @@ const Sidebar = () => {
   // read access; this mirrors the workspace check so a switch never shows
   // another workspace's objects while the new list is loading. A workspace
   // with no objects (or no workspace at all) shows none.
-  const workspaceObjects = new Set(activeWorkspace?.allowedObjects || []);
+  // The App's own list is its tab order (BRD 5.1.1), so one shared object can
+  // sit in a different place in each App. An object's global navOrder only
+  // breaks ties and places anything the list does not name.
+  const tabOrder = activeWorkspace?.allowedObjects || [];
+  const workspaceObjects = new Set(tabOrder);
+  const tabRank = (o) => {
+    const i = tabOrder.indexOf(o.apiName);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
   const navObjects = objects
     .filter((o) => o.showInNav && o.isActive && workspaceObjects.has(o.apiName))
-    .sort((a, b) => a.navOrder - b.navOrder);
+    .sort((a, b) => tabRank(a) - tabRank(b) || a.navOrder - b.navOrder);
 
   // Restore the persisted nav scroll offset before the first paint, so the
   // remount that every navigation causes isn't visible as a jump to the top.

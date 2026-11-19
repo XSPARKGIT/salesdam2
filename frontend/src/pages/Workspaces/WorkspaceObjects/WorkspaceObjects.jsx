@@ -2,7 +2,7 @@ import styles from './WorkspaceObjects.module.css';
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
-import { Box, Check } from 'lucide-react';
+import { ArrowDown, ArrowUp, Box, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -45,6 +45,20 @@ const WorkspaceObjects = () => {
       const newSet = new Set(prev);
       newSet.has(apiName) ? newSet.delete(apiName) : newSet.add(apiName);
       return newSet;
+    });
+  };
+
+  /* ── Tab order ────────────────────────────────── */
+  // The selection is kept in insertion order, and that order is the App's
+  // navigation order, so moving a tab means rebuilding the set.
+  const moveObject = (apiName, dir) => {
+    setSelectedObjects((prev) => {
+      const list = Array.from(prev);
+      const i = list.indexOf(apiName);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= list.length) return prev;
+      [list[i], list[j]] = [list[j], list[i]];
+      return new Set(list);
     });
   };
 
@@ -121,6 +135,46 @@ const WorkspaceObjects = () => {
           );
         })}
       </div>
+
+      {selectedObjects.size > 0 && (
+        <div className={styles.order}>
+          <h4 className={styles.orderTitle}>Tab order</h4>
+          <p className={styles.description}>
+            The order these appear in this workspace&apos;s navigation. Another workspace can
+            order the same objects differently.
+          </p>
+          <ol className={styles.orderList}>
+            {Array.from(selectedObjects).map((apiName, i, all) => {
+              const obj = objects.find((o) => o.apiName === apiName);
+              return (
+                <li key={apiName} className={styles.orderRow}>
+                  <span className={styles.orderName}>{obj?.pluralLabel || obj?.name || apiName}</span>
+                  <span className={styles.orderTools}>
+                    <button
+                      type="button"
+                      className={styles.orderBtn}
+                      title="Move up"
+                      disabled={i === 0}
+                      onClick={() => moveObject(apiName, -1)}
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.orderBtn}
+                      title="Move down"
+                      disabled={i === all.length - 1}
+                      onClick={() => moveObject(apiName, 1)}
+                    >
+                      <ArrowDown size={14} />
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
 
       <div className={styles.footer}>
         <div className={styles.footerInfo}>
