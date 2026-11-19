@@ -1,0 +1,485 @@
+<title>Custom Code Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Custom Code and Extensibility</h1>
+    <p class="standfirst">A step-by-step script for BRD Section&nbsp;15. You create tenant code, move it Draft → Test → Active → Inactive, test-run it safely, call it from a Flow, see it read and write records and return values, watch the runtime contain loops, crashes and escape attempts, and generate documents from templates by hand and from a Flow.</p>
+    <div class="mast-meta"><span><b>Scope</b> BRD §15</span><span><b>Tests</b> 23</span><span><b>Time</b> ~90 minutes</span><span><b>Issued</b> 19 Nov 2026</span></div>
+  </header>
+  <div class="progress-bar"><span class="count" id="count">0 of 23 complete</span><div class="track"><div class="fill" id="fill"></div></div><button class="btn-reset" id="reset" type="button">Reset</button></div>
+<h2>Before you start</h2><div class="callout"><h3>Signing in</h3><dl class="creds"><dt>Address</dt><dd>http://localhost:5173</dd><dt>Who</dt><dd>An administrator who may manage and deploy custom code, in the tenant being tested</dd></dl>
+  <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">Ask your Salesdam contact for the sign-in details. Pages can take 10–30 seconds to fill because the database is remote.</p></div>
+<div class="callout"><h3>What is prepared on My Company</h3><ul>
+<li>Custom code <b>s15_claim_review</b> (reads, queries, creates and updates claims, returns a risk value) and <b>s15_always_fails</b> (always raises an error), both Active.</li>
+<li>Flow <b>S15 Code Flow</b> (Claim created and claim number is <b>S15-CODE</b>) and flow <b>S15 PDF Flow</b> (claim number is <b>S15-PDF</b>), both Active. Other claims are not touched.</li>
+<li>PDF templates <b>S15 Claim Letter</b> and <b>S15 Policy Schedule</b>.</li>
+<li>Run the code-runtime tests (Tests 1–7 and 14–19) in a copy of your tenant, not in production: <b>Setup → Deployments → Clone Sandbox Tenant</b>, name it <b>S15 Sandbox</b>, switch to it with the <b>Tenant</b> switcher. A copy has no records, so record tests (9–13, 21–23) use My Company.</li></ul></div>
+<div class="callout warn"><h3>Safe-testing rules</h3><ul>
+<li>The security tests use probes that only <i>report</i> whether something is reachable. Do not paste code from other sources into a snippet, and never put real credentials into one.</li>
+<li>Leave <b>Test mode</b> ticked unless a test says otherwise. A run that is not in test mode writes real records.</li></ul></div>
+<div class="callout warn"><h3>Cleaning up</h3><ul>
+<li>Delete your snippets (<b>Setup → Custom Code</b>, trash icon) and the S15 claims (Recycle Bin). Switch back to your home tenant, then remove the copy with <b>Setup → Deployments → Delete sandbox…</b> (type its name).</li></ul></div>
+<h2>Code components, statuses and test runs</h2><p class="sec-note">BRD §15.4.2–§15.4.18, §15.5 — create, version, test, activate, log.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. A new piece of tenant code can be created, starts as a Draft, and is listed with its description</span>
+        <span class="refs"><span class="ref">§15.4.2–§15.4.4, §15.4.6–§15.4.7, §15.4.12</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Custom Code</b> (address <code>/admin/custom-code</code>).</li><li>Under <b>New Snippet</b> type the name <b>s15_demo</b>, the description <b>S15 adds two inputs</b>, the code <code>result = { total: (inputs.a || 0) + (inputs.b || 0) };</code> and the test inputs <code>{"a":2,"b":3}</code>. Click <b>Create snippet (v1 draft)</b>.</li><li>Find <b>s15_demo</b> in the <b>Snippets</b> list on the right.</li></ol>
+      <div class="expect"><b>Expected</b>The card shows the name, the description, <b>No active version · 1 version</b> and a tag <b>v1 · draft</b>. The tenant, created-by, created date, last-modified-by and date are stored on the record and returned by <code>GET /api/v1/custom-code/s15_demo</code>; the card itself does not display them (see <b>Known limits</b>). The snippet name is the identifier a Flow uses.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. A Draft can be moved to Test and test-run before anyone activates it</span>
+        <span class="refs"><span class="ref">§15.4.12, §15.5.1–§15.5.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the <b>s15_demo</b> card click <b>Actions</b>, then <b>Mark v1 Test</b>. The tag becomes <b>v1 · test</b>.</li><li>Click <b>Edit</b> on the card. Leave <b>Test mode — disable writes when executing</b> ticked and click <b>Execute</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The <b>Execution result</b> panel shows <b>success</b> and the time in milliseconds, then the <b>inputs</b> you supplied (<code>a: 2, b: 3</code>), the <b>output</b> (<code>total: 5</code>), <b>durationMs</b>, <b>version: 1</b> and <b>testMode: true</b>. A failing script shows the error text in the same panel instead of an output. Nothing was activated: the card still says <b>No active version</b>.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. Only an Active version can run in production</span>
+        <span class="refs"><span class="ref">§15.4.13</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the <b>s15_demo</b> card (still Test, not Active) click <b>Run</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The panel shows <b>failed</b> with the message <b>Custom code "s15_demo" has no active version</b>. A Flow that names this snippet would log the same failure (Test 11) and carry on.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. Activating a version makes it the one that runs; making it Inactive stops it</span>
+        <span class="refs"><span class="ref">§15.4.12, §15.4.13</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the card click <b>Actions</b>, then <b>Activate v1</b>. The tag shows <b>v1 · active</b> and the header reads <b>Active: v1</b>.</li><li>Click <b>Run</b> on the card, then <b>Actions → Make v1 Inactive</b>. The tag becomes <b>v1 · inactive</b> and the header returns to <b>No active version</b>.</li></ol>
+      <div class="expect"><b>Expected</b>While active the snippet returns <code>total: 5</code>; once inactive it is refused again as in Test 3. Activation and status changes are audited (<b>Audit Logs</b>: <code>custom_code_activate</code>, <code>custom_code_status</code>).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. Earlier versions are kept, and an earlier version can be restored</span>
+        <span class="refs"><span class="ref">§15.4.14, §15.4.15</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open the card's editor (<b>Edit</b>), change the change note and click <b>Add version</b>. Activate v2, then click <b>Actions → Restore v1</b>.</li><li>Read the version tags.</li></ol>
+      <div class="expect"><b>Expected</b>v1 and v2 both stay in the list; after Restore the tags read <b>v1 · active</b> and <b>v2 · archived</b>. <i>Not repeated in this run:</i> the same Restore v1 button was clicked in Section 13 (rollback of a code update), and the suite <code>section15-custom-code</code> proves a two-version history (22/22).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. Every run is logged, including failures</span>
+        <span class="refs"><span class="ref">§15.4.16, §15.4.17</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>After running a snippet (Tests 2–4), look at its card footer, then open it with <b>GET /api/v1/custom-code/s15_demo</b> (<b>Needs an API client</b>) and read <b>executions</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The card shows <b>1 run</b> and <b>Last run just now</b>. The API lists the last 50 runs, each with version, start and finish, duration, success, error, inputs, output and whether it was a test run. A failed run is recorded with its error text.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. Only people allowed to manage or deploy code can change or run it</span>
+        <span class="refs"><span class="ref">§15.4.24, §15.1.12</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs a person:</b> sign in as a user whose role does not have <b>Manage Custom Code</b> or <b>Deploy Custom Code</b> and open <code>/admin/custom-code</code>; then try <code>POST /api/v1/custom-code/s15_demo/execute</code>.</li></ol>
+      <div class="expect"><b>Expected</b>The page and the call are refused (<b>403</b>). Proved by the suite <code>section15-custom-code</code> (limited user: create 403, execute 403) and by the other tenant getting <b>404</b> on the snippet; not clicked as a second person.</div>
+    </div>
+  </div>
+<h2>Custom code in Flows</h2><p class="sec-note">BRD §15.1 — the Custom Code step, data in and out, branches and errors.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. A Flow has a Custom Code step that names a tenant's own active snippet</span>
+        <span class="refs"><span class="ref">§15.1.1, §15.1.2, §15.1.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Automation</b> and the flow <b>S15 Code Flow</b> (prepared for you on <b>My Company</b>; see <b>Before you start</b>). Open the <b>Steps</b> tab and click <b>Add Step</b>.</li><li>Read the <b>ACTIONS</b> group, then close the picker and click the step <b>Review</b>.</li></ol>
+      <div class="expect"><b>Expected</b><b>Custom Code</b> sits under <b>ACTIONS</b> beside Send Email, HTTP Request and Generate PDF. The Review step shows <b>Snippet</b> (only active snippets are offered, here <code>s15_always_fails</code> and <code>s15_claim_review</code>), <b>Inputs (JSON)</b> and <b>Output variable</b> (<code>rv</code>). <b>Needs a person:</b> dragging the action onto the canvas; the pane cannot start a drag, so the step was opened from the saved flow.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. The code receives the triggering record and the Flow's inputs, can read, query, create and update records, and hands values back</span>
+        <span class="refs"><span class="ref">§15.1.3–§15.1.7, §15.1.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Claims</b> and click <b>New</b>. Enter Claim Number <b>S15-CODE</b>, Claim Amount <b>15000</b>, Claim Status <b>Draft</b> and save (the prepared flow only runs for this claim number).</li><li>Wait about ten seconds and reopen the claim. Then open the <b>Claims</b> list.</li></ol>
+      <div class="expect"><b>Expected</b>The claim's <b>Description</b> reads <b>risk=high doubled=30000</b> (the code received <b>15000</b> from the record and returned two values the next step used) and <b>Approval Note</b> reads <b>code saw 15000</b> (the code re-read the record and updated it). The list holds one extra claim, <b>S15 created by code</b>, with a normal auto-number (the code created it). The code's input from the Flow (<code>label: from-flow</code>) is echoed in its output.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. A Flow decision can branch on what the code returned</span>
+        <span class="refs"><span class="ref">§15.1.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the claim from Test 9 read <b>Claim Status</b>.</li><li>Create a second claim with number <b>S15-CODE</b> and amount <b>500</b>, wait, and read its status.</li></ol>
+      <div class="expect"><b>Expected</b>The 15000 claim moved to <b>Pending Approval</b> (the decision outcome <b>High risk</b> matched the code's <code>risk</code> value); the 500 claim stays <b>Draft</b> and its description reads <b>risk=low doubled=1000</b>. <i>Limit:</i> the branch on the returned value was configured through the API (<code>$rv.risk</code>); the builder's own condition picker lists record fields, so from the screen a returned value is branched on after an <b>Update Record</b> step writes it to a field. Not clicked.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. An error raised by the code does not break the Flow, and a later step can handle it</span>
+        <span class="refs"><span class="ref">§15.1.10</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Re-read the 15000 claim from Test 9: its <b>Rejection Reason</b>.</li><li>Look at the flow's <b>High risk</b> outcome: it runs the snippet <b>s15_always_fails</b> (which always throws) and then a decision on the step's <code>__ok</code> value.</li></ol>
+      <div class="expect"><b>Expected</b><b>Rejection Reason</b> reads <b>handled: Custom code "s15_always_fails" failed: deliberate failure</b>. The Flow carried on, the failure was written to the flow trace, and the step's result variables <code>{$bad__ok}</code> and <code>{$bad__error}</code> were available to later steps. Cleanup: delete the S15 claims you made (Recycle Bin).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. Code cannot see or change another tenant's records</span>
+        <span class="refs"><span class="ref">§15.1.11, §15.4.25, §15.4.26</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create a snippet <code>result = readRecord('insured_life', '&lt;id of a record that belongs to another tenant&gt;').then(function (r) { result = { visible: r !== null }; });</code>, mark it Test and <b>Execute</b> it (Test mode on). <b>Needs a person with database access</b> to obtain a foreign record id.</li><li>Repeat with an id that does not exist.</li></ol>
+      <div class="expect"><b>Expected</b>Both runs return <code>visible: false</code>. The server adds the caller's tenant to every read, query, create and update; the code cannot name another tenant. Run in this acceptance with a real record id from a different tenant: <b>false</b>. A snippet also cannot be read, changed or run by another tenant (suite: 404).</div>
+    </div>
+  </div>
+<h2>The runtime: limits and isolation</h2><p class="sec-note">BRD §15.4.1, §15.4.19–§15.4.30 — what the code cannot do, and what it cannot take down.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. A runaway loop is stopped after five seconds</span>
+        <span class="refs"><span class="ref">§15.4.19, §15.4.30</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open the card for <b>s15_demo</b> (<b>Edit</b>), replace the code with <code>while (true) {}</code> in the draft, click <b>Save changes</b>, then <b>Execute</b>.</li><li>Open any other page (for example <b>Home</b>).</li></ol>
+      <div class="expect"><b>Expected</b>After about five seconds the panel reads <b>Script execution timed out after 5000ms</b> and the rest of the application keeps answering. (The same loop in a Flow fails only that step.)</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. Code that eats memory or recurses without end is stopped, and the platform stays up</span>
+        <span class="refs"><span class="ref">§15.4.20, §15.4.21, §15.4.30</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Replace the draft's code with <code>function f(n) { return f(n + 1) + 1 } result = f(0);</code> and <b>Execute</b>.</li><li>Replace it with a script that keeps adding large arrays to a list and <b>Execute</b> (<b>Needs a person:</b> write the loop yourself; it is stopped within a second or two by a 64 MB cap).</li></ol>
+      <div class="expect"><b>Expected</b>The first run reports <b>Maximum call stack size exceeded</b>. The second reports <b>Execution stopped (resource limit or crash)</b>. Each run is a separate short-lived process, so neither can take the server down; after both, other pages load normally. A snippet cannot be started again while it is already running (<b>429 recursion blocked</b>) and a tenant may run at most five at once (both by code and suite design, not exercised here); code has no way to call another snippet or start a Flow, so Flow → code → Flow loops cannot form.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. A throw or a rejected promise inside the code is contained</span>
+        <span class="refs"><span class="ref">§15.4.30</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Execute a snippet containing <code>throw new Error("boom")</code>.</li><li>Execute one containing <code>Promise.reject(new Error("rej")); result = "after";</code>.</li></ol>
+      <div class="expect"><b>Expected</b>The first shows <b>failed: boom</b>. The second succeeds with output <b>after</b>: an unhandled rejection in tenant code cannot crash the server. The list and every other page still work.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. The code cannot reach the server's internals, secrets or other processes</span>
+        <span class="refs"><span class="ref">§15.4.1, §15.4.22, §15.4.27–§15.4.29</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create a snippet with the code <code>result = (function () { var o = {}; try { o.escape = typeof inputs.constructor.constructor('return 1')(); } catch (e) { o.escape = 'refused'; } o.process = typeof process; o.require = typeof require; return o; })();</code>, mark it Test and <b>Execute</b> it.</li></ol>
+      <div class="expect"><b>Expected</b>The output is <b>escape: refused</b>, <b>process: undefined</b>, <b>require: undefined</b>. Running code from a string is switched off, there is no <code>process</code>, <code>require</code> or file access, and the script runs in its own operating-system process that has no file-system, child-process or worker permission and an empty environment. <i>Residual limit:</i> see <b>Known limits</b> (the run still has a network).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. Code can only call external systems the company has approved, and never sees their credentials</span>
+        <span class="refs"><span class="ref">§15.1.8, §15.4.23</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Execute <code>callApi("Not Approved", "/x").then(function () { result = "called"; }, function (e) { result = "refused: " + e.message; });</code> in Test mode.</li><li><b>Needs a person:</b> add the system under <b>External Objects</b> (base address and credential), then call <code>callApi("&lt;its name&gt;", "/path")</code>.</li></ol>
+      <div class="expect"><b>Expected</b>The unapproved name is refused with <b>is not an approved external system for this tenant</b>. For an approved system the call goes only to its host (a full URL or a different host is refused), the credential is attached by the server and is never visible to the code, test runs are limited to <b>GET</b>, and the reply is capped at 1 MB. The approved path was proved by code and suite, not clicked.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. A test run cannot change production records</span>
+        <span class="refs"><span class="ref">§15.5.6</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Execute <code>createRecord("claim", { description: "x" }).then(function () { result = "wrote"; }, function (e) { result = e.message; });</code> with <b>Test mode</b> ticked.</li></ol>
+      <div class="expect"><b>Expected</b>The result is <b>Test mode: createRecord is disabled to prevent production changes.</b> and no claim appears. <b>Test mode is on by default</b> in the editor and in the API (a production write needs <code>"testMode": false</code> sent on purpose, and only people holding Deploy Custom Code can run snippets at all). Updates are blocked the same way. Proved by the suite; the message shown here was clicked.</div>
+    </div>
+  </div>
+<h2>Custom documents</h2><p class="sec-note">BRD §15.3 — templates, generation by hand and from a Flow.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t19">
+      <span class="test-title"><span class="t">19. A document template is built from text, merge fields, a calculated value, a conditional section, a signature line, header and footer</span>
+        <span class="refs"><span class="ref">§15.3.1, §15.3.3, §15.3.4, §15.3.8, §15.3.9, §15.3.10, §15.3.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → PDF Templates</b> and the prepared <b>S15 Claim Letter</b> (see <b>Before you start</b>).</li><li>Read the blocks, then click the block <b>REFER-TO-MANAGER paragraph…</b> and read the <b>Show only if</b> box. Open the page settings and read <b>Header HTML</b> and <b>Footer HTML</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The blocks are: a heading <code>{record.name}</code>, a line with <code>{record.claim_amount}</code> and the calculated value <code>{= claim_amount * 1.15 }</code>, two paragraphs with <b>Show only if</b> <code>claim_amount &gt; 10000</code> and <code>claim_amount &lt;= 10000</code>, and a signature line. The header reads <b>X Spark - Claim {record.name}</b> and the footer <b>Confidential</b> (<code>{pageNumber}</code> and <code>{totalPages}</code> work in either). <b>Signatures:</b> a signature <i>line</i> is a text block; there is no electronic signature capture.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t20">
+      <span class="test-title"><span class="t">20. A document can be generated by hand from a record</span>
+        <span class="refs"><span class="ref">§15.3.13, §15.3.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In the template, click <b>Generate PDF</b> (top of the editor), paste the id of a claim record (for example the one from Test 9; its id is in its address) and click <b>Generate PDF</b> in the box.</li></ol>
+      <div class="expect"><b>Expected</b>The pane confirms <b>PDF generated and downloaded</b> and a PDF of about 1.6 KB downloads. <b>Needs a person:</b> open the file. Read from the file in this run: heading <b>Claim letter CLM-…</b>, <b>Amount claimed: 20000; with 15% VAT: 23000</b>, only the <b>REFER-TO-MANAGER</b> paragraph, the signature line, the header and <b>Confidential | Page 1 of 1</b> in the footer. A record you may not see answers <b>Record not found</b> (code, not clicked).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t21">
+      <span class="test-title"><span class="t">21. A Flow generates the document automatically and files it on the record</span>
+        <span class="refs"><span class="ref">§15.3.13</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Automation → S15 PDF Flow</b>: a record-created flow on Claim with one <b>Generate PDF</b> step naming <b>S15 Claim Letter</b> and the file name <code>Letter-{record.claim_number}</code>.</li><li>Create a claim with number <b>S15-PDF</b> and amount <b>20000</b>, wait, and look at the claim's Files.</li></ol>
+      <div class="expect"><b>Expected</b>A file <b>Letter-S15-PDF.pdf</b> is attached to the claim and contains that claim's own values (the claim's name, amount and the VAT calculation) — the step used to render with no record at all. Seen in this run by reading the stored file; the Files screen was not clicked.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t22">
+      <span class="test-title"><span class="t">22. A document can include a repeating table of related records with a total, tenant branding and fields of a related object</span>
+        <span class="refs"><span class="ref">§15.3.2, §15.3.5–§15.3.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API call to prepare</b> (the editor's Data Table block takes a list passed in by a Flow; a table of a record's children is set in the template data): create a template whose Data Table block has <code>relatedObject: insured_life</code>, <code>lookupField: policy</code> and the columns Name, Relationship and Sum assured with <code>total: "sum"</code>; add an Image block with an embedded picture (or <code>useBranding: true</code> for the company logo).</li><li>Use <b>Generate PDF</b> with the id of policy <b>POL-00001</b>.</li></ol>
+      <div class="expect"><b>Expected</b>The PDF lists the three insured lives (Thabo, Naledi and Lesedi Mokoena, with their relationship and cover) and a <b>Total 450000</b> row, with the picture at the top. Merge fields also read one level through a lookup (<code>{record.policy.policy_number}</code>). Proved by rendering the template to a PDF and reading the text (not clicked); a custom object's fields work the same way because nothing is object-specific. Remote picture addresses are deliberately never fetched.</div>
+    </div>
+  </div>
+<h2>Beyond Flows</h2><p class="sec-note">BRD §15.2 — what exists, and what does not.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t23">
+      <span class="test-title"><span class="t">23. Where tenant-specific extensions beyond a Flow already live</span>
+        <span class="refs"><span class="ref">§15.2.1–§15.2.13</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Read the table in <b>Known limits</b>. For each row open the screen named (action buttons: Section 4; automation, screens and approvals: Sections 7–8; webhooks and integrations: Setup menu).</li></ol>
+      <div class="expect"><b>Expected</b>Every §15.2 item is covered by an existing mechanism except custom screens written in code (the platform has configured <b>Screen Flows</b>, not tenant-authored UI) and code attached directly to an object event outside a Flow. Both are listed as not built. This test is a walk-through, not a new check.</div>
+    </div>
+  </div>
+<h2>Known limits</h2><div class="callout warn"><h3>Worth knowing</h3><ul>
+<li><b>How the code is isolated.</b> Each run starts its own operating-system process (Node permission model: no files, no child processes, no workers, no add-ons; empty environment; 64 MB heap; text-to-code switched off) and every data call goes back to the server, which fixes the tenant. This is much stronger than a plain Node <code>vm</code> context, which is <i>not</i> a security boundary and was what the platform used before this section; it is still not a hardware-isolated sandbox. <b>Residual risks:</b> the run process can still open network connections (including to internal addresses) because the Node permission model does not restrict the network, and a flaw in Node itself would be an escape; a container or separate host for the runner would close both and is the recommended next step before untrusted developers are allowed to write code.</li>
+<li><b>Code runs with the platform's authority, not the triggering user's.</b> It is limited to the tenant, but it does not apply the user's role, sharing or field security, so only people trusted with Deploy Custom Code should activate code.</li>
+<li><b>Display gaps.</b> The code card does not show tenant, created by/date, last modified by/date or an API name (the data is stored); the version tags show Draft, Test, Active, Inactive and Archived.</li>
+<li><b>Not built:</b> custom screens written in code, code attached directly to an object event or button without a Flow, tenant-defined REST endpoints (an inbound webhook can name a snippet to run), electronic signature capture, per-user permission checks inside documents, document-template UI for related-record tables and the logo block (set in the template data).</li>
+<li><b>Existing mechanisms for §15.2:</b> custom actions and buttons — action buttons that start a Flow or Screen Flow; custom screens — Screen Flows; custom integrations — Webhooks, Integrations and External Objects, the HTTP Request step and <code>callApi</code>; custom calculations — formula and roll-up fields and code; custom processes — Flows and Approvals; custom APIs — inbound webhooks; custom documents — PDF templates; functionality on any object — Flows with a Custom Code step.</li></ul></div>
+</div>
+<script>
+  (function () {
+    var KEY = 'salesdam-s15-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>
