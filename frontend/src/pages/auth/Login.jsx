@@ -6,17 +6,27 @@ import Button from '../../components/common/Button/Button';
 import FormInput from '../../components/common/FormInput/FormInput';
 import styles from './Login.module.css';
 import { useAuth } from '../../hooks/useAuth';
-import { useBranding } from '../../hooks/useBranding';
+import { useQuery } from '@tanstack/react-query';
+import api from '../../services/api';
 import { version } from '../../../package.json';
+import { applyBrandColor } from '../../utils/brandColor';
 
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, mfaVerify } = useAuth();
-  const branding = useBranding();
+  // Pre-login branding: public endpoint, tenant from ?tenant=<slug> or the last tenant used on this device.
+  const tenantRef = new URLSearchParams(location.search).get('tenant') || (() => { try { return localStorage.getItem('tenantId') || ''; } catch { return ''; } })();
+  const { data: branding = {} } = useQuery({
+    queryKey: ['public-branding', tenantRef],
+    queryFn: () => fetch(`${api.defaults.baseURL}/configuration/public-branding${tenantRef ? `?tenant=${encodeURIComponent(tenantRef)}` : ''}`, { credentials: 'omit' })
+      .then((r) => r.json()).then((j) => j?.data || {}),
+    staleTime: 60_000,
+    retry: false,
+  });
   useEffect(() => {
     if (branding?.primaryColor) {
-      document.documentElement.style.setProperty('--color-primary', branding.primaryColor);
+      return applyBrandColor(branding.primaryColor);
     }
   }, [branding?.primaryColor]);
 

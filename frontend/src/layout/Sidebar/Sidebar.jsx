@@ -9,6 +9,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useBranding } from '../../hooks/useBranding';
 import { useAppContext } from '../../context/AppContext';
 import { useTenantContext } from '../../context/TenantContext';
+import { safePrimaryColor } from '../../utils/brandColor';
 import SidebarHeader from './SidebarHeader';
 import SidebarNavItem from './SidebarNavItem';
 import SidebarObjects from './SidebarObjects';
@@ -146,7 +147,7 @@ const Sidebar = () => {
   const displaySlug = activeWorkspace?.slug || tenant?.slug || '';
   const displayColor =
     activeWorkspace?.color ||
-    branding.primaryColor ||
+    (branding.primaryColor && safePrimaryColor(branding.primaryColor)) ||
     tenant?.settings?.primaryColor ||
     'var(--color-primary)';
   const DisplayIcon = LucideIcons[activeWorkspace?.icon] || null;

@@ -20,7 +20,7 @@ export const useBranding = () => {
 
   return {
     companyName: get('branding.company_name', 'Salesdam'),
-    primaryColor: get('branding.primary_color', '#0066FF'),
+    primaryColor: get('branding.primary_color', '#244c64'),
     logoUrl: get('branding.logo_url', ''),
     loginLogoUrl: get('branding.login_logo_url', ''),
   };

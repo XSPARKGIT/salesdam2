@@ -21,6 +21,7 @@ import { useBranding } from '../../hooks/useBranding';
 import { useAppContext } from '../../context/AppContext';
 import { useOnboarding } from '../../components/onboarding/OnboardingProvider';
 import { globalSearch } from '../../services/api/search';
+import { applyBrandColor } from '../../utils/brandColor';
 
 const Topbar = () => {
   const { user, logout } = useAuth();
@@ -50,7 +51,7 @@ const Topbar = () => {
   const notifRef = useRef(null);
   useEffect(() => {
     if (branding?.primaryColor) {
-      document.documentElement.style.setProperty('--color-primary', branding.primaryColor);
+      return applyBrandColor(branding.primaryColor);
     }
   }, [branding?.primaryColor]);
   const profileRef = useRef(null);

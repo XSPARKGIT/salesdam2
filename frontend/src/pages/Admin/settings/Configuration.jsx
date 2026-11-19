@@ -64,7 +64,7 @@ export default function Configuration() {
       setDrafts((d) => withoutKey(d, entry.key));
       reload();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Save failed.');
+      toast.error(err.message || err.response?.data?.message || 'Save failed.');
     } finally {
       setBusyKey(null);
     }
@@ -78,7 +78,7 @@ export default function Configuration() {
       setDrafts((d) => withoutKey(d, entry.key));
       reload();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Reset failed.');
+      toast.error(err.message || err.response?.data?.message || 'Reset failed.');
     } finally {
       setBusyKey(null);
     }
@@ -114,7 +114,7 @@ export default function Configuration() {
       setAdding(null);
       reload();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not add the setting.');
+      toast.error(err.message || err.response?.data?.message || 'Could not add the setting.');
     }
   };
 
@@ -133,15 +133,33 @@ export default function Configuration() {
     if (entry.dataType === 'json') {
       return <textarea className={s.input} rows={3} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={entry.label || entry.key} />;
     }
+    const isLogo = entry.key === 'branding.logo_url' || entry.key === 'branding.login_logo_url';
+    const isColor = entry.key === 'branding.primary_color';
+    const pickImage = (file) => {
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = () => onChange(String(r.result));
+      r.readAsDataURL(file);
+    };
     return (
+      <>
+      {isColor && /^#[0-9a-fA-F]{6}$/.test(value) && (
+        <input type="color" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value.toUpperCase())} aria-label={`${entry.label} picker`} />
+      )}
+      {isLogo && value && <img src={value} alt="Logo preview" style={{ height: 28, maxWidth: 80, objectFit: 'contain' }} />}
+      {isLogo && (
+        <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={disabled} onChange={(e) => pickImage(e.target.files?.[0])} aria-label={`${entry.label} upload`} />
+      )}
       <input
         className={s.input}
-        type={entry.dataType === 'number' ? 'number' : 'text'}
+        type={entry.isSecret ? 'password' : entry.dataType === 'number' ? 'number' : 'text'}
+        autoComplete={entry.isSecret ? 'new-password' : undefined}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         aria-label={entry.label || entry.key}
       />
+      </>
     );
   };
 
