@@ -1,0 +1,754 @@
+<title>Salesdam — Permissions and Sharing test manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Permissions and Sharing</h1>
+    <p class="standfirst">
+      A step-by-step script for testing BRD Section&nbsp;9. You are checking that Profiles control which objects and fields a person can use, that records are shared only as the organisation-wide default, the manager chain and sharing rules allow, that each administrative capability is a separate permission enforced on the server, and that the Apps a person sees follow their Profile.
+    </p>
+    <div class="mast-meta">
+      <span><b>Scope</b> BRD §9.1 – §9.4</span>
+      <span><b>Tests</b> 38</span>
+      <span><b>Time</b> ~2 hours</span>
+      <span><b>Issued</b> 19 Nov 2026</span>
+    </div>
+  </header>
+
+  <div class="progress-bar">
+    <span class="count" id="count">0 of 38 complete</span>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <button class="btn-reset" id="reset" type="button">Reset</button>
+  </div>
+
+  <h2>Before you start</h2>
+  <p class="sec-note">Sign in as the administrator, then confirm the test profiles and people below are in place. Most tests need a <b>second person signed in at the same time</b> as a test user — use a private (incognito) browser window for each, so you stay signed in as the administrator in the main window.</p>
+
+  <div class="callout">
+    <h3>Signing in</h3>
+    <dl class="creds">
+      <dt>Address</dt><dd>http://localhost:5173</dd>
+      <dt>Administrator</dt><dd>admin@example.com (System Admin, Super User)</dd>
+      <dt>Workspace</dt><dd>My Company → Insurance</dd>
+    </dl>
+    <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">
+      Ask your Salesdam contact for the administrator password and for the test users' password. Roles are under <b>Setup → Roles</b>, Permission Sets under <b>Setup → Permission Sets</b>, and sharing under <b>Setup → Admin Settings → Sharing Settings</b>.
+    </p>
+  </div>
+
+  <div class="callout">
+    <h3>What is already in place</h3>
+    <ul>
+      <li><b>Test people</b> (provisioned for this test, then switched off; ask your contact to switch them on and give you the password): <b>Amahle AgentOne</b> (s9.agent1@example.com, profile S9 Agent, manager Sandile), <b>Bongani AgentTwo</b> (s9.agent2@example.com, S9 Agent, no manager, member of the S9 Funeral Team group), <b>Sandile Manager</b> (s9.manager@example.com, S9 Agent), <b>Refilwe Reader</b> (s9.reader@example.com, S9 Reader), <b>Carol Customizer</b> (s9.custom@example.com, S9 Customizer), <b>Eddie Exporter</b> (s9.exporter@example.com, S9 Exporter) and <b>Adele Admin</b> (s9.admin@example.com, Administrator).</li>
+      <li><b>Test profiles</b> (Setup → Roles): <b>S9 Agent</b> — Create, Read, Update and Export on S9 Case; Case Type editable, Reference read-only, Internal Note hidden. <b>S9 Reader</b> — Read only. <b>S9 Exporter</b> — same as S9 Agent, plus the Export Data system permission. <b>S9 Customizer</b> — no object access and no system permission (the tests switch permissions on and off one at a time).</li>
+      <li><b>S9 Case</b> object: Case Number (automatic), Case Type (Funeral Plan, Credit Life, Other), Reference, Internal Note. Its organisation-wide default starts at <b>Private</b>. It is not yet in the Insurance App; Test 3 adds it and Test 38 takes it out again.</li>
+      <li><b>The company's BRD names three example profiles — Admin, Agent and Superuser.</b> In this product they are <b>Administrator</b>, <b>Standard User</b> (the Agent-style profile) and <b>Super User</b>, alongside <b>Read Only</b>.</li>
+    </ul>
+  </div>
+
+  <div class="callout warn">
+    <h3>Things worth knowing before you begin</h3>
+    <ul>
+      <li><b>Pages take a while to open.</b> The application runs on your machine but its database is in the cloud, so a screen can take ten to thirty seconds to fill in.</li>
+      <li><b>Tests that change a setting put it back:</b> the organisation-wide default is returned to Private, the sharing rule is deleted, and Carol's profile is cleared (Test 38).</li>
+      <li><b>Administrators see everything.</b> Administrator and Super User bypass the record, field and system-permission checks by design, so a person holding one of those profiles will always see the full result. Use the test people for the "refused" results.</li>
+      <li><b>A record you may not see looks like it does not exist.</b> Opening a colleague's private case by its address shows "not found" rather than "forbidden" — that is deliberate.</li>
+      <li><b>Earlier fixtures</b> (POL-00001, POL-00003, POL-00004, the Claim records) are not touched by this script.</li>
+    </ul>
+  </div>
+  <h2>Part 1 — Profiles</h2>
+  <p class="sec-note">BRD §9.1. A Profile (a Role in the menus) decides which objects a person can create, read, edit and delete, and which fields they can see or change.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. A Profile is a named set of object and field permissions, and the old roles are example Profiles</span>
+        <span class="refs"><span class="ref">§9.1.1</span><span class="ref">§9.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Go to <b>Setup → Roles</b> and read the list.</li><li>Click <b>S9 Agent</b> to open it. Open the <b>Object Permissions</b> tab and find the <b>S9 Case</b> row: Create, Read, Update, Delete, Export and Import ticks.</li><li>Click <b>Fields</b> on that row. Each field has a <b>View</b> (eye) and an <b>Edit</b> (pencil) switch.</li><li>Open the <b>App Permissions</b> tab. Click <b>Cancel</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The list shows <b>Administrator</b>, <b>Read Only</b>, <b>Standard User</b>, <b>Super User</b> (marked System) beside Claims Handler, Claims Manager and the four S9 profiles. S9 Agent has Create, Read, Update and Export ticked on S9 Case. In the field list Case Type has View and Edit on, Reference has View on and Edit off, Internal Note has both off — <b>Visible</b>, <b>Read-only</b> and <b>Hidden</b>. The App Permissions tab lists every system permission (Customize Application through Manage Document Templates).</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. An administrator can create a further Profile</span>
+        <span class="refs"><span class="ref">§9.1.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On <b>Setup → Roles</b> click <b>New Role</b>.</li><li>Enter Label <code>S9 UI Trial</code>; the API name fills in as <code>s9_ui_trial</code>. Click <b>Create Role</b>.</li><li>Open the new role and look at <b>Object Permissions</b>.</li><li>Delete the role again (trash icon on the list).</li></ol>
+      <div class="expect"><b>Expected</b>
+        The role is created and appears in the list. It has <b>no access to any object</b> and no system permission until you grant some. Deleting it removes it from the list.</div>
+      <div class="aside"><b>Needs a person.</b> Creating the role was clicked through. The delete asks for a browser confirmation that an automated run cannot accept, so deletion was done through the application's interface calls.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. Create, Read, Update and Delete are enforced for each Profile</span>
+        <span class="refs"><span class="ref">§9.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b>, add S9 Case to the Insurance App: <b>Setup → Workspaces → Insurance → Objects</b>, add <b>S9 Case</b>, save.</li><li>In a private window sign in as <b>Amahle AgentOne</b> (S9 Agent). Open <b>S9 Cases</b> and click <b>New</b>; choose Case Type <code>Funeral Plan</code> and save.</li><li>Try to delete that case (open it, or tick it in the list).</li><li>In a second private window sign in as <b>Refilwe Reader</b> (S9 Reader) and open <b>S9 Cases</b>.</li><li>In a third window sign in as <b>Carol Customizer</b>; look for S9 Cases.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Amahle creates the case. Deleting is refused (no Delete button, or "You do not have permission to delete"). Refilwe has no <b>New</b> button and cannot create. Carol cannot open S9 Cases at all: refused (403), because her profile has no entry for the object.</div>
+      <div class="aside"><b>Proven by script.</b> Signed in as these users through the application's interface calls: Amahle creates (201) and edits her own case (200), delete refused (403); Refilwe's create refused (403); Carol's read refused (403). The on-screen buttons were not clicked as these users.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. A Hidden field is not on the form, the detail page or the list; a Read-only field cannot be changed</span>
+        <span class="refs"><span class="ref">§9.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b>, create an S9 Case with Case Type <code>Funeral Plan</code>, Reference <code>S9-A1</code> and Internal Note <code>NOTE-SECRET</code>. (Admin sees all three fields.)</li><li>As <b>Amahle</b>, open <b>S9 Cases</b>: look at the list columns, then then open her own case and its <b>Edit</b> form.</li><li>On Amahle's own case: change Case Type to <code>Credit Life</code> and save. Try to change Reference.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Amahle's list, detail page and edit form show <b>Case Number</b>, <b>Case Type</b> and <b>Reference</b>, but <b>never Internal Note</b>. Case Type changes and saves. Reference is greyed out (read-only), and a value forced in through the interface is ignored on save. As admin, Internal Note still holds <code>NOTE-SECRET</code>.</div>
+      <div class="aside"><b>Proven by script.</b> As Amahle, Internal Note is absent from record detail and list; a crafted update that sets Reference and Internal Note leaves both unchanged while Case Type updates. The form rendering as Amahle was not clicked.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. Export leaves out hidden fields, and needs the Export Data permission as well as object Export</span>
+        <span class="refs"><span class="ref">§9.1.1</span><span class="ref">§9.3.14</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>Amahle</b> (S9 Agent: object Export ticked, no Export Data permission) try to export S9 Cases.</li><li>As <b>Eddie Exporter</b> (object Export and the Export Data permission) export S9 Cases and open the file.</li><li>As <b>admin</b> export the same list and open the file.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Amahle is refused. Eddie's file has the columns Case Number, Record Owner, Description, Case Type, Reference — <b>no Internal Note column and no <code>NOTE-SECRET</code> value</b>. Admin's file includes Internal Note.</div>
+      <div class="aside"><b>Proven by script.</b> Amahle 403; Eddie 200 with no hidden column or value; admin file contains the hidden value. Downloading the file in the browser was not clicked.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. Search never matches or shows a field the person cannot see</span>
+        <span class="refs"><span class="ref">§9.1.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> type <code>NOTE-SECRET</code> in the global search (top bar).</li><li>As <b>Amahle</b>, search <code>NOTE-SECRET</code>, then search a Reference such as <code>S9-A1</code>.</li><li>Open a lookup that lists S9 Cases (if any) — suggestions use the name field only.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Admin finds the case. Amahle finds <b>nothing</b> for <code>NOTE-SECRET</code>. Searching the Reference finds the case and the result shows only the fields Amahle may see.</div>
+      <div class="aside"><b>Proven by script.</b> Before this section's fix, search returned every field of a matched record and matched on hidden fields; it now removes hidden fields from results and drops hits that matched only through one. The suggestion box also refuses to probe a hidden field. Not clicked as a second user.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. A new object starts with no access for every Profile</span>
+        <span class="refs"><span class="ref">§9.1.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> go to <b>Setup → Object Settings → New</b> and create an object <code>S9 Temp</code> (API name <code>s9_temp</code>).</li><li>Open <b>Setup → Roles</b> and, for <b>Read Only</b>, <b>Standard User</b>, <b>Administrator</b>, <b>S9 Agent</b> in turn, open <b>Object Permissions</b> and find <b>S9 Temp</b>.</li><li>Delete <b>S9 Temp</b> from Object Settings.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Every profile lists S9 Temp with <b>Create, Read, Update, Delete, Export and Import all off</b>. Nobody gets access until an administrator ticks it. After deleting the object it disappears from every profile.</div>
+      <div class="aside"><b>Verified.</b> Created through the application, then read from all ten profiles: every one had S9 Temp with all six permissions off; after delete none kept an entry. (Administrator and Super User show the ticks off but still bypass them, as they do for every object.)</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. A new field starts hidden for every Profile</span>
+        <span class="refs"><span class="ref">§9.1.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open S9 Case in Object Settings and add a text field <code>Temp Field</code>, saving with the default field security.</li><li>Open <b>Setup → Roles → S9 Agent → Object Permissions → S9 Case → Fields</b>.</li><li>Delete <b>Temp Field</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Temp Field is listed for S9 Agent with View and Edit both <b>off</b> (Hidden). The same holds for every profile that has an entry for S9 Case. If you choose Read-only or Visible on the field form, profiles start with that level instead.</div>
+      <div class="aside"><b>Verified.</b> A text field added through the interface calls appeared Hidden on all ten profiles.</div>
+    </div>
+  </div>
+  <h2>Part 2 — Sharing model</h2>
+  <p class="sec-note">BRD §9.2. Org-wide default sets the baseline; the manager chain and sharing rules add visibility. Set the default under <b>Setup → Admin Settings → Sharing Settings</b>.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. Org-wide default Private: each person sees only their own cases</span>
+        <span class="refs"><span class="ref">§9.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open Sharing Settings and confirm <b>S9 Case</b> is <b>Private</b>.</li><li>As <b>Amahle</b> create a case; as <b>Bongani</b> create another; as <b>admin</b> create a third.</li><li>Check what each of them sees under <b>S9 Cases</b>. As <b>Refilwe</b> (who owns none) open the list.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Amahle sees only hers, Bongani only his, Refilwe an empty list. Admin sees all three.</div>
+      <div class="aside"><b>Proven by script</b> for all four users (22 of 22 checks).</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. A private record cannot be opened by someone else even with its address</span>
+        <span class="refs"><span class="ref">§9.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Copy the address of Amahle's case. In Bongani's window paste it.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Bongani gets "not found" (404) — the record is not visible to him, and the page does not reveal that it exists.</div>
+      <div class="aside"><b>Proven by script</b> (404 on direct read).</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. Org-wide default Public Read-Only: everyone sees everything, nobody else can edit</span>
+        <span class="refs"><span class="ref">§9.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> in Sharing Settings set <b>S9 Case</b> to <b>Public Read-Only</b>.</li><li>As <b>Amahle</b> open <b>S9 Cases</b>; open Bongani's case and try to edit it.</li><li>As <b>Refilwe</b> open the list.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Amahle and Refilwe both see all three cases. Amahle's edit of Bongani's case is refused. Her own case still edits.</div>
+      <div class="aside"><b>Proven by script.</b> The refused edit answers "not found" (404) rather than "forbidden".</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. Org-wide default Public Read-Write: others can edit, but only if their Profile allows editing</span>
+        <span class="refs"><span class="ref">§9.2.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Set <b>S9 Case</b> to <b>Public Read-Write</b>.</li><li>As <b>Amahle</b> edit Bongani's case (change Case Type) and save.</li><li>As <b>Refilwe</b> try to edit any case.</li><li>Set <b>S9 Case</b> back to <b>Private</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Amahle's edit saves. Refilwe is refused: the sharing model widens <b>which records</b>, never which actions the profile allows.</div>
+      <div class="aside"><b>Proven by script</b> (edit 200; read-only profile 403).</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. A manager sees records owned by the people who report to them</span>
+        <span class="refs"><span class="ref">§9.2.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>Setup → Admin Settings → Users</b> (address <code>/admin/users</code>) and confirm Amahle's <b>Manager</b> is <b>Sandile Manager</b> and Bongani has none. Default is Private.</li><li>As <b>Sandile</b> open <b>S9 Cases</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Sandile sees <b>Amahle's case</b> but not Bongani's. (He also sees any case he owns.) This uses the same <b>User → Manager</b> field the approval routing uses.</div>
+      <div class="aside"><b>Proven by script.</b> Sandile can also edit his subordinate's case; the sharing model gives managers read and write on their reports' records.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. A sharing rule shares matching records with a public group</span>
+        <span class="refs"><span class="ref">§9.2.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open Sharing Settings → <b>Sharing Rules</b>. Object <b>S9 Case</b>; name <code>S9 Funeral cases to Funeral Team</code>; <b>Share with</b> <i>Group · S9 Funeral Team</i>; Access <b>Read-Only</b>; Match <b>Records matching criteria</b>: <code>case_type</code> <b>eq</b> <code>Funeral Plan</code>. Click <b>Create sharing rule</b>.</li><li>Make sure at least one Funeral Plan case and one Credit Life case exist (Amahle's and admin's).</li><li>As <b>Bongani</b> (a member of the group) open S9 Cases. As <b>Amahle</b> (not a member) open the list.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The rule appears in the table as <i>case_type eq Funeral Plan · Group · S9 Funeral Team · Read-Only · Active</i>. Bongani now sees every <b>Funeral Plan</b> case plus his own; Credit Life cases owned by others stay hidden. Amahle sees only her own.</div>
+      <div class="aside"><b>Verified by clicking</b> that the rule shows in the table; <b>proven by script</b> for who sees what.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. A read-only sharing rule does not allow edits, and switching it off removes the visibility</span>
+        <span class="refs"><span class="ref">§9.2.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>Bongani</b> open a shared Funeral Plan case (not his) and try to edit it.</li><li>As <b>admin</b> untick <b>Active</b> on the rule (edit it in the table) and save. As Bongani reload the list. Tick <b>Active</b> again.</li><li>Delete the rule when finished.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The edit is refused. With the rule inactive, Bongani sees only his own case again. Choose <b>Read-Write</b> on a rule to allow edits.</div>
+      <div class="aside"><b>Proven by script</b> (edit refused; inactive rule removes the extra cases). Rule deletion goes through a browser confirmation that an automated run cannot accept.</div>
+    </div>
+  </div>
+  <h2>Part 3 — System permissions</h2>
+  <p class="sec-note">BRD §9.3. Each system permission controls one administrative capability and is checked by the server on every request, whatever the screen shows. Method for Tests 16–32: sign in as <b>Carol Customizer</b>, whose profile has no permission; as admin tick exactly the permission under test on <b>S9 Customizer → App Permissions</b> and save; reload Carol's window.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. Customize Application: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Customize Application</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Workspaces (<code>/workspaces</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: Workspaces list, and Sharing Settings, open for Carol. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Customize Application: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. Manage Custom Objects and Fields: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Custom Objects and Fields</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Object Settings (<code>/setup/objects</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: Object Settings opens; Carol can add a field. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Custom Objects and Fields: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. Manage Page Layouts: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.4</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Page Layouts</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open the layout builder at <code>/setup/objects/s9_case/layout</code>.</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The layout builder for S9 Case opens. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Page Layouts: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t19">
+      <span class="test-title"><span class="t">19. Manage Flows: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.5</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Flows</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Automation (<code>/automation</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The flow list opens and Carol can create a flow. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Flows: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t20">
+      <span class="test-title"><span class="t">20. Manage Approval Processes: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.6</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Approval Processes</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Approval Processes (<code>/setup/approval-processes</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The process list opens. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Approval Processes: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t21">
+      <span class="test-title"><span class="t">21. Manage Custom Code: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.7</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Custom Code</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Custom Code (<code>/admin/custom-code</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: Scripts list opens; Carol can create a script but not deploy it. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Custom Code: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t22">
+      <span class="test-title"><span class="t">22. Deploy Custom Code: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.8</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Deploy Custom Code</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Deployments (<code>/admin/deployments</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: Carol can activate a script version; without it activation is refused. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Deploy Custom Code: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t23">
+      <span class="test-title"><span class="t">23. Manage Integrations: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Integrations</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Integrations (<code>/integrations</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The integrations page opens. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Integrations: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t24">
+      <span class="test-title"><span class="t">24. Manage API Credentials: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.10</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage API Credentials</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open the API Keys tab of Setup → Integrations.</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: API keys are listed and can be created; without it the keys list is refused. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage API Credentials: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t25">
+      <span class="test-title"><span class="t">25. Manage Users: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Users</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Admin Settings → Users (<code>/admin/users</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The user list opens. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Users: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t26">
+      <span class="test-title"><span class="t">26. Manage Profiles and Permissions: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.12</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Profiles and Permissions</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Roles and Setup → Permission Sets.</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: Roles and Permission Sets open; Carol still cannot give herself a permission she does not hold (Test 36). Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Profiles and Permissions: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t27">
+      <span class="test-title"><span class="t">27. Manage Tenant Configuration: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.13</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Tenant Configuration</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Admin Settings (<code>/admin/settings</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: Company settings, Configuration and billing open. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Tenant Configuration: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t28">
+      <span class="test-title"><span class="t">28. Export Data: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.14</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Export Data</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Admin Settings → Data Export (<code>/admin/settings/data-export</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The export page opens and a file can be produced. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Export Data: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t29">
+      <span class="test-title"><span class="t">29. Import Data: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.15</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Import Data</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Admin Settings → Data Import (<code>/admin/settings/data-import</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The import page opens. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Import Data: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t30">
+      <span class="test-title"><span class="t">30. View Audit Logs: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.16</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>View Audit Logs</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Audit Logs in the sidebar (<code>/admin/audit-logs</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The audit log lists entries. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (View Audit Logs: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t31">
+      <span class="test-title"><span class="t">31. Manage Communication Templates: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.18</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Communication Templates</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → Email Templates (<code>/email-templates</code>), Message Templates and Channel Accounts.</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: These pages open. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Communication Templates: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t32">
+      <span class="test-title"><span class="t">32. Manage Document Templates: refused without it, available with it</span>
+        <span class="refs"><span class="ref">§9.3.19</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>S9 Customizer → App Permissions</b>, tick <b>Manage Document Templates</b> only, <b>Save Changes</b>.</li><li>As <b>Carol</b> reload and open Setup → PDF Templates (<code>/setup/pdf-templates</code>).</li><li>As admin untick it, save, and reload Carol's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        With the permission: The templates list opens. Without it: the menu entry is gone, the address sends Carol back to Home, and anything she sends to the server is refused (403, "Permission denied").</div>
+      <div class="aside"><b>Server proven by script</b> (Manage Document Templates: 403 without it, allowed with it; no other permission opens the route). The page opening in Carol's own browser window was <b>not clicked</b> — the screen guard was changed in this section and checked as admin only.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t33">
+      <span class="test-title"><span class="t">33. View Call Recordings: the recording link is hidden from people without the permission</span>
+        <span class="refs"><span class="ref">§9.3.17</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>A call that has a recording is logged by the telephony connection (the link cannot be typed in on screen).</li><li>As <b>admin</b> open the record's activity timeline: the call shows its recording link.</li><li>As <b>Amahle</b> open the same timeline.</li><li>Grant <b>View Call Recordings</b> through a Permission Set (Test 34) and reload Amahle's window.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Admin sees the recording link. Amahle sees the call itself but <b>no recording link</b>; after the Permission Set is assigned she sees it.</div>
+      <div class="aside"><b>Proven by script.</b> Before this section recordings were not protected: the permission existed but no screen or interface checked it. Now the link is removed from the activity list, single-activity and call-history responses for anyone without it. The link cannot be typed in on screen, so it was not clicked through.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t34">
+      <span class="test-title"><span class="t">34. A Permission Set can grant a system permission on top of a Profile</span>
+        <span class="refs"><span class="ref">§9.3.20</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>admin</b> open <b>Setup → Permission Sets → New Permission Set</b>; call it <code>S9 Integration Access</code>; tick <b>Manage Integrations</b> and <b>View Call Recordings</b>; assign it to <b>Refilwe Reader</b>; save.</li><li>As <b>Refilwe</b> open <b>Setup → Integrations</b>; then try <b>Admin Settings → Users</b>.</li><li>Remove Refilwe from the set (or delete the set).</li></ol>
+      <div class="expect"><b>Expected</b>
+        Before assignment Refilwe is refused both. After assignment the Integrations page works; Users is still refused — the set grants only what it lists. After removal she is refused again.</div>
+      <div class="aside"><b>Proven by script</b> (403, then 200 after assignment, still 403 on Users). Creating a Permission Set through the form was not clicked; the page lists existing sets.</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t35">
+      <span class="test-title"><span class="t">35. Administrative capability does not depend on object access, and object access does not grant it</span>
+        <span class="refs"><span class="ref">§9.3.21</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Tick <b>Manage Page Layouts</b> only on S9 Customizer. As <b>Carol</b> open the S9 Case layout builder, then try to open S9 Cases.</li><li>As <b>Amahle</b> (full create/read/update on S9 Case) try <b>Admin Settings → Users</b> and <b>Setup → Roles</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Carol can use the layout builder yet cannot read any S9 Case record. Amahle can work with cases yet is refused every administrative page.</div>
+      <div class="aside"><b>Proven by script</b> (Carol: layouts allowed, records 403; Amahle: users 403).</div>
+    </div>
+  </div>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t36">
+      <span class="test-title"><span class="t">36. Nobody can grant themselves a permission they do not hold</span>
+        <span class="refs"><span class="ref">§9.3.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As <b>Carol</b> try to save a change to S9 Customizer ticking <b>Manage Users</b>.</li></ol>
+      <div class="expect"><b>Expected</b>
+        Refused (403): editing Profiles needs the Manage Profiles and Permissions permission, and a holder can only grant permissions they themselves hold.</div>
+      <div class="aside"><b>Proven by script</b> for the refusal without Manage Profiles; the self-grant check for holders is proven by suite <code>system-permissions</code>.</div>
+    </div>
+  </div>
+  <h2>Part 4 — Workspace access</h2>
+  <p class="sec-note">BRD §9.4. Which Apps a person sees is decided by their Profile, separately from which objects they can read.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t37">
+      <span class="test-title"><span class="t">37. Which Apps appear in the switcher comes from the Profile, independently of object permissions</span>
+        <span class="refs"><span class="ref">§9.4.1</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open <b>Setup → Roles → S9 Agent → App Access</b>. Read the note and the list (Insurance is the default for everyone; Broker Desk is optional).</li><li>As <b>Amahle</b> look at the App switcher at the top left.</li><li>As admin tick <b>Broker Desk</b> for S9 Agent, save, and reload Amahle's window; untick and save again.</li></ol>
+      <div class="expect"><b>Expected</b>
+        The tab explains that the apps a role sees are separate from object permissions. Amahle sees Insurance; with Broker Desk ticked it appears in her switcher even though she has no permission on Broker objects, and the Brokers screens inside it stay empty or refused.</div>
+      <div class="aside"><b>App Access tab clicked.</b> The rules are <b>proven by suites</b> <code>app-access</code> (26 of 26) and <code>workspace-object-isolation</code> (31 of 31). Amahle's switcher was not looked at in a browser.</div>
+    </div>
+  </div>
+  <h2>Part 5 — Putting things back</h2>
+  <p class="sec-note">Leave the workspace as you found it.</p>
+  <div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t38">
+      <span class="test-title"><span class="t">38. Tidy-up: test settings, rule and cases removed</span>
+        <span class="refs"><span class="ref">—</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Set <b>S9 Case</b> back to <b>Private</b> if it is not. Delete the sharing rule. Clear S9 Customizer's App Permissions and the Permission Set from Test 34.</li><li>Delete the test S9 Cases (tick them on the list, <b>Delete</b>).</li><li>In <b>Setup → Workspaces → Insurance → Objects</b> remove <b>S9 Case</b>. Ask your Salesdam contact to switch the test people off.</li></ol>
+      <div class="expect"><b>Expected</b>
+        S9 Case is no longer in the Insurance sidebar, the organisation-wide default is Private, and no sharing rule or Permission Set from this script remains. The S9 profiles, the S9 Funeral Team group and the S9 Case object stay for a repeat run. Earlier fixtures (POL-00001, POL-00003, POL-00004) still open and save normally.</div>
+    </div>
+  </div>
+  <h2>Still to be covered</h2>
+  <p>These points sit outside this script:</p>
+  <ul>
+    <li><b>Screens as the test people.</b> The browser pane used for the automated run could not sign in as a second person without signing the administrator out, so on-screen behaviour as Amahle, Refilwe, Carol and the others is described from the interface responses, not clicked. A person must confirm it with private windows (the tests that need this are marked).</li>
+    <li><b>Call recordings.</b> A recording link is created by a telephony provider; it cannot be entered on screen. Proven through the interface calls only.</li>
+    <li><b>Delete confirmations.</b> Deleting a role or a sharing rule asks the browser to confirm, which an automated run cannot accept; the deletions were done through the interface calls.</li>
+    <li><b>Webhooks, Analytics.</b> Manage Webhooks, View Analytics and Manage Analytics exist as additional system permissions beyond the BRD's list. The first is enforced on every webhook route; the Analytics pair is stored and used by the screens, not checked here.</li>
+    <li><b>Hierarchy depth.</b> The manager chain was tested one level deep. Multi-level visibility is proven by suite <code>sharing-model</code>.</li>
+    <li><b>Layout-level and API-field rules.</b> Field security applies to forms, detail pages, lists, export, search and the record API. Internal platform writers (for example the Insurance module) do not apply field security.</li>
+  </ul>
+
+  <h3>Reporting a problem</h3>
+  <p>For anything that does not match the expected result, note the test number, which test person you were signed in as, what you saw instead, and the record you were working on. A screenshot of the screen as it looked when it went wrong is usually enough for us to reproduce it.</p>
+
+  <footer>
+    Salesdam V3 · Permissions and Sharing acceptance script · issued 19 November 2026.
+    Tick-box progress is remembered in this browser only.
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s9-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>
