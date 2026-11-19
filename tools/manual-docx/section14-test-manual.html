@@ -1,0 +1,501 @@
+<title>Tenant Configuration Test Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Layout: single reading column; sticky progress bar; tickable test cards */
+  :root {
+    --bg:        #f7f6f3;
+    --surface:   #ffffff;
+    --surface-2: #f1efe9;
+    --ink:       #1c1b18;
+    --ink-soft:  #5d5a52;
+    --ink-faint: #8b8780;
+    --rule:      #ddd9d0;
+    --accent:    #1f5c4a;
+    --accent-bg: #e4efe9;
+    --warn:      #8a5a12;
+    --warn-bg:   #fbf0dc;
+    --ok:        #1f5c4a;
+    --ok-bg:     #e4efe9;
+
+    --display: 'Newsreader', Georgia, serif;
+    --body:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14150f;
+      --surface: #1d1e18;
+      --surface-2: #252620;
+      --ink: #f0eee7;
+      --ink-soft: #a9a69d;
+      --ink-faint: #7c7970;
+      --rule: #32332c;
+      --accent: #7fc4ab;
+      --accent-bg: #1b2c25;
+      --warn: #d9a95c;
+      --warn-bg: #2d2415;
+      --ok: #7fc4ab;
+      --ok-bg: #1b2c25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14150f;
+    --surface: #1d1e18;
+    --surface-2: #252620;
+    --ink: #f0eee7;
+    --ink-soft: #a9a69d;
+    --ink-faint: #7c7970;
+    --rule: #32332c;
+    --accent: #7fc4ab;
+    --accent-bg: #1b2c25;
+    --warn: #d9a95c;
+    --warn-bg: #2d2415;
+    --ok: #7fc4ab;
+    --ok-bg: #1b2c25;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 72px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  header.mast {
+    padding-block: 44px 28px;
+    border-bottom: 2px solid var(--ink);
+    margin-block-end: 8px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-block-end: 14px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5.5vw, 3rem);
+    font-weight: 600; line-height: 1.1; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .mast-meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-block-start: 22px; font-size: 13px; color: var(--ink-faint);
+  }
+  .mast-meta b { color: var(--ink-soft); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--rule);
+    padding-block: 10px; margin-block-end: 30px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 11;
+  }
+  .track { flex: 1 1 180px; min-width: 0; height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .btn-reset {
+    font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer;
+    background: var(--surface); color: var(--ink-soft);
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  h2 {
+    font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+    margin: 52px 0 6px; text-wrap: balance; letter-spacing: -.01em;
+    padding-block-start: 14px; border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { border-top: none; }
+  .sec-note { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; max-width: 62ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 13px; }
+  a { color: var(--accent); }
+
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  code { background: var(--surface-2); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 9px 9px 0; padding: 18px 22px; margin-block: 22px;
+  }
+  .callout h3 { margin-block-start: 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout ul { margin: 8px 0 0; padding-left: 20px; }
+  .callout li { margin-block-end: 5px; }
+
+  dl.creds { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+  dl.creds dt { color: var(--ink-faint); }
+  dl.creds dd { margin: 0; font-family: var(--mono); font-size: 13px; user-select: all; }
+
+  .test {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; margin-block-end: 14px; overflow: hidden;
+  }
+  .test-head { display: flex; align-items: flex-start; gap: 13px; padding: 15px 18px; cursor: pointer; user-select: none; }
+  .test-head:hover { background: var(--surface-2); }
+  .test-head input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex: 0 0 19px; margin-top: 2px;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .test-head input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .test-head input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 1.5px;
+    width: 5px; height: 10px; border: solid var(--surface);
+    border-width: 0 2px 2px 0; transform: rotate(42deg);
+  }
+  .test-head input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .test-title { flex: 1 1 auto; min-width: 0; }
+  .test-title .t { font-weight: 600; display: block; }
+  .test:has(input:checked) .test-title .t { color: var(--ink-faint); text-decoration: line-through; }
+  .refs { display: flex; gap: 6px; flex-wrap: wrap; margin-block-start: 6px; }
+  .ref {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 4px;
+    background: var(--accent-bg); color: var(--accent);
+  }
+
+  .test-body { padding: 15px 18px 17px 50px; border-top: 1px solid var(--rule); }
+  .test-body > :first-child { margin-top: 0; }
+
+  .steps { margin: 0 0 14px; padding-left: 19px; }
+  .steps li { margin-block-end: 7px; }
+
+  .expect { background: var(--ok-bg); border-radius: 7px; padding: 11px 15px; font-size: 14px; color: var(--ink); }
+  .expect b {
+    color: var(--ok); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  .aside { background: var(--surface-2); border-radius: 7px; padding: 11px 15px; font-size: 14px; margin-block-start: 11px; color: var(--ink-soft); }
+  .aside b {
+    color: var(--ink); font-weight: 600; display: block; margin-block-end: 3px;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  }
+
+  footer {
+    margin-block-start: 56px; padding-block-start: 24px;
+    border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media (max-width: 560px) {
+    .test-body { padding-left: 18px; }
+    .mast-meta { gap: 6px 14px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Salesdam V3 · Client Acceptance Test</div>
+    <h1>Tenant Configuration</h1>
+    <p class="standfirst">A step-by-step script for BRD Section&nbsp;14. You see which settings a company can change, override one and reset it, watch the platform default take over, set a company's name, colour and logos and see them appear (and fall back), and prove that saved credentials are masked, encrypted and kept out of logs. Everything that changes data happens in a throwaway copy of a tenant, which is deleted at the end.</p>
+    <div class="mast-meta"><span><b>Scope</b> BRD §14</span><span><b>Tests</b> 25</span><span><b>Time</b> ~75 minutes</span><span><b>Issued</b> 19 Nov 2026</span></div>
+  </header>
+  <div class="progress-bar"><span class="count" id="count">0 of 25 complete</span><div class="track"><div class="fill" id="fill"></div></div><button class="btn-reset" id="reset" type="button">Reset</button></div>
+<h2>Before you start</h2><div class="callout"><h3>Signing in</h3><dl class="creds"><dt>Address</dt><dd>http://localhost:5173</dd><dt>Who</dt><dd>An administrator (Super User) of the tenant being tested</dd></dl>
+  <p style="margin:12px 0 0;font-size:14px;color:var(--ink-soft)">Ask your Salesdam contact for the sign-in details. Pages can take 10–30 seconds to fill because the database is remote. The Configuration page is under <b>Setup → Admin Settings → Configuration</b>. The top-bar <b>Tenant</b> switcher decides which tenant you are changing.</p></div>
+<div class="callout"><h3>Prepare a throwaway tenant</h3><ul>
+<li>Open <b>Setup → Deployments</b>, choose your working tenant under <b>Clone Sandbox Tenant</b>, name the copy <b>S14 Config Sandbox</b> and click <b>Clone</b>. Switch to it with the <b>Tenant</b> switcher.</li>
+<li>Use dummy credentials only. Never type a real password, token or key into this script.</li></ul></div>
+<div class="callout warn"><h3>Cleaning up</h3><ul>
+<li>Switch back to your working tenant, then delete the copy with <b>Setup → Deployments → Delete sandbox…</b> (type its name). This removes its settings, credentials, email senders and webhooks.</li>
+<li>Remove any platform setting you created (tests 3–5) and return any value you changed in your working tenant with <b>Reset</b>.</li></ul></div>
+<h2>Settings and the order they are read in</h2><p class="sec-note">BRD §14.1–§14.3 — the company's value, then the platform's, then the built-in default.</p>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t1">
+      <span class="test-title"><span class="t">1. A company sees every setting it may change, and whether each is its own value or the platform default</span>
+        <span class="refs"><span class="ref">§14.1, §14.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Sign in as an administrator. Open <b>Setup → Admin Settings</b> and click the <b>Configuration</b> card.</li><li>Read the list. Each row shows the setting's name, its key, a description, the current value, and a badge.</li></ol>
+      <div class="expect"><b>Expected</b>The page lists about 34 settings (approval threshold, recycle-bin retention, default currency, minimum deal value, communication consent, branding, integration credentials, call-recording retention, file limits, password and login rules, MFA and single sign-on). A setting nobody has changed carries <b>Platform default</b>; one the company has changed carries <b>Company value</b> and a <b>Reset</b> button.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t2">
+      <span class="test-title"><span class="t">2. A company value overrides the platform default, and Reset brings the default back</span>
+        <span class="refs"><span class="ref">§14.1, §14.2 (resolution order)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the Configuration page change <b>Default Currency</b> from <b>ZAR</b> to <b>USD</b> and click <b>Save</b>.</li><li>Read the row, then click <b>Reset</b> on it.</li></ol>
+      <div class="expect"><b>Expected</b>After Save the badge reads <b>Company value</b> and a Reset button appears. After Reset the badge returns to <b>Platform default</b> and the value to <b>ZAR</b>. (Clicked; the same check was repeated for the Approval Threshold Amount in Section 8 and the Minimum Deal Value in Section 6.)</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t3">
+      <span class="test-title"><span class="t">3. A platform-wide default reaches every company that has not set its own, and a company value still wins</span>
+        <span class="refs"><span class="ref">§14.2, §14.3 (operator level)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API call:</b> as a Super User call <code>PUT /api/v1/configuration/defaults/platform.default_currency</code> with <code>{"value":"EUR"}</code>. The screen offers no editor for an existing default; its <b>Add platform setting</b> box creates new ones.</li><li>Open the Configuration page in a tenant that has no override: the row shows <b>EUR</b> with the <b>Platform default</b> badge.</li><li>Save <b>USD</b> as that company's value, then click <b>Reset</b>. Finally <code>DELETE /api/v1/configuration/defaults/platform.default_currency</code>.</li></ol>
+      <div class="expect"><b>Expected</b>Order of precedence seen at each step: <b>ZAR</b> (built-in default) → <b>EUR</b> (operator default) → <b>USD</b> (company value) → after Reset <b>EUR</b> → after deleting the operator default <b>ZAR</b>. The three levels are exactly: the company's own entry, then the platform entry, then the built-in value.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t4">
+      <span class="test-title"><span class="t">4. A Super User can add a brand-new platform setting from the screen</span>
+        <span class="refs"><span class="ref">§14.1, §14.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>As a Super User click <b>Add platform setting</b>. Type the key <code>s14.demo_limit</code>, label <b>S14 Demo Limit</b>, default value <b>7</b>, and click <b>Add for every company</b>.</li><li>Check the row appears. (Afterwards remove it: <code>DELETE /api/v1/configuration/defaults/s14.demo_limit</code>.)</li></ol>
+      <div class="expect"><b>Expected</b>The row <b>S14 Demo Limit</b> appears with the <b>Platform default</b> badge and the key. Validation rules can read it with <code>CONFIG("s14.demo_limit")</code>. The box is shown to Super Users only.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t5">
+      <span class="test-title"><span class="t">5. A setting the operator has locked cannot be changed by a company</span>
+        <span class="refs"><span class="ref">§14.3 (key exposure)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs an API call to prepare:</b> as a Super User create a platform setting with <code>"editableByTenant": false</code> (<code>PUT /api/v1/configuration/defaults/s14.locked_setting</code>).</li><li>Open the Configuration page and find the row <b>S14 Locked</b>.</li><li>Try to save a value for it through the API: <code>PUT /api/v1/configuration/s14.locked_setting</code>. Remove the setting afterwards.</li></ol>
+      <div class="expect"><b>Expected</b>The row is shown but its field and Save button are greyed out (clicked). The API answers <b>403 Configuration key 's14.locked_setting' is not available for tenant override.</b> An unknown key is refused the same way.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t6">
+      <span class="test-title"><span class="t">6. A company administrator who is not a Super User cannot change platform defaults</span>
+        <span class="refs"><span class="ref">§14.3</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs a person:</b> sign in as an ordinary company administrator (not a Super User) in a second browser window. Open Configuration: every setting is listed, an ordinary one (for example <b>Recycle Bin Retention</b>) can be saved and reset, the locked row from test 5 is greyed out, and there is no <b>Add platform setting</b> box.</li><li>Then call <code>PUT /api/v1/configuration/defaults/records.recycle_bin_retention_days</code> from that window.</li></ol>
+      <div class="expect"><b>Expected</b>The platform-defaults call answers <b>403</b>, as do the matching <b>GET</b> and <b>DELETE</b>. Proved by the suite <code>section14-config</code> (40/40), which creates a throwaway tenant with a real, non-Super-User administrator (random password, never printed), signs in over HTTP and checks: can view the list, can override and reset an editable key, cannot override a locked key (403), cannot read, change or delete operator defaults (403). The screen itself was not clicked as that person: the browser pane holds one signed-in user.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t7">
+      <span class="test-title"><span class="t">7. One company's settings never change another company's</span>
+        <span class="refs"><span class="ref">§14.5, §14.12</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create a copy of your working tenant (<b>Setup → Deployments → Clone Sandbox</b>, Section 13). In the top bar <b>Tenant</b> switcher choose the copy, open Configuration, and set a company name, colour and logo (test 12).</li><li>Switch back to your working tenant and open Configuration and look at the page header.</li></ol>
+      <div class="expect"><b>Expected</b>The working tenant still shows <b>Salesdam</b>, the default colour and no logo; its Branding rows say <b>Platform default</b>. The pre-sign-in branding address (test 14) returns the copy's branding for the copy and the default for the working tenant. The suites <code>tenant-isolation</code> (23/23) and <code>section14-config</code> prove the same for two tenants.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t8">
+      <span class="test-title"><span class="t">8. Validation rules, approvals, flows and the recycle bin read these settings</span>
+        <span class="refs"><span class="ref">§14.2 (applies uniformly)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>No new steps: these were clicked in earlier sections. Validation rule <code>CONFIG("deals.minimum_value")</code> follows the Configuration page (Section 6, Test on CONFIG); an approval entry criterion reads the Approval Threshold Amount (Section 8); the recycle-bin purge reads its retention days per tenant (Section 3); flows read settings through the same <code>CONFIG()</code> function.</li><li>Settings that are stored but not yet read by any behaviour are listed under <b>Known limits</b>.</li></ol>
+      <div class="expect"><b>Expected</b>Each behaviour reads the company's own value first, then the platform value, then the built-in default. Single sign-on, password policy, lockout, MFA, file-size and file-type limits, default currency, call-recording retention, communication consent, the default communication template and the WhatsApp, Meta, telephony and webhook keys also read the company's value first (tests 9–11 and the credential tests near the end).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t9">
+      <span class="test-title"><span class="t">9. The company's default currency decides what the application shows and what new records get</span>
+        <span class="refs"><span class="ref">§14.1 (default currency), §14.2</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On the Configuration page set <b>Default Currency</b> to <b>EUR</b> and click <b>Save</b>. Open <b>Setup → Admin Settings → Company Information</b>.</li><li>Create a record on an object that has a <b>Currency</b> field (for example a Deal) and leave the field empty. Then click <b>Reset</b> on <b>Default Currency</b>.</li></ol>
+      <div class="expect"><b>Expected</b>Company Information reads <b>Selected currency: Euro (EUR)</b> (clicked; it read South African Rand before). The sign-in session carries EUR, so every amount the application formats uses it. A new record with an empty Currency field receives the tenant's code (suite; not clicked). The order is the company's value, then a platform-wide value (test 3), then the built-in ZAR; another company is unaffected. A company that only ever used the older Operating Currency box on Company Information keeps that choice until a Default Currency is set.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t10">
+      <span class="test-title"><span class="t">10. Call recordings are cleared after the company's retention period, and only for companies that set one</span>
+        <span class="refs"><span class="ref">§14.2.10</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Set <b>Call Recording Retention (days)</b> to <b>7</b> on a throwaway tenant. The built-in value is <b>0</b>, which keeps recordings for ever.</li><li><b>Needs a person with database access:</b> add two call activities carrying a recording link, one 30 days old and one 1 day old, and a 400-day-old call in a second tenant that has no retention set. Wait for the hourly sweep (or run it from a script).</li></ol>
+      <div class="expect"><b>Expected</b>Only the 30-day-old call in the tenant with the 7-day window loses its recording link (a purge time is stamped; the call itself, who, when and how long, stays). The 1-day-old call and the other tenant's 400-day-old call are untouched. A value of 0 or a negative number purges nothing. Proved by the suite with throwaway data (the purge job mirrors the recycle-bin job: hourly, one tenant at a time, a failure in one tenant does not stop the rest). The Configuration row itself was saved by clicking, as in test 2.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t11">
+      <span class="test-title"><span class="t">11. Communication consent settings stop an opted-out client being contacted, wherever the message is sent</span>
+        <span class="refs"><span class="ref">§14.2.9</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Set <b>Enforce Communication Consent</b> to <b>Yes</b> on a throwaway tenant. Record that a client has opted out of email (Section 17's consent screen), then queue an email to that client (a policy communication, an Inbox reply, a flow's send step or custom code).</li></ol>
+      <div class="expect"><b>Expected</b>With enforcement on the send is refused with <b>Contact blocked: consent withdrawn</b>; with enforcement off, the default, it goes ahead. <b>Default Opt-In (unknown consent)</b> decides what happens for clients with no record. The Inbox, flow and custom-code paths already checked consent; the queued policy communications did not and now do (suite).</div>
+    </div>
+  </div>
+<h2>Branding</h2><p class="sec-note">BRD §14.4–§14.16 (tenant branding) — name, colour and logos per company, with a Salesdam fallback.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t12">
+      <span class="test-title"><span class="t">12. Branding is set from a screen: company name, colour, header logo and login-page logo</span>
+        <span class="refs"><span class="ref">§14.4, §14.6–§14.10, §14.16</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In the throwaway tenant (see <b>Before you start</b>) open Configuration. In the <b>Company Name</b> row type <b>Acme S14</b> and click <b>Save</b>.</li><li>In <b>Primary Brand Colour</b> type <b>#B8312F</b> (a colour picker appears beside the box once the value is a valid colour) and click <b>Save</b>.</li><li>In <b>Company Logo URL</b> and <b>Login Page Logo URL</b> use the file button to choose a small PNG (up to 500 KB; a preview appears) or paste an https address, then click <b>Save</b> on each row. <b>Needs a person:</b> the operating-system file chooser cannot be driven here; the acceptance run supplied the file to the same handler.</li></ol>
+      <div class="expect"><b>Expected</b>Each row turns to <b>Company value</b> and a green message names the setting. No developer, deployment or restart was needed.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t13">
+      <span class="test-title"><span class="t">13. The company logo and colour appear on every standard screen</span>
+        <span class="refs"><span class="ref">§14.7, §14.9, §14.10, §14.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Reload the page and look at the top bar and the user avatar. Then open <b>Audit Logs</b> from the sidebar and look again.</li><li>Click a different workspace in the sidebar and look again (not clicked in the acceptance run).</li></ol>
+      <div class="expect"><b>Expected</b>The top bar shows the company logo (our test image, 64 px square shown at 24 px) and the avatar and accents take the company colour (<b>#B8312F</b>). Seen on the Configuration and Audit Logs screens (clicked). The bar is part of the shared page frame, so every workspace and standard screen uses it. The company name is shown in place of the logo when no logo is set.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t14">
+      <span class="test-title"><span class="t">14. The login page shows the company's own logo and name before anyone signs in</span>
+        <span class="refs"><span class="ref">§14.8</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Open the public branding address, with no sign-in: <code>GET /api/v1/configuration/public-branding?tenant=&lt;tenant id or slug&gt;</code>.</li><li>Open the login page without signing out of the administrator window: use a second browser or a private window, or the same machine under the other host name (<code>http://127.0.0.1:5173/login?tenant=&lt;tenant id&gt;</code> when you normally use <code>localhost</code>), so no sign-in cookie applies. A browser that has signed in to the tenant before shows the same branding without the <code>?tenant=</code> part.</li></ol>
+      <div class="expect"><b>Expected</b>The address answers with only the four branding values (company name, colour, logo, login logo): <b>Acme S14</b>, <b>#B8312F</b> and the images for the copy; <b>Salesdam</b>, <b>#0066FF</b> and no logo for the default. Nothing else is exposed, no key marked secret is ever returned, and the address is rate limited (120 a minute per visitor). Before this change the login page asked for the authenticated settings list, so it could only ever show Salesdam. <b>Clicked (second host name):</b> the login screen for the copy read <b>Acme S14b</b> in place of Salesdam and its <b>Sign in</b> button took the company colour (<b>rgb(5, 5, 15)</b>); with no tenant given the same screen read <b>Salesdam</b> in the default colour (<b>#244C64</b>). The header logo is read from the same value; a login-page logo image was not seen on screen in this run.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t15">
+      <span class="test-title"><span class="t">15. Clearing a branding value falls back to the Salesdam default</span>
+        <span class="refs"><span class="ref">§14.12, §14.13, §14.14</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In the throwaway tenant click <b>Reset</b> on each of the four Branding rows.</li><li>Reload and look at the top bar and the public branding address from test 14.</li></ol>
+      <div class="expect"><b>Expected</b>The rows return to <b>Platform default</b>, the top bar shows <b>Salesdam</b> with no logo and the default blue (<b>#0066FF</b>), and the public address returns the defaults.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t16">
+      <span class="test-title"><span class="t">16. Unusable branding values are refused with a clear message</span>
+        <span class="refs"><span class="ref">§14.15</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In <b>Primary Brand Colour</b> type <b>red</b> and click <b>Save</b>.</li><li>Through the API try a logo of <code>javascript:alert(1)</code> and a company name of 81 characters.</li></ol>
+      <div class="expect"><b>Expected</b>The screen shows <b>Primary colour must be a hex colour such as #0066FF.</b> (clicked). The API refuses the logo (<b>Logo must be an http(s) URL or a PNG, JPEG, GIF or WebP image.</b>) and the long name (<b>Company name must be 80 characters or fewer.</b>); a logo over 500 KB is refused too. Nothing is stored.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t17">
+      <span class="test-title"><span class="t">17. A very light brand colour cannot make the screen unreadable</span>
+        <span class="refs"><span class="ref">§14.15 (accessibility)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Save the colour <b>#FFFF99</b> (pale yellow) on the throwaway tenant, then reload and read the top bar and buttons.</li></ol>
+      <div class="expect"><b>Expected</b>The application darkens any colour whose contrast against white text is below 3:1, so <b>#FFFF99</b> is shown as <b>#97975A</b> and white text stays readable. The saved value is unchanged; only the displayed shade is corrected. A very dark colour is handled in the dark theme: <b>#05050F</b> is shown as <b>#717177</b> when the dark theme is switched on, and as saved in the light theme (clicked, read from the page). The workspace avatar in the sidebar uses the same corrected shade.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t18">
+      <span class="test-title"><span class="t">18. Branding does not break the layout on a phone</span>
+        <span class="refs"><span class="ref">§14.15 (layout, responsiveness)</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>With the branding saved, make the browser window phone width (375 px) and reload any screen.</li><li>Return to the desktop width.</li></ol>
+      <div class="expect"><b>Expected</b>No sideways scrolling (page width equals window width), the logo is held to 24 × 24 px in the top bar, and the menu and Configuration page work as before.</div>
+    </div>
+  </div>
+<h2>Credentials and secrets</h2><p class="sec-note">BRD §14.2 (communication and integration configuration) — masked, encrypted and kept out of logs.</p><div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t19">
+      <span class="test-title"><span class="t">19. A saved credential is masked on the screen and in every answer from the server</span>
+        <span class="refs"><span class="ref">§14.2.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>In a throwaway tenant, on the Configuration page, find <b>SMTP Password</b> (key <code>integration.email.smtp_password</code>). The box is a password field. Type a dummy value (never a real one) and click <b>Save</b>.</li><li>Look at the row after saving, and open the page's text. Do the same for <b>Telephony API Key</b> through the API.</li></ol>
+      <div class="expect"><b>Expected</b>After saving, the box shows <b>••••••••</b>; the dummy value appears nowhere on the page. The settings list answers <b>••••••••</b> for every credential, and the answer to the save itself no longer carries the value (not even in encrypted form). Credentials are never sent back.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t20">
+      <span class="test-title"><span class="t">20. Credentials are encrypted in the database, and kept out of logs, audit records and formulas</span>
+        <span class="refs"><span class="ref">§14.2.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs a person with database access (read-only):</b> read the stored configuration row, the email-sender row and the webhook row for the dummy credentials. Read the Audit Logs screen and the server log for the dummy text.</li><li>Write a validation rule or flow formula that calls <code>CONFIG("integration.email.smtp_password")</code>.</li></ol>
+      <div class="expect"><b>Expected</b>The stored values begin <b>enc:</b> followed by random text (AES-256-GCM, a fresh random value per save); the dummy text is not in the row. The audit entry records only the key name (<b>tenant_config_update</b>), and the server log and audit records do not contain the dummy text. Formulas receive nothing for a credential key, so a rule cannot copy a secret into a record or an error message. The key is the server's <code>ENCRYPTION_KEY</code> setting; the server now refuses to start in production without it. There is no automatic key rotation.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t21">
+      <span class="test-title"><span class="t">21. An email sender's password and a webhook's signing secret are encrypted too</span>
+        <span class="refs"><span class="ref">§14.2.2, §14.2.7, §14.2.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>Create an email sender (the Email Senders screen, or <code>POST /api/v1/email-senders</code>; the acceptance run used the API) with a dummy SMTP password, and a webhook with <code>POST /api/v1/webhooks</code>. List both through the screens or API.</li><li><b>Needs a person with database access:</b> read both stored rows.</li></ol>
+      <div class="expect"><b>Expected</b>The sender list never contains the user name or password. A webhook shows its signing secret once, at creation, and never again. Both are stored as <b>enc:…</b>. Sending mail and signing webhook calls still work: the model decrypts on use. Rows saved before this change are still read correctly (as plain text) and are encrypted the next time they are saved.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t22">
+      <span class="test-title"><span class="t">22. A channel uses the company's own WhatsApp, Meta and telephony credentials first, then the platform's, and never another company's</span>
+        <span class="refs"><span class="ref">§14.2.3–§14.2.6, §14.2.12, §14.2.13</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>On a throwaway tenant save <b>WhatsApp Access Token</b>, <b>Meta App Secret</b> and <b>Telephony API Key</b> with dummy values. A Super User may also save a platform-wide default for the same keys (test 3).</li><li><b>Needs a person with a test channel:</b> send a WhatsApp message and post a signed inbound telephony call to a channel account that has no credential of its own.</li></ol>
+      <div class="expect"><b>Expected</b>The WhatsApp request carries the channel account's own token if it has one, else the company's, else the platform's, else the message stays <b>queued</b> with <b>Missing accessToken</b>. An inbound call or Meta message is accepted only if it is signed with the account's secret, else the company's key, else the platform's; a different company's key is refused (<b>401</b>). Proved by the suite with the HTTP call to the provider stubbed (no message is sent); not clicked.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t23">
+      <span class="test-title"><span class="t">23. Email sending uses the company's own stored credentials (captured, not delivered)</span>
+        <span class="refs"><span class="ref">§14.2.2, §14.2.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs a person with a mail catcher:</b> start any local SMTP catcher on the machine (for example MailHog, or <code>python3 -m aiosmtpd -n -l 127.0.0.1:1025</code>). Create an email sender on a throwaway tenant: host <code>127.0.0.1</code>, port <b>1025</b>, a dummy user and a dummy password.</li><li>Click the sender's <b>Send test email</b> (or <code>POST /api/v1/email-senders/&lt;id&gt;/test</code> with a <code>to</code> address).</li></ol>
+      <div class="expect"><b>Expected</b>The catcher receives one message and shows the dummy user and password in its sign-in step: the application decrypts the stored password to use it. The answers to the create, test and list calls, and the application log, never contain the password. Proved by the suite with its own capture server (nothing left the machine).</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t24">
+      <span class="test-title"><span class="t">24. A webhook is signed with the company's secret, on the first try and on a retry</span>
+        <span class="refs"><span class="ref">§14.2.7, §14.2.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li><b>Needs a person with a local receiver:</b> run any local HTTP receiver that prints the <code>X-Webhook-Signature</code> header and the raw body. Create a webhook pointing at it (<code>POST /api/v1/webhooks</code>) and keep the secret from the answer: it is shown once.</li><li>Call <code>POST /api/v1/webhooks/&lt;id&gt;/test</code>. For a retry, record a failed delivery log row that is due, or let a real failed delivery be retried.</li></ol>
+      <div class="expect"><b>Expected</b>The receiver gets <b>sha256=</b> plus the HMAC-SHA256 of the body computed with the secret you saved, both for the test and for the retry (recomputed in the suite and compared). The delivery log and the webhook list never show the secret. A secret or company id supplied by the caller in the create call is ignored; before this change a caller-supplied secret was stored while a different one was shown.</div>
+    </div>
+  </div>
+<div class="test">
+    <label class="test-head"><input type="checkbox" data-id="t25">
+      <span class="test-title"><span class="t">25. A secret is not exposed anywhere else: reports, flows, search, audit history, logs and exports</span>
+        <span class="refs"><span class="ref">§14.2.11</span></span></span></label>
+    <div class="test-body">
+      <ol class="steps"><li>With dummy credentials saved (the credentials tests above), search for the word <b>integration</b>, open Audit Logs and read the change entries, and read the Configuration, Channel Accounts, Email Senders and Webhooks lists.</li><li>Write a validation rule or a flow formula that reads a credential with <code>CONFIG("integration.meta.app_secret")</code>.</li></ol>
+      <div class="expect"><b>Expected</b>No screen or answer contains a dummy value. The change history records only that a key changed, never its value. Credentials are not held in any record object, so the report builder, dashboard widgets, Data Export and search (which read records only) cannot reach them; flows and approvals receive nothing for a credential key, so it cannot be copied into a record, an error message or a flow's history. Proved by the suite, which searches every answer, the audit records, the stored rows and the application log for random dummy text. A custom field a company creates to hold a secret is an ordinary field and is exported and reported like any other.</div>
+    </div>
+  </div>
+<h2>Known limits</h2><div class="callout warn"><h3>Worth knowing</h3><ul>
+<li><b>Settings now acted on:</b> default currency, call-recording retention (0 = keep), communication consent, default communication template, and the WhatsApp, Meta, telephony and webhook keys. <b>Still not built:</b> the Meta Messenger/Instagram <i>page</i> token and each channel account's own provider credentials keep living on the channel account (encrypted), because they are per page or number, not per company; call recordings themselves are not stored by Salesdam, only their link, so retention removes the link; no setting yet drives the language or time zone.</li>
+<li>The Configuration screen cannot edit an existing platform-wide default (only add a new one); that is done through the API, by a Super User.</li>
+<li>Logos are uploaded as a small image (up to 500 KB) or linked by address. The login page needs to know the tenant: it uses <code>?tenant=</code> in the address or the tenant last used in that browser; an address without either shows Salesdam.</li>
+<li>The browser tab title on application pages and the workspace name in the sidebar are not branded; the company name appears in the top bar when no logo is set.</li>
+<li><b>Encryption key.</b> Credentials are encrypted with the server's <code>ENCRYPTION_KEY</code> setting (documented in <code>.env.example</code>). In production the server <b>refuses to start</b> without it; set it to a long random value (<code>node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"</code>) in the server's environment, and keep a copy: without the key stored credentials cannot be read. To change the key, run <code>node scripts/rotateEncryptionKey.mjs</code> with <code>OLD_ENCRYPTION_KEY</code> and the new <code>ENCRYPTION_KEY</code> set (a dry run first, then <code>--apply</code>); it re-encrypts configuration secrets, email-sender passwords, webhook secrets, channel-account credentials and MFA secrets. The re-encryption helper is covered by a suite check; the full script was not run against live data.</li>
+<li>The deployment package (Section 13) deliberately omits credentials.</li></ul></div>
+
+<script>
+  (function () {
+    var KEY = 'salesdam-s14-tests-v1';
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-id]'));
+    var fill = document.getElementById('fill');
+    var count = document.getElementById('count');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+    function save(state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function render() {
+      var done = boxes.filter(function (b) { return b.checked; }).length;
+      count.textContent = done + ' of ' + boxes.length + ' complete';
+      fill.style.width = (boxes.length ? (done / boxes.length) * 100 : 0) + '%';
+    }
+
+    var state = load();
+    boxes.forEach(function (b) {
+      if (state[b.dataset.id]) b.checked = true;
+      b.addEventListener('change', function () {
+        var s = load();
+        if (b.checked) s[b.dataset.id] = 1; else delete s[b.dataset.id];
+        save(s);
+        render();
+      });
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      save({});
+      render();
+    });
+
+    render();
+  })();
+</script>
