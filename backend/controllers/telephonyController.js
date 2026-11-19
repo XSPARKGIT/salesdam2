@@ -1,5 +1,6 @@
 import telephonyService from '../services/telephonyService.js';
 import telephonyProviders from '../services/telephonyProviders.js';
+import { redactCallRecordings } from '../services/systemPermissionService.js';
 import { asyncHandler, sendSuccess } from '../utils/errors.js';
 
 // Supported telephony providers and their (not-yet-wired) call-control scope.
@@ -59,8 +60,9 @@ const callHistory = asyncHandler(async (req, res) => {
     limit: req.query.limit,
     skip: req.query.skip,
   });
+  const items = await redactCallRecordings(req.user, result.items);
   sendSuccess(res, {
-    data: result.items,
+    data: items,
     meta: { total: result.total, limit: result.limit, skip: result.skip },
   });
 });

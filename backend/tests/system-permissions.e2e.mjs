@@ -25,6 +25,7 @@ import ObjectMeta from '../models/ObjectMeta.js';
 import FieldMeta from '../models/FieldMeta.js';
 import Workspace from '../models/Workspace.js';
 import AuditLog from '../models/AuditLog.js';
+import Activity from '../models/Activity.js';
 import { seedDefaultRoles } from '../services/roleService.js';
 import { seedWorkspace } from './helpers/workspace.mjs';
 
@@ -63,7 +64,7 @@ const loginCookie = async (username) => {
 };
 
 let tenantId = null;
-const models = [User, Role, Session, PermissionSet, ObjectMeta, FieldMeta, Workspace, AuditLog];
+const models = [User, Role, Session, PermissionSet, ObjectMeta, FieldMeta, Workspace, AuditLog, Activity];
 
 try {
   await connectDB();
@@ -348,6 +349,34 @@ try {
   check('admin can create role with new system permissions', r.status === 201);
   const newRoleData = r.json?.data;
   check('new role has new permissions stored', newRoleData?.appPermissions?.canManageApprovals === true && newRoleData?.appPermissions?.canDeployCustomCode === true);
+
+  // ── 10b. Export / Import need the system permission as well as the object right
+  const objPerm = { objectApiName: 'lead', canCreate: true, canRead: true, canUpdate: true, canDelete: false, canExport: true, canImport: true, fieldPermissions: [] };
+  const xr = await Role.create({ tenantId, name: `xport_${RUN}`, label: 'Xport', dataAccess: 'all', objectPermissions: [objPerm], appPermissions: {} });
+  const xu = await User.create({ tenantId, firstName: 'X', lastName: 'Port', email: `xport-${RUN}@example.com`, username: `xport_${RUN}`, password: PASSWORD, role: xr._id, status: 'active', emailVerified: true });
+  // The object must be reachable in the user's workspace, otherwise every call is refused for that reason alone.
+  const wsX = await Workspace.findOneAndUpdate({ tenantId }, { $set: { allowedObjects: ['lead'] }, $addToSet: { memberIds: xu._id } }, { new: true });
+  await User.updateOne({ _id: xu._id }, { $addToSet: { workspaceIds: wsX._id } });
+  const xCookie = await loginCookie(xu.email);
+  r = await req('/api/v1/records/lead/export', { cookie: xCookie });
+  check('9.3.14: object-level Export alone is refused without Export Data', r.status === 403);
+  r = await req('/api/v1/records/lead/import', { method: 'POST', cookie: xCookie, body: {} });
+  check('9.3.15: object-level Import alone is refused without Import Data', r.status === 403);
+  await Role.updateOne({ _id: xr._id }, { $set: { 'appPermissions.canExportData': true, 'appPermissions.canImportData': true } });
+  r = await req('/api/v1/records/lead/export', { cookie: xCookie });
+  check('9.3.14: with Export Data the route is no longer refused for permission', r.status !== 403, `status ${r.status}`);
+  r = await req('/api/v1/records/lead/import', { method: 'POST', cookie: xCookie, body: {} });
+  check('9.3.15: with Import Data the route is no longer refused for permission', r.status !== 403, `status ${r.status}`);
+
+  // ── 10c. View Call Recordings hides the recording link ───────────────────
+  const act = await Activity.create({ tenantId, type: 'call', subject: 'Recorded call', objectApiName: 'lead', recordId: new mongoose.Types.ObjectId(), createdBy: admin._id, metadata: { recordingUrl: 'https://rec.example.test/a.mp3' } });
+  r = await req(`/api/v1/activities/${act._id}`, { cookie: adminCookie });
+  check('9.3.17: administrator sees the recording link', r.json?.data?.metadata?.recordingUrl === 'https://rec.example.test/a.mp3');
+  r = await req(`/api/v1/activities/${act._id}`, { cookie: limitedCookie });
+  check('9.3.17: user without View Call Recordings does not get the link', r.status === 200 && !r.json?.data?.metadata?.recordingUrl, `status ${r.status}`);
+  await Role.updateOne({ _id: xr._id }, { $set: { 'appPermissions.canViewCallRecordings': true } });
+  r = await req(`/api/v1/activities/${act._id}`, { cookie: xCookie });
+  check('9.3.17: holder of View Call Recordings gets the link', r.json?.data?.metadata?.recordingUrl === 'https://rec.example.test/a.mp3');
 
   // ── 11. Regression: existing permissions still work ──────────────────────
   r = await req('/api/v1/admin/logs', { cookie: adminCookie });

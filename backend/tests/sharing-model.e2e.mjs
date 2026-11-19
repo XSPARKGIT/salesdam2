@@ -127,6 +127,8 @@ try {
   const rwMember = await makeUser(tenant._id, editorRole._id, 'RwMember');
   const editor = await makeUser(tenant._id, editorRole._id, 'Editor');
   editorRole.objectPermissions.forEach((p) => { p.canExport = true; });
+  // Export needs both the object-level Export right and the Export Data system permission (BRD 9.3.14).
+  editorRole.appPermissions = { ...(editorRole.appPermissions?.toObject?.() || editorRole.appPermissions || {}), canExportData: true };
   await editorRole.save();
   const noReadRole = await makeRole(tenant._id, 'noread', { read: false, update: false });
   const noReadUser = await makeUser(tenant._id, noReadRole._id, 'NoRead');

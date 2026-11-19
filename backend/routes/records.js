@@ -4,7 +4,7 @@ import { listRecords, getRecord, createRecord, updateRecord, deleteRecord, bulkD
 import { exportRecords, importRecords } from '../controllers/importExportController.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceTenant } from '../middleware/tenant.js';
-import { checkObjectPermission } from '../middleware/permissions.js';
+import { checkObjectPermission, checkAppPermission } from '../middleware/permissions.js';
 import { requireReachableObject } from '../services/objectAccessService.js';
 
 const IMPORT_MIMES = new Set([
@@ -146,8 +146,8 @@ router.post('/validate-formula', asyncHandler(async (req, res) => {
 // ─── Import / Export ──────────────────────────────────────────────────────────
 // These must come BEFORE /:objectApiName/:id to avoid "export"/"import" being
 // treated as record IDs.
-router.get('/:objectApiName/export', checkObjectPermission('export'), exportRecords);
-router.post('/:objectApiName/import', checkObjectPermission('import'), upload.single('file'), importRecords);
+router.get('/:objectApiName/export', checkObjectPermission('export'), checkAppPermission('canExportData'), exportRecords);
+router.post('/:objectApiName/import', checkObjectPermission('import'), checkAppPermission('canImportData'), upload.single('file'), importRecords);
 
 // ─── Field History (OBJ-013) ──────────────────────────────────────────────────
 router.get('/:objectApiName/:id/history', checkObjectPermission('read'), asyncHandler(async (req, res) => {

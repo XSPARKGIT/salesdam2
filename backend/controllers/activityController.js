@@ -1,5 +1,6 @@
 import Activity from '../models/Activity.js';
 import activityService from '../services/activityService.js';
+import { redactCallRecordings } from '../services/systemPermissionService.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 
 const listActivities = asyncHandler(async (req, res) => {
@@ -12,8 +13,9 @@ const listActivities = asyncHandler(async (req, res) => {
     limit: req.query.limit,
     skip: req.query.skip,
   });
+  const items = await redactCallRecordings(req.user, result.items);
   sendSuccess(res, {
-    data: result.items,
+    data: items,
     meta: { total: result.total, limit: result.limit, skip: result.skip },
   });
 });
@@ -34,8 +36,9 @@ const getTimeline = asyncHandler(async (req, res) => {
     limit: req.query.limit,
     skip: req.query.skip,
   });
+  const items = await redactCallRecordings(req.user, result.items);
   sendSuccess(res, {
-    data: result.items,
+    data: items,
     meta: { total: result.total, limit: result.limit, skip: result.skip },
   });
 });
@@ -68,7 +71,7 @@ const getActivity = asyncHandler(async (req, res) => {
     tenantId: req.tenantId,
   });
   if (!activity) throw new AppError('Activity not found.', 404);
-  sendSuccess(res, { data: activity });
+  sendSuccess(res, { data: await redactCallRecordings(req.user, activity) });
 });
 
 const createActivity = asyncHandler(async (req, res) => {
@@ -94,7 +97,7 @@ const updateActivity = asyncHandler(async (req, res) => {
     updates: req.body,
     user: req.user,
   });
-  sendSuccess(res, { data: activity }, 'Activity updated');
+  sendSuccess(res, { data: await redactCallRecordings(req.user, activity) }, 'Activity updated');
 });
 
 const deleteActivity = asyncHandler(async (req, res) => {

@@ -4,7 +4,7 @@ import User from '../models/User.js';
 import { asyncHandler, sendSuccess, AppError } from '../utils/errors.js';
 import { reindexObject } from '../services/searchService.js';
 import { getVisibleObjects, getReachableObjects } from '../services/objectAccessService.js';
-import { hasObjectPermission, buildDataAccessFilter } from '../middleware/permissions.js';
+import { hasObjectPermission, buildDataAccessFilter, getVisibleFields } from '../middleware/permissions.js';
 
 /**
  * GET /api/search?q=term&objects=contact,account&limit=20
@@ -105,8 +105,32 @@ const globalSearch = asyncHandler(async (req, res) => {
     .limit(10)
     .lean();
 
+  // Field-level security (BRD 9.1.1): return only fields this user may see, and
+  // drop a hit that matched only through a field they cannot see.
+  const visibleByObject = new Map();
+  for (const name of new Set(recordResults.map((r) => r.objectApiName))) {
+    const keys = new Set();
+    recordResults.filter((r) => r.objectApiName === name).forEach((r) => Object.keys(r.data || {}).forEach((k) => keys.add(k)));
+    const all = [...keys];
+    const vis = new Set(await getVisibleFields(req.user, name, all));
+    visibleByObject.set(name, { vis, restricted: vis.size < all.length });
+  }
+  const termTokens = searchTerm.toLowerCase().split(/\s+/).filter(Boolean).map((t) => t.slice(0, 4));
+  const matchesVisible = (data) => {
+    const text = Object.values(data).map((v) => (v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v))).join(' ').toLowerCase();
+    return termTokens.some((t) => text.includes(t));
+  };
+  const permittedRecords = [];
+  for (const r of recordResults) {
+    const { vis, restricted } = visibleByObject.get(r.objectApiName);
+    if (!restricted) { permittedRecords.push(r); continue; }
+    const data = Object.fromEntries(Object.entries(r.data || {}).filter(([k]) => vis.has(k)));
+    if (!matchesVisible(data)) continue;
+    permittedRecords.push({ ...r, data });
+  }
+
   // Format records
-  const formattedRecords = recordResults.map(r => {
+  const formattedRecords = permittedRecords.map(r => {
     const dataObj = {};
     if (r.data) {
       for (const [k, v] of Object.entries(r.data)) {
@@ -210,6 +234,10 @@ const suggest = asyncHandler(async (req, res) => {
   }
 
   // For non-user objects, search DynamicRecords
+  // A field the user cannot see must not be probed through suggestions.
+  if (field !== 'name' && (await getVisibleFields(req.user, objectApiName, [field])).length === 0) {
+    return sendSuccess(res, { data: [] });
+  }
   const accessFilter = await buildDataAccessFilter(req.user, objectApiName);
   const query = {
     tenantId: req.tenantId,

@@ -98,3 +98,22 @@ export async function hasSystemPermission(user, permissionKey) {
   });
   return count > 0;
 }
+
+/**
+ * Call recordings (BRD 9.3.17). Activities carry the recording link in
+ * metadata.recordingUrl; strip it for users without View Call Recordings.
+ * Accepts one activity or an array; returns plain objects.
+ */
+export async function redactCallRecordings(user, activities) {
+  if (await hasSystemPermission(user, 'canViewCallRecordings')) return activities;
+  const strip = (a) => {
+    if (!a) return a;
+    const o = typeof a.toObject === 'function' ? a.toObject() : { ...a };
+    if (o.metadata && 'recordingUrl' in o.metadata) {
+      o.metadata = { ...o.metadata };
+      delete o.metadata.recordingUrl;
+    }
+    return o;
+  };
+  return Array.isArray(activities) ? activities.map(strip) : strip(activities);
+}
