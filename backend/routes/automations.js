@@ -15,6 +15,26 @@ import {
   paginate,
 } from '../utils/errors.js';
 import { audit } from '../utils/auditLogger.js';
+import AuthFailureLog from '../models/AuthFailureLog.js';
+import { hasObjectPermission } from '../middleware/permissions.js';
+
+// BRD 17.1.9: a flow is started through the API only when (1) the flow is flagged
+// "allow API trigger" (default off), (2) the key's object list, if any, includes the
+// target object, and (3) the key owner's role may update that object.
+// Session users (buttons in the app) are unchanged.
+const assertApiMayTrigger = async (req, automation, objectApiName) => {
+  if (!req.isApiKeyAuth) return;
+  const target = objectApiName || automation.trigger?.objectApiName;
+  const allowedObjects = req.apiKey?.allowedObjects || [];
+  let reason = null;
+  if (!automation.allowApiTrigger) reason = `Flow "${automation.name}" is not enabled for API triggering.`;
+  else if (allowedObjects.length && target && !allowedObjects.includes(target)) reason = `This key may not act on '${target}'.`;
+  else if (target && !(await hasObjectPermission(req.user, 'update', target))) reason = `The key owner may not update ${target} records.`;
+  if (reason) {
+    await AuthFailureLog.create({ tenantId: req.tenantId, integration: 'api-key', identifier: req.apiKey?.keyPrefix, reason, ip: req.ip, path: req.originalUrl.split('?')[0], method: req.method }).catch(() => {});
+    throw new AppError(reason, 403);
+  }
+};
 import mongoose from 'mongoose';
 import { checkRecordRules } from '../services/validationService.js';
 import {
@@ -186,6 +206,7 @@ router.put(
       'order',
       'maxDepth',
       'allowRecursion',
+      'allowApiTrigger',
     ];
     allowed.forEach((k) => {
       if (req.body[k] !== undefined) automation[k] = req.body[k];
@@ -855,6 +876,7 @@ router.post(
       tenantId: req.tenantId,
     });
     if (!automation) throw new AppError('Automation not found.', 404);
+    await assertApiMayTrigger(req, automation, req.body?.objectApiName);
 
     const {
       recordId,
@@ -967,6 +989,7 @@ router.post(
       tenantId: req.tenantId,
     });
     if (!automation) throw new AppError('Automation not found.', 404);
+    await assertApiMayTrigger(req, automation, req.body?.objectApiName);
 
     const {
       resumeNodeId,

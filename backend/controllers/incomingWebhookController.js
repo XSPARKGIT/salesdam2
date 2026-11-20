@@ -128,6 +128,7 @@ const handleIncoming = asyncHandler(async (req, res) => {
     if (flowId) {
       const flow = await Automation.findOne({ _id: flowId, tenantId, isActive: true });
       if (!flow) throw new AppError('Flow not found or not active.', 404);
+      if (!flow.allowApiTrigger) throw new AppError(`Flow "${flow.name}" is not enabled for API triggering.`, 403);
       const target = result.recordId
         ? await DynamicRecord.findOne({ _id: result.recordId, tenantId, isDeleted: false })
         : recordId ? await DynamicRecord.findOne({ _id: recordId, tenantId, isDeleted: false }) : null;

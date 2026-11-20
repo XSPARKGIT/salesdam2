@@ -102,6 +102,7 @@ const automationSchema = new mongoose.Schema(
     order: { type: Number, default: 0 }, // lower fires first
     maxDepth: { type: Number, default: 1 }, // max re-entry depth (1 = no recursion)
     allowRecursion: { type: Boolean, default: false }, // explicit opt-in
+    allowApiTrigger: { type: Boolean, default: false }, // BRD 17.1.9: may an API key / token / incoming webhook start this flow?
 
     // Trigger configuration
     trigger: {

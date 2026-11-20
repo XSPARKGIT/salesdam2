@@ -12,6 +12,7 @@ const webhookDeliveryLogSchema = new mongoose.Schema(
     httpStatus: { type: Number },
     response: { type: String },
     error: { type: String },
+    note: { type: String }, // e.g. fields left out by field security
     attempt: { type: Number, default: 1 },
     maxAttempts: { type: Number, default: 3 },
     nextRetryAt: { type: Date },

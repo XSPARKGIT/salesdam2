@@ -34,7 +34,7 @@ router.get('/', asyncHandler(async (req, res) => {
         id: String(l._id), tenant: tenantName, integration: names[String(l.webhookId)] || '(deleted webhook)',
         direction: 'outbound', time: l.createdAt, event: l.event, endpoint: l.url,
         result: l.status === 'success' ? 'success' : l.status === 'failed' ? 'failed' : 'retrying',
-        httpStatus: l.httpStatus ?? null, error: l.error || null,
+        httpStatus: l.httpStatus ?? null, error: l.error || (l.note ? `Note: ${l.note}` : null),
         retry: l.status === 'success' ? `delivered on attempt ${l.attempt}` : `attempt ${l.attempt} of ${l.maxAttempts}${l.nextRetryAt ? `, next ${new Date(l.nextRetryAt).toISOString()}` : ''}`,
       });
     }

@@ -20,6 +20,9 @@ import Webhook from '../models/Webhook.js';
 import WebhookDeliveryLog from '../models/WebhookDeliveryLog.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import FieldMeta from '../models/FieldMeta.js';
+import ObjectMeta from '../models/ObjectMeta.js';
+import { getVisibleFields, hasObjectPermission } from '../middleware/permissions.js';
 import logger from '../utils/logger.js';
 
 export const WEBHOOK_EVENTS = [
@@ -49,25 +52,57 @@ export const maskSecrets = (v, depth = 0) => {
   return v;
 };
 
-const buildPayload = (webhook, event, tenantId, { objectApiName, record, data }) => {
+/**
+ * Field security (BRD 17.1.2/17.2): a payload carries only fields the webhook
+ * creator's role may view. Hidden fields are dropped from full-record AND mapped
+ * payloads; the dropped names go in the delivery row's note. No creator = name only.
+ */
+const applyFieldSecurity = async (webhook, tenantId, objectApiName, body) => {
+  if (!objectApiName) return { body, dropped: [] };
+  const fieldNames = new Set((await FieldMeta.find({ tenantId, objectApiName }).select('apiName').lean()).map((f) => f.apiName));
+  const dataKeys = Object.keys(body).filter((k) => fieldNames.has(k));
+  let allowed;
+  if (webhook.createdBy) {
+    const user = await User.findById(webhook.createdBy).populate('role');
+    allowed = user && user.status === 'active' ? new Set(await getVisibleFields(user, objectApiName, dataKeys)) : null;
+  }
+  if (!allowed) {
+    const obj = await ObjectMeta.findOne({ tenantId, apiName: objectApiName }).select('nameFieldApiName').lean();
+    allowed = new Set([obj?.nameFieldApiName || 'name']);
+  }
+  const dropped = dataKeys.filter((k) => !allowed.has(k));
+  const out = { ...body };
+  dropped.forEach((k) => delete out[k]);
+  return { body: out, dropped, fieldNames };
+};
+
+const buildPayload = async (webhook, event, tenantId, { objectApiName, record, data }) => {
   const flat = flatten(record);
   let body = flat ? { ...flat } : {};
+  const secured = await applyFieldSecurity(webhook, tenantId, objectApiName, body);
+  body = secured.body;
+  const notes = [];
+  if (secured.dropped.length) notes.push(`Not sent (field security): ${secured.dropped.join(', ')}`);
   if (data) body = { ...body, ...data };
   // 17.4.12: payloadMapping = { "name sent": "field api name" } picks standard and custom fields
   const mapping = webhook.payloadMapping && typeof webhook.payloadMapping === 'object' ? webhook.payloadMapping : null;
   if (mapping && Object.keys(mapping).length) {
     const mapped = {};
-    for (const [out, field] of Object.entries(mapping)) mapped[out] = body[field] ?? null;
+    const hidden = new Set(secured.dropped);
+    for (const [out, field] of Object.entries(mapping)) {
+      if (hidden.has(field)) { notes.push(`Mapping "${out}" names hidden field ${field}: left out`); continue; }
+      mapped[out] = body[field] ?? null;
+    }
     body = mapped;
   }
-  return maskSecrets({
+  return { notes, payload: maskSecrets({
     event,
     tenantId: String(tenantId),
     timestamp: new Date().toISOString(),
     object: objectApiName || undefined,
     recordId: flat?.id ? String(flat.id) : undefined,
     data: body,
-  });
+  }) };
 };
 
 const retryDelayMs = (webhook, attempt) => {
@@ -169,8 +204,9 @@ const dispatch = async (tenantId, event, ctx) => {
   const hooks = await Webhook.find({ tenantId, isActive: true, events: event }).select('+secret');
   for (const webhook of hooks) {
     if (ctx.objectApiName && webhook.objectFilters?.length && !webhook.objectFilters.includes(ctx.objectApiName)) continue;
-    const payload = buildPayload(webhook, event, tenantId, ctx);
+    const { payload, notes } = await buildPayload(webhook, event, tenantId, ctx);
     const log = await WebhookDeliveryLog.create({
+      note: notes.join('; ') || undefined,
       tenantId,
       webhookId: webhook._id,
       event,

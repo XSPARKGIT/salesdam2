@@ -65,7 +65,7 @@ const received = [];
 let mode = 200;
 const receiver = http.createServer((rq, rs) => {
   let b = ''; rq.on('data', (c) => { b += c; });
-  rq.on('end', () => { received.push({ headers: rq.headers, body: b }); rs.statusCode = mode; rs.end('ok'); });
+  rq.on('end', () => { received.push({ url: rq.url, headers: rq.headers, body: b }); rs.statusCode = mode; rs.end('ok'); });
 });
 await new Promise((r) => receiver.listen(0, '127.0.0.1', r));
 const hookUrl = `http://127.0.0.1:${receiver.address().port}/hook`;
@@ -86,16 +86,21 @@ try {
     appPermissions: { canManageApiKeys: true },
   });
   const mk = (t, role, tag) => User.create({ tenantId: t._id, firstName: tag, lastName: 'S17', email: `${tag}-${RUN}@example.com`, username: `${tag}_${RUN}`, password: PASSWORD, role: role._id, status: 'active', emailVerified: true });
-  const adminA = await mk(tA, roleA, 'a'); const adminB = await mk(tB, roleB, 'b'); const limited = await mk(tA, limitedRole, 'lim');
+  const hookRole = await Role.create({
+    tenantId: tA._id, name: 'hooker', label: 'Hooker', dataAccess: 'all',
+    objectPermissions: [{ objectApiName: 'bill', canRead: true, canCreate: false, canUpdate: false, canDelete: false, fieldPermissions: ['name', 'amount', 'status'].map((f) => ({ fieldApiName: f, canView: true })).concat([{ fieldApiName: 'ssn', canView: false }]) }],
+    appPermissions: { canManageWebhooks: true },
+  });
+  const adminA = await mk(tA, roleA, 'a'); const adminB = await mk(tB, roleB, 'b'); const limited = await mk(tA, limitedRole, 'lim'); const hooker = await mk(tA, hookRole, 'hk'); const apprUser = await mk(tA, roleA, 'appr');
   const mkObj = async (t, apiName, extra = []) => {
     const o = await ObjectMeta.create({ tenantId: t._id, name: apiName, label: apiName, pluralLabel: `${apiName}s`, apiName, nameFieldApiName: 'name', isActive: true });
     await FieldMeta.create([{ name: 'name', apiName: 'name', label: 'Name', type: 'text' }, { name: 'amount', apiName: 'amount', label: 'Amount', type: 'number' }, { name: 'status', apiName: 'status', label: 'Status', type: 'text' }, ...extra]
       .map((f) => ({ tenantId: t._id, objectId: o._id, objectApiName: apiName, ...f })));
     return o;
   };
-  await mkObj(tA, 'bill'); await mkObj(tA, 'vault'); await mkObj(tB, 'bill');
-  await seedWorkspace(tA._id, [adminA._id, limited._id], ['bill', 'vault']); await seedWorkspace(tB._id, [adminB._id], ['bill']);
-  const CA = await login(adminA.email); const CB = await login(adminB.email); const CL = await login(limited.email);
+  await mkObj(tA, 'bill', [{ name: 'ssn', apiName: 'ssn', label: 'SSN', type: 'text' }]); await mkObj(tA, 'vault'); await mkObj(tA, 'lead'); await mkObj(tB, 'bill');
+  await seedWorkspace(tA._id, [adminA._id, limited._id, hooker._id, apprUser._id], ['bill', 'vault', 'lead']); await seedWorkspace(tB._id, [adminB._id], ['bill']);
+  const CA = await login(adminA.email); const CB = await login(adminB.email); const CL = await login(limited.email); const CH = await login(hooker.email); const CP = await login(apprUser.email);
   check('test admins and a limited user can sign in', !!CA && !!CB && !!CL);
 
   const mkKey = async (cookie, body) => (await call('/api-keys', { method: 'POST', cookie, body })).json?.data;
@@ -142,7 +147,7 @@ try {
   check('a new custom object and field are usable through the API at once (17.1.10)', oc.status < 300 && fc.status < 300 && gc.status === 201 && JSON.stringify(gg.json).includes('red'), `obj ${oc.status} field ${fc.status} rec ${gc.status}`);
 
   // 17.1.9 trigger a flow
-  const flow = await Automation.create({ tenantId: tA._id, name: `S17 Flow ${RUN}`, apiName: `s17_flow_${RUN}`, type: 'autolaunched', isActive: true, nodes: [{ id: 't', type: 'trigger', label: 'Start', nextNodes: [{ nodeId: 'u' }] }, { id: 'u', type: 'action_update_record', label: 'Mark', config: { recordMode: 'trigger', fields: { status: 'flowed' } } }] });
+  const flow = await Automation.create({ tenantId: tA._id, name: `S17 Flow ${RUN}`, apiName: `s17_flow_${RUN}`, type: 'autolaunched', isActive: true, allowApiTrigger: true, nodes: [{ id: 't', type: 'trigger', label: 'Start', nextNodes: [{ nodeId: 'u' }] }, { id: 'u', type: 'action_update_record', label: 'Mark', config: { recordMode: 'trigger', fields: { status: 'flowed' } } }] });
   const rf = await call(`/automations/${flow._id}/run-action`, { method: 'POST', key: K, body: { recordId: id1, objectApiName: 'bill' } });
   const afterFlow = await DynamicRecord.findById(id1).lean();
   check('a key triggers a flow (17.1.9)', rf.status === 200 && afterFlow?.data?.status === 'flowed', `HTTP ${rf.status} status=${afterFlow?.data?.status}`);
@@ -285,6 +290,53 @@ try {
   const note = await waitFor(() => Notification.findOne({ tenantId: tA._id, title: /keeps failing/ }));
   check('after the last retry the delivery is failed and an administrator is notified (17.5.13)', failed?.attempt === 3 && !!note, `attempt=${failed?.attempt} note=${!!note}`);
   mode = 200;
+
+  // ── Round 2: field security in payloads, flow-trigger permission, remaining events ──
+  const hk = await call('/webhooks', { method: 'POST', cookie: CH, body: { name: 'hk hook', url: hookUrl.replace('/hook', '/hk'), events: ['record.created', 'record.updated'], retryCount: 0 } });
+  const hkMap = await call('/webhooks', { method: 'POST', cookie: CH, body: { name: 'hk mapped', url: hookUrl.replace('/hook', '/hkm'), events: ['record.created'], retryCount: 0, payloadMapping: { secretNo: 'ssn', amt: 'amount' } } });
+  received.length = 0;
+  const fr = await call('/records/bill', { method: 'POST', cookie: CA, body: { name: 'FS', amount: 7, status: 'open', ssn: 'FS-HIDDEN-VALUE' } });
+  const fsId = fr.json?.data?.id;
+  await call(`/records/bill/${fsId}`, { method: 'PUT', cookie: CA, body: { name: 'FS', amount: 8, status: 'open', ssn: 'FS-HIDDEN-VALUE-2' } });
+  await waitFor(() => received.filter((r) => r.url === '/hk').length >= 2 && received.some((r) => r.url === '/hkm'), 10000);
+  const full = received.filter((r) => r.url === '/hk'); const mapped = received.find((r) => r.url === '/hkm');
+  check('a webhook made by a role that cannot see a field never sends it, on create or update (17.1.2, 17.2)', hk.status === 201 && full.length >= 2 && full.every((r) => !r.body.includes('FS-HIDDEN') && JSON.parse(r.body).data.amount !== undefined && !('ssn' in JSON.parse(r.body).data)), full.map((r) => r.body.slice(0, 80)).join('|'));
+  check('a mapping that names a hidden field leaves it out and the log says so (17.4.12)', hkMap.status === 201 && mapped && JSON.stringify(Object.keys(JSON.parse(mapped.body).data)) === '["amt"]' && !mapped.body.includes('FS-HIDDEN'));
+  const adminSees = received.find((r) => r.url === '/hook' && r.body.includes('FS-HIDDEN-VALUE'));
+  const flog = (await call('/integration-log?direction=outbound&limit=300', { cookie: CA })).json?.data || [];
+  check('the Integration Log records which fields were withheld', flog.some((r) => /Not sent \(field security\): ssn/.test(r.error || '')) && flog.some((r) => /Mapping "secretNo" names hidden field ssn/.test(r.error || '')), flog.filter((r) => r.error).map((r) => r.error).slice(0, 2).join('|'));
+  await call(`/webhooks/${hk.json?.data?._id}`, { method: 'DELETE', cookie: CH }); await call(`/webhooks/${hkMap.json?.data?._id}`, { method: 'DELETE', cookie: CH });
+
+  const flowOff = await Automation.create({ tenantId: tA._id, name: `S17 Off ${RUN}`, apiName: `s17_off_${RUN}`, type: 'autolaunched', isActive: true, nodes: [{ id: 't', type: 'trigger', label: 'Start', nextNodes: [{ nodeId: 'u' }] }, { id: 'u', type: 'action_update_record', label: 'Mark', config: { recordMode: 'trigger', fields: { status: 'ranoff' } } }] });
+  const kScoped = await mkKey(CA, { name: 'vault only', scopes: ['write'], allowedObjects: ['vault'] });
+  const runIt = (id, k, obj = 'bill') => call(`/automations/${id}/run-action`, { method: 'POST', key: k, body: { recordId: fsId, objectApiName: obj } });
+  const t1 = await runIt(flowOff._id, K), t2 = await runIt(flow._id, kScoped.rawKey), t3 = await runIt(flow._id, kLim.rawKey), t4 = await runIt(flow._id, K);
+  const after = await DynamicRecord.findById(fsId).lean();
+  check('flow trigger by key: flag off 403, key object list 403, owner lacks update 403; all enabled and allowed succeeds (17.1.9)', t1.status === 403 && t2.status === 403 && t3.status === 403 && t4.status === 200 && after.data.status === 'flowed', `${t1.status}/${t2.status}/${t3.status}/${t4.status} status=${after.data.status}`);
+  const ilog = (await call('/integration-log?direction=inbound&limit=300', { cookie: CA })).json?.data || [];
+  const refused = ilog.filter((r) => /run-action/.test(r.endpoint) && r.httpStatus === 403);
+  const af = (await call('/api-keys/auth-failures', { cookie: CA })).json?.data || [];
+  check('the refusals are in the Integration Log and the failure log, and the flow did not run', refused.length >= 3 && af.some((r) => /not enabled for API triggering/.test(r.reason)) && after.data.status !== 'ranoff');
+  const viaHook = await inc({ flowId: String(flowOff._id), recordId: fsId, objectApiName: 'bill', action: 'update', data: { name: 'FS', amount: 8, status: 'open' } });
+  check('an incoming webhook cannot start a flow that is not enabled for API triggering', viaHook.status === 403);
+
+  // approval.completed, communication.sent, lead.received
+  const ev = await call('/webhooks', { method: 'POST', cookie: CA, body: { name: 'events hook', url: hookUrl.replace('/hook', '/ev'), events: ['approval.completed', 'communication.sent', 'lead.received'], retryCount: 0 } });
+  const evSecret = ev.json?.data?.secret;
+  const proc = await call('/approval-processes', { method: 'POST', cookie: CA, body: { name: 'S17 approval', objectApiName: 'bill', steps: [{ order: 1, name: 'Review', approverType: 'user', approverUserId: String(apprUser._id) }] } });
+  const sub = await call('/approval-processes/submit', { method: 'POST', cookie: CA, body: { objectApiName: 'bill', recordId: fsId, processId: proc.json?.data?._id } });
+  const apv = await call(`/approval-processes/${sub.json?.data?._id}/approve`, { method: 'POST', cookie: CP, body: { comment: 'ok' } });
+  const ldc = await call('/records/lead', { method: 'POST', cookie: CA, body: { name: 'Lead 1' } });
+  const accS = await ChannelAccount.create({ tenantId: tA._id, channel: 'telephony', name: 'S17 tel2', provider: 'other' });
+  const inb = await channelService.fireTestEvent({ tenantId: tA._id, id: accS._id, kind: 'message' }).catch((e) => ({ err: e.message }));
+  const rep = await call(`/conversations/${inb.conversation?._id}/reply`, { method: 'POST', cookie: CA, body: { body: 'stub reply' } });
+  await waitFor(() => ['approval.completed', 'lead.received', 'communication.sent'].every((e) => received.filter((r) => r.url === '/ev').map((r) => JSON.parse(r.body).event).includes(e)), 10000);
+  const evs = received.filter((r) => r.url === '/ev');
+  const names = evs.map((r) => JSON.parse(r.body).event);
+  check('approval completed, lead received and communication sent are delivered signed (17.4.5, 17.4.7, 17.4.9)', ['approval.completed', 'lead.received', 'communication.sent'].every((e) => names.includes(e)) && evs.every((r) => r.headers['x-webhook-signature'] === `sha256=${crypto.createHmac('sha256', evSecret).update(r.body).digest('hex')}`), `${sub.status}/${apv.status}/${ldc.status}/${rep.status} ${names.join(',')} ${inb.err || ''}`);
+  const elog = (await call('/integration-log?direction=outbound&limit=300', { cookie: CA })).json?.data || [];
+  check('each of those three has an Integration Log row', ['approval.completed', 'lead.received', 'communication.sent'].every((e) => elog.some((r) => r.event === e && r.result === 'success' && r.httpStatus === 200)));
+  await call(`/webhooks/${ev.json?.data?._id}`, { method: 'DELETE', cookie: CA });
   // integration log
   const log = await call('/integration-log?limit=300', { cookie: CA });
   const rows = log.json?.data || [];
