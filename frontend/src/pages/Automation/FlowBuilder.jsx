@@ -2510,6 +2510,7 @@ export default function FlowBuilder() {
           order: auto.order ?? 0,
           maxDepth: auto.maxDepth ?? 1,
           allowRecursion: auto.allowRecursion ?? false,
+          allowApiTrigger: auto.allowApiTrigger ?? false,
         });
         setVariables(auto.variables || []);
         setScheduledPaths(auto.scheduledPaths || []);
@@ -3209,6 +3210,15 @@ export default function FlowBuilder() {
                   >
                     use with caution
                   </span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-size-sm)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!form.allowApiTrigger}
+                    onChange={(e) => setForm((f) => ({ ...f, allowApiTrigger: e.target.checked }))}
+                    style={{ accentColor: 'var(--color-primary)', width: 15, height: 15 }}
+                  />
+                  Allow this flow to be started by an API key, access token or incoming webhook
                 </label>
               </div>
             </div>

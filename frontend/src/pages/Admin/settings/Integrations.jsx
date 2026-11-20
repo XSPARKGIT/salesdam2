@@ -366,7 +366,10 @@ export default function Integrations() {
           <div className={localStyles.modalContent} onClick={(e) => e.stopPropagation()}>
             <h2>Access Token</h2>
             <p className={localStyles.tokenWarning}>
-              <AlertCircle size={14} /> Save this token somewhere safe. You won't be able to see it again.
+              <AlertCircle size={14} />{' '}
+              {selectedIntegration.accessToken
+                ? "Save this token somewhere safe. You won't be able to see it again."
+                : 'The token is shown only once, when it is created or regenerated. Use Regenerate Token to get a new one.'}
             </p>
 
             <div className={localStyles.formGroup}>
